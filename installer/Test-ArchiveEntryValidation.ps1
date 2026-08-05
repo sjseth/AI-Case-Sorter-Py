@@ -82,13 +82,13 @@ Assert-Rejected 'pkg\..\..\evil.py'     'parent traversal via backslashes'
 Write-Host "== must accept: real sdist entries ==" -ForegroundColor Cyan
 # Guarding against the opposite failure: a check so broad it rejects the
 # archive every legitimate install depends on.
-Assert-Accepted 'ai_case_sorter_py-1.2.3/main.py'
-Assert-Accepted 'ai_case_sorter_py-1.2.3/sorter/__init__.py'
-Assert-Accepted 'ai_case_sorter_py-1.2.3/sorter/_version.py'
-Assert-Accepted 'ai_case_sorter_py-1.2.3/PKG-INFO'
-Assert-Accepted 'ai_case_sorter_py-1.2.3/installer/install-windows.ps1'
-Assert-Accepted 'ai_case_sorter_py-1.2.3/.gitignore'
-Assert-Accepted 'ai_case_sorter_py-1.2.3/sorter/ui/tab_ai.py'
+Assert-Accepted 'ai_case_sorter-1.2.3/main.py'
+Assert-Accepted 'ai_case_sorter-1.2.3/sorter/__init__.py'
+Assert-Accepted 'ai_case_sorter-1.2.3/sorter/_version.py'
+Assert-Accepted 'ai_case_sorter-1.2.3/PKG-INFO'
+Assert-Accepted 'ai_case_sorter-1.2.3/installer/install-windows.ps1'
+Assert-Accepted 'ai_case_sorter-1.2.3/.gitignore'
+Assert-Accepted 'ai_case_sorter-1.2.3/sorter/ui/tab_ai.py'
 Assert-Accepted 'pkg/a..b.py'           # dots, but no '..' component
 Assert-Accepted 'pkg/sub.dir/x.py'
 Assert-Accepted 'pkg/file with spaces.py'

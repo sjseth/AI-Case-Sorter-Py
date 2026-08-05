@@ -12,8 +12,8 @@ By participating in this project you agree to abide by our
 
 - Report bugs or request features via [GitHub Issues](https://github.com/sjseth/AI-Case-Sorter-Py/issues/new/choose)
   — pick the bug report or feature request form so we get what we need to reproduce it.
-- General questions belong in [Discussions](https://github.com/sjseth/AI-Case-Sorter-Py/discussions),
-  not Issues.
+- Ask usage questions in the project **Discord**, not Issues — the invite is on the
+  [project page](https://www.reloadingrecipes.com/HeadstampSorter) (free account).
 - Improve documentation — including [`CLAUDE.md`](CLAUDE.md), the architecture map.
 - Fix bugs or add features via pull requests (the PR template lists the checklist).
 - Report **security** issues privately — see [`SECURITY.md`](SECURITY.md). Please

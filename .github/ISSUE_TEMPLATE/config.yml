@@ -1,5 +1,9 @@
+# Points at the project page rather than a raw discord.gg invite on purpose:
+# the invite lives behind a free account there, so publishing one here would
+# route around that, and it would rot the moment the invite is rotated. The
+# project page is the owner's own entry point and stays valid.
 blank_issues_enabled: false
 contact_links:
   - name: Question / usage help
-    url: https://github.com/sjseth/AI-Case-Sorter-Py/discussions
-    about: Please ask usage questions here rather than in an issue.
+    url: https://www.reloadingrecipes.com/HeadstampSorter
+    about: Ask in the project Discord — the invite is on the project page (free account).

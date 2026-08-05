@@ -229,7 +229,7 @@ function Select-ReleaseAsset {
     param($Release)
 
     $tag = $Release.PSObject.Properties['tag_name'].Value
-    $expected = "ai_case_sorter_py-$($tag -replace '^v', '').tar.gz"
+    $expected = "ai_case_sorter-$($tag -replace '^v', '').tar.gz"
     if (-not $Release.PSObject.Properties['assets']) { return $null }
     $asset = $Release.assets |
         Where-Object { $_.PSObject.Properties['name'] -and $_.name -eq $expected } |

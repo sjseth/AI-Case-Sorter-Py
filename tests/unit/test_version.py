@@ -60,7 +60,7 @@ def test_falls_back_to_a_literal_placeholder_when_nothing_is_available(monkeypat
     monkeypatch.setitem(sys.modules, "sorter._version", None)
 
     def _raise(_name: str) -> str:
-        raise PackageNotFoundError("ai-case-sorter-py")
+        raise PackageNotFoundError("ai-case-sorter")
 
     monkeypatch.setattr("importlib.metadata.version", _raise)
 

@@ -67,8 +67,8 @@ def _archive() -> bytes:
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
         for name, content in {
-            "ai_case_sorter_py-9.9.9/main.py": "new\n",
-            "ai_case_sorter_py-9.9.9/sorter/__init__.py": '__version__ = "9.9.9"\n',
+            "ai_case_sorter-9.9.9/main.py": "new\n",
+            "ai_case_sorter-9.9.9/sorter/__init__.py": '__version__ = "9.9.9"\n',
         }.items():
             data = content.encode("utf-8")
             info = tarfile.TarInfo(name=name)

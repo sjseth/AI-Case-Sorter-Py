@@ -40,7 +40,11 @@ repository:
   has_issues: true
   has_wiki: false
   has_projects: false
-  has_discussions: true # the issue templates route support questions here
+  # Off: the project's user community is the Discord, not a GitHub tab, and a
+  # second half-used venue only splits the audience and leaves questions
+  # unanswered. Support questions route to Discord via the issue-form contact
+  # link; this repo's Issues stay for bugs and features.
+  has_discussions: false
 
   # Squash-only. Merge commits and rebase both produce histories that break the
   # one assumption everything else here depends on: that each commit on main is

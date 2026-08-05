@@ -6,7 +6,7 @@ this repo's size the delta-transfer advantage is worth nothing. Dropping git
 means non-developers never install a 60 MB dependency to receive a 1 MB
 update.
 
-The downloaded archive is the project's own **sdist** (`ai_case_sorter_py-
+The downloaded archive is the project's own **sdist** (`ai_case_sorter-
 <tag>.tar.gz`) — the same file `uv build`/`publish.yml` already produce and
 attach to every release, not a separately built artifact. hatch-vcs's build
 hook stamps `sorter/_version.py` into every build target, so the sdist
@@ -211,7 +211,7 @@ def _strip_tag_prefix(tag: str) -> str:
 def _expected_asset_name(tag: str) -> str:
     """Name the sdist `uv build` produces for ``tag``.
 
-    Hatchling writes the underscore form of "ai-case-sorter-py" per PEP 625
+    Hatchling writes the underscore form of "ai-case-sorter" per PEP 625
     (not PEP 503 -- that normalizes *to* hyphens, and governs index URLs
     rather than sdist filenames). This is the file publish.yml already
     attaches; there is no separate app-archive asset to build.
@@ -223,7 +223,7 @@ def _expected_asset_name(tag: str) -> str:
     client would silently miss the asset and fall back to the source
     archive, losing the baked-in version this whole path exists to deliver.
     """
-    return f"ai_case_sorter_py-{_strip_tag_prefix(tag)}.tar.gz"
+    return f"ai_case_sorter-{_strip_tag_prefix(tag)}.tar.gz"
 
 
 def _pick_asset(release: dict[str, Any], tag: str) -> tuple[str, int | None]:
