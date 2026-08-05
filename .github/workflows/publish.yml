@@ -74,7 +74,7 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          SDIST="dist/ai_case_sorter_py-${TAG#v}.tar.gz"
+          SDIST="dist/ai_case_sorter-${TAG#v}.tar.gz"
           if [ ! -f "$SDIST" ]; then
             echo "::error::Expected $SDIST; built $(ls dist/*.tar.gz). The updater matches by exact name and would fall back to the source archive."
             exit 1
@@ -93,7 +93,7 @@ jobs:
           path: dist/
 
       # No separate app-archive build step: sorter/updater.py's _pick_asset
-      # downloads the sdist above by exact name (ai_case_sorter_py-<tag>.tar.gz).
+      # downloads the sdist above by exact name (ai_case_sorter-<tag>.tar.gz).
       # hatch-vcs's build hook already stamps sorter/_version.py into every
       # build target, sdist included, so it carries the correct version with
       # nothing extra to keep in sync. This used to be a hand-built zip
@@ -129,7 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: test
-      url: https://test.pypi.org/p/ai-case-sorter-py
+      url: https://test.pypi.org/p/ai-case-sorter
     permissions:
       id-token: write # required for trusted publishing (OIDC) -- no API token stored
     steps:
@@ -152,7 +152,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: prod
-      url: https://pypi.org/p/ai-case-sorter-py
+      url: https://pypi.org/p/ai-case-sorter
     permissions:
       id-token: write # required for trusted publishing (OIDC) -- no API token stored
     steps:

@@ -575,7 +575,7 @@ Two things this makes load-bearing that weren't before:
   `sorter/_version.py` with that fallback. See `bootstrap.py`'s docstring.
 - **The version has to reach the user some other way, then.** `updater.py`'s
   `_pick_asset` downloads the release's own **sdist** by exact name
-  (`ai_case_sorter_py-<tag>.tar.gz`) — the same file `uv build` already
+  (`ai_case_sorter-<tag>.tar.gz`) — the same file `uv build` already
   produces and `publish.yml` already attaches, not a separately built
   artifact. hatch-vcs's build hook stamps `sorter/_version.py` into every
   build target it runs against, sdist included, so it already carries the

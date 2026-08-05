@@ -26,6 +26,6 @@ except ImportError:
     from importlib.metadata import PackageNotFoundError, version
 
     try:
-        __version__ = version("ai-case-sorter-py")
+        __version__ = version("ai-case-sorter")
     except PackageNotFoundError:
         __version__ = "0.0.0+unknown"

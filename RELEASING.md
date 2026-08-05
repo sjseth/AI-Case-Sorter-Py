@@ -52,7 +52,7 @@ all -- three different answers to "what version is this?", one of them shown to 
 
 How the version reaches a user who never has `.git`:
 
-- **A downloaded release** gets `ai_case_sorter_py-<tag>.tar.gz` -- the project's own sdist,
+- **A downloaded release** gets `ai_case_sorter-<tag>.tar.gz` -- the project's own sdist,
   the same file `uv build` already produces for every push to `main`, not a separately built
   artifact. hatch-vcs's build hook stamps `sorter/_version.py` into it automatically.
   `sorter/updater.py` looks for that asset by exact name.

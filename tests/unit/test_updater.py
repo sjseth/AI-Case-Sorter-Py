@@ -80,7 +80,7 @@ def test_check_returns_info_when_newer(monkeypatch) -> None:
 def test_check_prefers_the_named_sdist_asset(monkeypatch) -> None:
     assets = [
         {"name": "checksums.txt", "browser_download_url": "https://x/c.txt"},
-        {"name": "ai_case_sorter_py-0.9.0.tar.gz", "browser_download_url": "https://x/app.tar.gz", "size": 4242},
+        {"name": "ai_case_sorter-0.9.0.tar.gz", "browser_download_url": "https://x/app.tar.gz", "size": 4242},
     ]
     monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(200, _release(assets=assets)))
     info = updater.check_for_update(current="0.1.0")
@@ -116,15 +116,15 @@ def test_tag_prefix_stripping_matches_the_sdist_filename(tag: str, expected: str
     strips every leading v, and stripping a capital V disagrees with bash.
     """
     assert updater._strip_tag_prefix(tag) == expected
-    assert updater._expected_asset_name(tag) == f"ai_case_sorter_py-{expected}.tar.gz"
+    assert updater._expected_asset_name(tag) == f"ai_case_sorter-{expected}.tar.gz"
 
 
 @pytest.mark.parametrize(
     ("tag", "hatchling_builds"),
     [
-        ("1.2.3-rc1", "ai_case_sorter_py-1.2.3rc1.tar.gz"),
-        ("1.2.3.RC1", "ai_case_sorter_py-1.2.3rc1.tar.gz"),
-        ("1.0", "ai_case_sorter_py-1.0.tar.gz"),
+        ("1.2.3-rc1", "ai_case_sorter-1.2.3rc1.tar.gz"),
+        ("1.2.3.RC1", "ai_case_sorter-1.2.3rc1.tar.gz"),
+        ("1.0", "ai_case_sorter-1.0.tar.gz"),
     ],
 )
 def test_expected_asset_name_does_not_normalize(tag: str, hatchling_builds: str) -> None:
@@ -166,7 +166,7 @@ def test_check_ignores_the_wheel(monkeypatch) -> None:
     with a wheel (attached by the publish workflow) but no sdist falls back
     correctly, exactly as a release with no assets at all always has."""
     assets = [
-        {"name": "ai_case_sorter_py-0.9.0-py3-none-any.whl", "browser_download_url": "https://x/w.whl"},
+        {"name": "ai_case_sorter-0.9.0-py3-none-any.whl", "browser_download_url": "https://x/w.whl"},
     ]
     monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(200, _release(assets=assets)))
     info = updater.check_for_update(current="0.1.0")
@@ -266,7 +266,7 @@ def _tar_bytes(
     return buf.getvalue()
 
 
-def _good_archive(prefix: str = "ai_case_sorter_py-0.9.0/") -> bytes:
+def _good_archive(prefix: str = "ai_case_sorter-0.9.0/") -> bytes:
     return _tar_bytes(
         {
             f"{prefix}main.py": "print('new')\n",
@@ -318,7 +318,7 @@ def test_stage_extracts_and_strips_the_sdist_wrapper(monkeypatch) -> None:
     # land in the staged tree like any other file, not be specially dropped.
     assert (pending.path / "PKG-INFO").is_file()
     # The wrapper directory must be gone, not nested.
-    assert not (pending.path / "ai_case_sorter_py-0.9.0").exists()
+    assert not (pending.path / "ai_case_sorter-0.9.0").exists()
 
 
 def test_stage_records_pending_metadata(monkeypatch) -> None:

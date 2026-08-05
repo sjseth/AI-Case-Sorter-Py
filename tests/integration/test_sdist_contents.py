@@ -105,5 +105,5 @@ def test_sdist_filename_matches_what_the_updater_expects(sdist: Path) -> None:
     """The client matches this name exactly; a mismatch degrades it to the
     source archive silently. publish.yml asserts the same thing at release
     time -- this catches it at development time, for the current version."""
-    version = sdist.name.removeprefix("ai_case_sorter_py-").removesuffix(".tar.gz")
+    version = sdist.name.removeprefix("ai_case_sorter-").removesuffix(".tar.gz")
     assert sdist.name == updater._expected_asset_name(version)
