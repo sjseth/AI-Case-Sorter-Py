@@ -14,18 +14,39 @@ name: Verify Installer
 #
 # The workflow file is in its own path filter: without that, a PR editing
 # only this file never runs the job it changes.
+#
+# ---------------------------------------------------------------------------
+# TEMPORARILY DISABLED until the initial release is out.
+#
+# The automatic triggers below are commented out; only manual runs remain.
+# The "Verify the install" step asserts the install carries
+# sorter/_version.py, which only the release sdist has -- hatch-vcs stamps it
+# at build time, and a source archive is not a build. With no release
+# published yet, Get-ReleaseInfo's documented last resort is the main-branch
+# source archive, so that assertion cannot pass: this job has failed on every
+# run it has ever had, including on main, for a reason that says nothing
+# about the installer.
+#
+# TO RE-ENABLE, once a release with attached assets exists: uncomment the
+# three triggers below. Note that release:published starts this alongside
+# publish.yml, which is what uploads the sdist at the END of its package job
+# -- so the first run may still race the upload and fall back. If it does,
+# invoking this workflow from publish.yml behind `needs: package` (via
+# `workflow_call`) orders the two properly.
+# ---------------------------------------------------------------------------
 on:
-  pull_request:
-    paths:
-      - "installer/**"
-      - ".github/workflows/installer-smoke.yml"
-  push:
-    branches: [main]
-    paths:
-      - "installer/**"
-      - ".github/workflows/installer-smoke.yml"
-  release:
-    types: [published]
+  workflow_dispatch:
+  # pull_request:
+  #   paths:
+  #     - "installer/**"
+  #     - ".github/workflows/installer-smoke.yml"
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - "installer/**"
+  #     - ".github/workflows/installer-smoke.yml"
+  # release:
+  #   types: [published]
 
 permissions:
   contents: read
