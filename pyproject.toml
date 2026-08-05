@@ -1,5 +1,5 @@
 [project]
-name = "ai-case-sorter-py"
+name = "ai-case-sorter"
 # Derived from the git tag at build time (hatch-vcs, below) so the packaged
 # version and the release tag can never drift apart -- see sorter/__init__.py
 # for how the running app resolves this without needing .git itself.
