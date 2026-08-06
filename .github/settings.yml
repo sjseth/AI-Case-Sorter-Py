@@ -29,12 +29,6 @@
 #      no equivalent here, so those two stay manual. The wanted state is
 #      alerts ON, automated fixes OFF: Renovate owns dependency PRs here, and
 #      running both bots opens duplicate PRs for the same CVE.
-#
-# NOTE ON BRANCH PROTECTION: the `branches:` block below is commented out on
-# purpose. Requiring an approving review makes it impossible to merge your own
-# PR (GitHub won't let you approve your own), which locks a solo maintainer or
-# a fork owner out of their own repo. Uncomment it upstream, where PRs get an
-# actual second pair of eyes -- see the comment on that block.
 
 repository:
   has_issues: true
@@ -155,26 +149,39 @@ labels:
     color: "d876e3"
     description: "Further information is requested"
 
-# Uncomment upstream. Deliberately inactive by default -- see the note at the
-# top: required_approving_review_count: 1 prevents a solo maintainer from
-# merging their own PR at all.
+  # Applied by labeler.yml on any PR touching .github/settings.yml. Merging one
+  # of those does not just change a file -- the Settings app applies it to the
+  # live repo, including things no diff makes obvious (merge methods, branch
+  # protection, who can approve a deployment). Loud on purpose.
+  - name: "⚠️ REPO SETTINGS"
+    color: "b60205"
+    description: "⚠️ Changes .github/settings.yml -- merging APPLIES it to the live repository"
+
+# Deployment environments, referenced by .github/workflows/publish.yml.
 #
-# branches:
-#   - name: main
-#     protection:
-#       required_pull_request_reviews:
-#         required_approving_review_count: 1
-#         dismiss_stale_reviews: true
-#         require_code_owner_reviews: false
-#       required_status_checks:
-#         strict: true
-#         contexts:
-#           - "ruff (check + format)"
-#           - "lint the workflows themselves"
-#           - "release version mapping"
-#           - "pytest (ubuntu-latest, py3.12)"
-#           - "pytest (windows-latest, py3.12)"
-#           - "Validate PR title"
-#       required_conversation_resolution: true
-#       enforce_admins: false
-#       restrictions: null
+# `stable` is the PyPI publish, and it is the one irreversible step in the whole
+# release: a version can be yanked but never replaced. The reviewer requirement
+# is the in-flow confirmation before that happens -- the job sits pending until
+# somebody approves it.
+#
+# Free on public repos; protection rules only cost money on private ones.
+#
+# Both gated by the same reviewer, so a release takes two approvals: one before
+# the TestPyPI rehearsal, one before the PyPI publish. Nothing reaches an index
+# without a human saying so.
+#
+# No deployment_branch_policy on purpose. `protected_branches: true` restricts
+# deployments to protected branches, and these jobs run on `release` events
+# where the ref is a tag rather than a branch -- it would block every
+# deployment.
+environments:
+  # TestPyPI, the rehearsal.
+  - name: test
+    reviewers:
+      - id: 3073671 # sjseth
+        type: User
+
+  - name: stable
+    reviewers:
+      - id: 3073671 # sjseth
+        type: User

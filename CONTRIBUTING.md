@@ -182,3 +182,14 @@ git commit -s -m "Your message"
 
 This appends a `Signed-off-by: Your Name <you@example.com>` line to the commit.
 The full DCO text is at <https://developercertificate.org>.
+
+Forgot on a commit you have already made?
+
+```bash
+git commit --amend -s                 # the most recent commit
+git rebase --signoff origin/main      # every commit on your branch
+git push --force-with-lease
+```
+
+Enforced by the [DCO app](https://github.com/apps/dco), which posts a `DCO`
+status on each pull request and skips bot and merge commits.

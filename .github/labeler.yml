@@ -68,3 +68,12 @@ dependencies:
           - 'pyproject.toml'
           - 'uv.lock'
   - head-branch: ['^renovate/', '^dependabot/']
+
+# Deliberately loud, and the only label here that is a warning rather than a
+# classification. Merging a PR that touches this file does not just change a
+# file: the Settings app applies it to the live repository. Some of what it can
+# change is invisible in a diff of it -- merge methods, branch protection, who
+# is allowed to approve a deployment.
+"⚠️ REPO SETTINGS":
+  - changed-files:
+      - any-glob-to-any-file: '.github/settings.yml'
