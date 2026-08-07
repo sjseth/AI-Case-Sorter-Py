@@ -31,7 +31,7 @@ What it does, in order:
      only now there's no hash-based marker at all, because `uv sync`
      reconciles against the venv's actual contents rather than trusting a
      proxy for them.
-  4. `uv sync --frozen --no-install-project` -- --frozen takes the committed
+  4. `uv sync --frozen --no-dev --no-install-project` -- --frozen takes the committed
      uv.lock as-is and never re-resolves on a user's machine, so launches
      stay deterministic and offline-safe (CI uses `--locked` instead, which
      fails if the lock has drifted from pyproject.toml -- see
@@ -40,6 +40,8 @@ What it does, in order:
      tree, so it was never needed for that, and building it is actively
      harmful when there's no .git to derive a version from (see
      pyproject.toml's [tool.hatch.version] and sorter/__init__.py).
+     --no-dev keeps the `dev` group (pytest, ruff) out of a user's venv --
+     uv installs it by default, and it is pure CI tooling.
   5. Launch the app: `uv run --no-sync python main.py <forwarded args>`.
      --no-sync, not --frozen: `uv run` syncs implicitly by default even with
      --frozen, which would redo the very build step 4 skipped.
@@ -420,9 +422,17 @@ def main(argv: list[str] | None = None) -> int:
     # restart, and find it gone, with a multi-GB re-download to get back.
     # CI still syncs exactly (--locked in build.yml); being strict is the
     # whole point there. Here, a user-installed extra has to survive.
+    #
+    # --no-dev: uv installs the `dev` dependency group by default, so without
+    # this every end user was getting pytest and ruff -- CI tooling, useless
+    # on a sorting machine. CI asks for the group explicitly where it wants
+    # it (`--only-group dev` in lint.yml, the default sync in build.yml), so
+    # nothing there depends on the launcher's behavior. Note that --inexact
+    # means this doesn't *remove* the group from installs that already have
+    # it; it only stops new ones from acquiring it.
     try:
         subprocess.run(
-            [uv, "sync", "--frozen", "--inexact", "--no-install-project"],
+            [uv, "sync", "--frozen", "--inexact", "--no-dev", "--no-install-project"],
             cwd=ROOT,
             check=True,
         )

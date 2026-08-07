@@ -162,6 +162,27 @@ def test_sync_is_inexact_so_the_ml_extra_survives(bootstrap, monkeypatch) -> Non
     assert "--inexact" in sync_cmd, f"launcher sync would prune the [ml] extra: {sync_cmd}"
 
 
+def test_sync_skips_the_dev_group(bootstrap, monkeypatch) -> None:
+    """uv installs the `dev` dependency group by default. That group is CI
+    tooling (pytest, ruff) and has no business in an end user's venv -- the
+    launcher must ask for it to be left out."""
+    monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
+    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock())
+    monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
+
+    sync_cmd = []
+
+    def tracking_run(cmd, *a, **kw):
+        if cmd[1:2] == ["sync"]:
+            sync_cmd.extend(cmd)
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(bootstrap.subprocess, "run", tracking_run)
+
+    bootstrap.main([])
+    assert "--no-dev" in sync_cmd, f"launcher sync would install pytest and ruff: {sync_cmd}"
+
+
 def test_sync_failure_exits_with_a_readable_message(bootstrap, monkeypatch) -> None:
     """The audience for this script is a non-developer who downloaded a ZIP;
     a raw CalledProcessError traceback is not an actionable failure."""
