@@ -14,10 +14,10 @@ import pytest
 
 pytest.importorskip("tkinter")
 
-import tkinter as tk  # noqa: E402
+import tkinter as tk
 
-from sorter.ui import theme  # noqa: E402
-from sorter.ui.theme import (  # noqa: E402
+from sorter.ui import theme
+from sorter.ui.theme import (
     BUILTIN_THEMES,
     CUSTOM_THEME_VERSION,
     DEFAULT_THEME,

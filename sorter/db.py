@@ -2,9 +2,26 @@
 
 Exposes a single `Database` class that owns:
   - a `sqlite3.Connection` with row_factory = sqlite3.Row
-  - schema DDL via `PRAGMA user_version`
+  - schema DDL plus an ordered set of migration steps run through
+    `sqlite_utils.Migrations`
   - `ensure_initialized()` that creates the DB if missing and runs the
     one-shot import from `data/config.json` when present.
+
+Every open lays down `SCHEMA_DDL` (idempotent, IF NOT EXISTS) and then applies
+`MIGRATIONS`: sqlite-utils records each applied step in its
+`_sqlite_migrations` table and skips it on every later open, so ordering and
+run-once bookkeeping live there. That tracking table is **authoritative**;
+`PRAGMA user_version` is still stamped to `SCHEMA_VERSION` after a successful
+run, but only as an informational marker (and it is never downgraded).
+
+Databases in the wild carry no tracking table — earlier builds versioned the
+schema by `user_version` alone, and the pre-ladder ones stamped it to current
+without actually migrating anything (issue #44). On first open under this
+code every registered step therefore looks un-applied and runs, whatever the
+stamp claims — which is exactly what repairs those installs. The price is
+that **every step must be presence-guarded and idempotent**: safe against any
+historical shape, and against a fresh database where the DDL pass already
+laid down the current schema.
 """
 
 from __future__ import annotations
@@ -18,11 +35,37 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import sqlite_utils
+from sqlite_utils.migrations import Migrations
+
 from . import paths
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
-SCHEMA_DDL = """
+# Split out of SCHEMA_DDL because the v3 -> v4 ladder step replays it verbatim;
+# one copy means the step cannot drift from the schema.
+SLOT_TEMPLATES_DDL = """
+-- Named slot-assignment layouts for the Run tab. Scoped to a model
+-- (model_id NULL = AI Config mode) and to a run mode ('standard'/'package'),
+-- which keep separate lists because their assignment rules differ.
+CREATE TABLE IF NOT EXISTS slot_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  model_id INTEGER REFERENCES models(id) ON DELETE CASCADE,
+  mode TEXT NOT NULL CHECK(mode IN ('standard','package')),
+  name TEXT NOT NULL,
+  assignments_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- IFNULL() because UNIQUE treats every NULL model_id (AI Config mode) as
+-- distinct, which would let duplicate AI-mode template names through.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_slot_templates_name
+  ON slot_templates(IFNULL(model_id, -1), mode, name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_slot_templates_scope ON slot_templates(model_id, mode);
+"""
+
+SCHEMA_DDL = (
+    """
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 
@@ -81,30 +124,15 @@ CREATE TABLE IF NOT EXISTS headstamps (
   UNIQUE(model_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_headstamps_model ON headstamps(model_id);
-
--- Named slot-assignment layouts for the Run tab. Scoped to a model
--- (model_id NULL = AI Config mode) and to a run mode ('standard'/'package'),
--- which keep separate lists because their assignment rules differ.
-CREATE TABLE IF NOT EXISTS slot_templates (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  model_id INTEGER REFERENCES models(id) ON DELETE CASCADE,
-  mode TEXT NOT NULL CHECK(mode IN ('standard','package')),
-  name TEXT NOT NULL,
-  assignments_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
--- IFNULL() because UNIQUE treats every NULL model_id (AI Config mode) as
--- distinct, which would let duplicate AI-mode template names through.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_slot_templates_name
-  ON slot_templates(IFNULL(model_id, -1), mode, name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_slot_templates_scope ON slot_templates(model_id, mode);
-
+"""
+    + SLOT_TEMPLATES_DDL
+    + """
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
 """
+)
 # NOTE: community feedback-loop captures are intentionally NOT tracked in the
 # DB. They live as JPEGs under data/models/<id>/feedback_images/ and that folder
 # is the queue (see sorter/feedback.py). A legacy DB may still carry an unused
@@ -114,6 +142,142 @@ CREATE TABLE IF NOT EXISTS settings (
 DEFAULT_CARTRIDGE_NAME = "9mm"
 DEFAULT_MODEL_NAME = "Default"
 DEFAULT_MODEL_MODE = "convnext_tiny"
+
+
+# ----- schema migrations ------------------------------------------------------
+
+
+def _execute_script(conn: sqlite3.Connection, ddl: str) -> None:
+    """Run a multi-statement DDL string one statement at a time.
+
+    Not `executescript()`: that commits any open transaction before it runs,
+    which would tear a migration step out of its enclosing transaction.
+    """
+    for stmt in ddl.strip().split(";"):
+        stmt = stmt.strip()
+        if stmt:
+            conn.execute(stmt)
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """The column names of `table`, empty when the table does not exist.
+
+    `PRAGMA` cannot take a bound parameter in sqlite3, hence the f-string; the
+    table name is always a literal from this module.
+    """
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+# Every `models` column the current DDL declares beyond the four the table
+# shipped with, in declaration order, as (name, ALTER definition).
+_LATE_MODEL_COLUMNS: tuple[tuple[str, str], ...] = (
+    (
+        "model_type",
+        "TEXT NOT NULL DEFAULT 'Standard' CHECK(model_type IN ('Standard','ReadOnly','CommunityManaged'))",
+    ),
+    ("community_model_uid", "TEXT"),
+    ("model_version", "INTEGER NOT NULL DEFAULT 1"),
+    ("enable_image_processing", "INTEGER NOT NULL DEFAULT 1"),
+    ("image_processing_json", "TEXT"),
+    ("training_config_json", "TEXT"),
+    ("ai_model_config_json", "TEXT"),
+    ("use_primer_mask", "INTEGER NOT NULL DEFAULT 0"),
+    ("hide_primer", "INTEGER NOT NULL DEFAULT 1"),
+    ("primer_mask_size", "INTEGER NOT NULL DEFAULT 135"),
+    ("last_training_date", "TEXT"),
+    ("last_training_duration", "INTEGER NOT NULL DEFAULT 0"),
+    ("trained_image_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("training_confusion_table", "TEXT"),
+    ("feedback_loop_enabled", "INTEGER NOT NULL DEFAULT 0"),
+    ("feedback_loop_confidence_floor", "INTEGER NOT NULL DEFAULT 95"),
+    ("feedback_loop_upload_mode", "TEXT NOT NULL DEFAULT 'Manual'"),
+    ("model_path", "TEXT"),
+    # SQLite rejects ADD COLUMN with a non-constant default on a populated
+    # table, so the two timestamps cannot carry the DDL's
+    # `NOT NULL DEFAULT (datetime('now'))`. They arrive nullable and are
+    # backfilled instead.
+    ("created_at", "TEXT"),
+    ("updated_at", "TEXT"),
+)
+
+_BACKFILLED_MODEL_COLUMNS = ("created_at", "updated_at")
+
+
+def _add_column(conn: sqlite3.Connection, table: str, name: str, definition: str) -> None:
+    """ALTER `table` to add `name`, unless it is already there.
+
+    A table the DDL pass had to create arrives complete and is skipped
+    wholesale, so a step only ever patches a table it found already present.
+    """
+    present = _columns(conn, table)
+    if present and name not in present:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+
+
+def _add_missing_model_columns(conn: sqlite3.Connection) -> None:
+    """Bring a pre-existing `models` table up to the current column set."""
+    if not _columns(conn, "models"):
+        return
+    for name, definition in _LATE_MODEL_COLUMNS:
+        _add_column(conn, "models", name, definition)
+    for name in _BACKFILLED_MODEL_COLUMNS:
+        conn.execute(f"UPDATE models SET {name} = datetime('now') WHERE {name} IS NULL")
+
+
+# The migration set. Steps run in registration order; sqlite-utils records
+# each one in `_sqlite_migrations` keyed by (set, name) and never reruns a
+# recorded step, so the explicit `name=` strings are load-bearing — renaming
+# one would make every install run it again. Numbered after the historical
+# `user_version` each change shipped at.
+#
+# Every step is presence-guarded (see the module docstring for why): it runs
+# once on every pre-existing database regardless of shape, and once on a
+# fresh one where the DDL pass has already done its work.
+MIGRATIONS = Migrations("casesorter")
+
+
+@MIGRATIONS(name="0002_headstamps_parent_id")
+def _headstamps_parent_id(db: sqlite_utils.Database) -> None:
+    """Parent classifications: the child link on `headstamps`.
+
+    The `headstamp_parents` table itself is created by the DDL pass that runs
+    before the migrations; only the column on an already-present `headstamps`
+    table needs an ALTER.
+    """
+    # NULL default keeps this a legal ALTER even with a REFERENCES clause.
+    _add_column(
+        db.conn,
+        "headstamps",
+        "parent_id",
+        "INTEGER REFERENCES headstamp_parents(id) ON DELETE SET NULL",
+    )
+
+
+@MIGRATIONS(name="0003_headstamp_parents_slot")
+def _headstamp_parents_slot(db: sqlite_utils.Database) -> None:
+    """Per-parent slot assignment."""
+    _add_column(db.conn, "headstamp_parents", "slot", "INTEGER NOT NULL DEFAULT 0")
+
+
+@MIGRATIONS(name="0004_slot_templates")
+def _slot_templates(db: sqlite_utils.Database) -> None:
+    """Named slot-assignment layouts for the Run tab.
+
+    Replays the shared `SLOT_TEMPLATES_DDL` constant (all IF NOT EXISTS), so
+    the step cannot drift from the schema.
+    """
+    _execute_script(db.conn, SLOT_TEMPLATES_DDL)
+
+
+@MIGRATIONS(name="0005_models_columns")
+def _models_columns(db: sqlite_utils.Database) -> None:
+    """The `models` columns no earlier build ever migrated (issue #44).
+
+    Presence-guarded per column, so this single step repairs every historical
+    shape — including a database stamped `user_version = SCHEMA_VERSION` by a
+    pre-ladder build while still carrying the original four-column table.
+    """
+    _add_missing_model_columns(db.conn)
 
 
 class Database:
@@ -198,17 +362,8 @@ class Database:
         was_fresh = not self.path.exists()
         conn = self.connect()
         # DDL is idempotent (IF NOT EXISTS) so re-running on an existing DB is safe.
-        for stmt in SCHEMA_DDL.strip().split(";"):
-            stmt = stmt.strip()
-            if stmt:
-                conn.execute(stmt)
-        # Bring pre-existing tables up to the current shape. CREATE TABLE IF NOT
-        # EXISTS leaves an already-present `headstamps` table untouched, so new
-        # columns are added here with ALTER instead.
-        self._apply_column_migrations(conn)
-        current_version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if current_version < SCHEMA_VERSION:
-            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        _execute_script(conn, SCHEMA_DDL)
+        self._migrate_schema()
 
         if was_fresh:
             if legacy_config_json and Path(legacy_config_json).exists():
@@ -218,24 +373,26 @@ class Database:
 
     # ----- migration ----------------------------------------------------------
 
-    def _apply_column_migrations(self, conn: sqlite3.Connection) -> None:
-        """Add columns introduced after a table's first release.
+    def _migrate_schema(self) -> None:
+        """Apply every pending migration step, then stamp `user_version`.
 
-        Idempotent: each ALTER runs only when the column is absent, so this
-        is safe to call on every startup (fresh DBs already have the column
-        from the DDL and skip the ALTER).
+        sqlite-utils' `_sqlite_migrations` table decides what is pending, so
+        every step runs at most once per database — including on a fresh one,
+        where each step is a presence-guarded no-op that just gets recorded.
+
+        The whole run happens inside one `transaction()` (sqlite-utils'
+        per-step transactions nest as SAVEPOINTs), so an interrupted upgrade
+        rolls back whole: no step is left recorded as applied without its
+        changes, and the stamp never advances early. `user_version` is written
+        last, informationally, and never downgraded — a database stamped by a
+        newer build keeps its stamp.
         """
-        headstamp_cols = {row[1] for row in conn.execute("PRAGMA table_info(headstamps)").fetchall()}
-        if "parent_id" not in headstamp_cols:
-            # NULL default keeps this a legal ALTER even with a REFERENCES clause.
-            conn.execute(
-                "ALTER TABLE headstamps ADD COLUMN parent_id INTEGER "
-                "REFERENCES headstamp_parents(id) ON DELETE SET NULL"
-            )
-
-        parent_cols = {row[1] for row in conn.execute("PRAGMA table_info(headstamp_parents)").fetchall()}
-        if parent_cols and "slot" not in parent_cols:
-            conn.execute("ALTER TABLE headstamp_parents ADD COLUMN slot INTEGER NOT NULL DEFAULT 0")
+        with self.transaction() as conn:
+            # Wrapping our own connection: recursive_triggers/execute_plugins
+            # off so construction leaves the connection exactly as it was.
+            MIGRATIONS.apply(sqlite_utils.Database(conn, recursive_triggers=False, execute_plugins=False))
+            if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
+                conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def _migrate_from_json(self, json_path: Path) -> None:
         """One-shot import. Reads `config.json`, writes rows, renames to `.bak`."""

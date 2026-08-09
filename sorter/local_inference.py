@@ -216,7 +216,7 @@ def _dump_environment(torch_mod: Any) -> None:
             # the issue is something in our pipeline (.to(device) walks,
             # tensor strides, etc.).
             try:
-                from torchvision import models as tv_models  # noqa: F401
+                from torchvision import models as tv_models
 
                 bench_net = tv_models.convnext_tiny(weights=None).cuda().eval()
                 bench_x = torch_mod.randn(1, 3, 224, 224, device="cuda")

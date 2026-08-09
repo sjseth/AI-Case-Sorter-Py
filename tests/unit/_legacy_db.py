@@ -1,17 +1,13 @@
-"""One hand-written pre-SCHEMA_VERSION database, shared by the migration tests.
+"""Hand-written pre-SCHEMA_VERSION databases, shared by the migration tests.
 
 Three modules used to carry their own copy of a "legacy" schema
 (`test_db.py`, `test_headstamp_parents.py`, `test_parent_runtime.py`), which
 meant three things to keep in step and three chances to drift.
 
-The tables are deliberately kept to the **minimum the inserts need**. An
-earlier version of this helper reproduced the current `models` DDL verbatim,
-all 24 columns of it, which made the fixture look like it covered a
-`models` migration when no such migration exists — `_apply_column_migrations`
-only ever touches `headstamps.parent_id` and `headstamp_parents.slot`. A
-genuinely old `models` table is left exactly as it is found. Keeping the
-fixture minimal states that honestly and cannot drift out of date, since
-there is nothing here to keep in sync. That gap is issue #44.
+The tables are deliberately kept to the **minimum the inserts need**, with the
+shape of each table the migration steps touch driven by `SCHEMA_SHAPES` — one
+entry per historical `user_version` a database in the wild can carry, so a
+fixture and the step that consumes it cannot drift apart.
 """
 
 from __future__ import annotations
@@ -20,31 +16,48 @@ import json
 import sqlite3
 from pathlib import Path
 
-# The columns `models` carried before any of the later additions. Everything
-# the current DDL has beyond this is what a real legacy DB would be *missing*
-# — and would go on missing, because nothing migrates this table.
+# The columns `models` carried before any of the later additions. A real
+# legacy database still has exactly these, because no old build ever migrated
+# this table (issue #44).
 LEGACY_MODEL_COLUMNS = {"id", "name", "cartridge_id", "model_mode"}
+
+# What the database looked like on disk at each historical `user_version`.
+# `models` stays legacy throughout: no old build ever migrated it, so a v4
+# database in the wild carries the v1 `models` table.
+SCHEMA_SHAPES: dict[int, dict[str, bool]] = {
+    1: {},
+    2: {"with_parents_table": True, "with_parent_id": True},
+    3: {"with_parents_table": True, "with_parent_id": True, "with_parent_slot": True},
+    4: {
+        "with_parents_table": True,
+        "with_parent_id": True,
+        "with_parent_slot": True,
+        "with_slot_templates": True,
+    },
+}
 
 
 def write_legacy_db(
     path: Path,
     *,
     user_version: int,
-    with_parents_table: bool,
+    with_parents_table: bool = False,
     with_parent_id: bool = False,
+    with_parent_slot: bool = False,
+    with_slot_templates: bool = False,
 ) -> None:
     """Lay down a pre-SCHEMA_VERSION database by hand.
 
-    Only the tables the column migrations touch are given their *old* shape:
-    `headstamps` without `parent_id` (unless `with_parent_id`), and optionally
-    a `headstamp_parents` that carries no `slot` of its own. Everything else
-    is the minimum the seed rows below need.
+    Only the tables the migration steps touch are given their *old* shape:
+    `headstamps` without `parent_id` (unless `with_parent_id`), optionally a
+    `headstamp_parents` that carries no `slot` of its own (unless
+    `with_parent_slot`), and optionally `slot_templates`. Everything else is
+    the minimum the seed rows below need.
 
-    Note `user_version` is essentially decorative: `_apply_column_migrations`
-    decides what to do by inspecting the columns that are actually present,
-    not by reading the stamp, so the same DB shape migrates identically at any
-    starting version. It is set only so the "did the stamp get bumped" assertion
-    has somewhere to start from.
+    `user_version` no longer decides what runs (sqlite-utils' tracking table
+    does, and a legacy database has none — every presence-guarded step runs on
+    first open), but a real database of this shape carried this stamp, so the
+    fixture writes it too — see `write_db_at_version`, which pairs the two.
     """
     conn = sqlite3.connect(path, isolation_level=None)
     conn.executescript(
@@ -75,13 +88,24 @@ def write_legacy_db(
         + "  UNIQUE(model_id, name))"
     )
     if with_parents_table:
-        # Old shape: parents existed but carried no slot of their own.
         conn.execute(
             "CREATE TABLE headstamp_parents ("
             "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "  name TEXT NOT NULL,"
             "  model_id INTEGER NOT NULL,"
-            "  UNIQUE(model_id, name))"
+            + ("  slot INTEGER NOT NULL DEFAULT 0," if with_parent_slot else "")
+            + "  UNIQUE(model_id, name))"
+        )
+    if with_slot_templates:
+        conn.execute(
+            "CREATE TABLE slot_templates ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  model_id INTEGER,"
+            "  mode TEXT NOT NULL,"
+            "  name TEXT NOT NULL,"
+            "  assignments_json TEXT NOT NULL DEFAULT '{}',"
+            "  created_at TEXT NOT NULL DEFAULT (datetime('now')),"
+            "  updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
         )
 
     conn.execute("INSERT INTO cartridges(id, name) VALUES (1, '9mm')")
@@ -93,6 +117,20 @@ def write_legacy_db(
     conn.execute("INSERT INTO settings(key, value) VALUES ('api', ?)", (json.dumps({"model": "legacy"}),))
     conn.execute(f"PRAGMA user_version = {user_version}")
     conn.close()
+
+
+def write_db_at_version(path: Path, version: int, *, stamped_as: int | None = None) -> None:
+    """Write the on-disk shape of `version`, stamped `stamped_as` (default `version`).
+
+    `stamped_as` exists for the historically common mismatch: a database
+    already stamped at the current SCHEMA_VERSION while carrying an older
+    shape, which is what every pre-ladder build produced (issue #44).
+    """
+    write_legacy_db(
+        path,
+        user_version=version if stamped_as is None else stamped_as,
+        **SCHEMA_SHAPES[version],
+    )
 
 
 def columns(conn: sqlite3.Connection, table: str) -> set[str]:

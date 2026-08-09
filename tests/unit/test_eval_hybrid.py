@@ -13,7 +13,7 @@ pytest.importorskip("tkinter")
 pytest.importorskip("cv2")
 pytest.importorskip("PIL")
 
-from sorter.ui.dialog_model_evaluator import ModelEvaluatorDialog  # noqa: E402
+from sorter.ui.dialog_model_evaluator import ModelEvaluatorDialog
 
 
 def _row(**over):

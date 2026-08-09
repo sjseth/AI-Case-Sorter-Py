@@ -10,7 +10,7 @@ import pytest
 pytest.importorskip("tkinter")
 pytest.importorskip("cv2")
 
-from sorter.ui.tab_run import SlotDetailsPanel  # noqa: E402
+from sorter.ui.tab_run import SlotDetailsPanel
 
 
 def test_catch_all_is_read_only() -> None:

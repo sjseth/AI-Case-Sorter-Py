@@ -73,8 +73,9 @@ it.
 
 **Python:** 3.12+ floor (`pyproject.toml`); `.python-version` pins the actual
 version uv provisions for the app itself, independent of that floor. **Core
-deps:** pyserial, opencv-python, numpy, Pillow, requests, msal, platformdirs
-(+ `pygrabber` on Windows). **Optional ML deps:** torch, torchvision.
+deps:** pyserial, opencv-python, numpy, Pillow, requests, msal, platformdirs,
+sqlite-utils (+ `pygrabber` on Windows). **Optional ML deps:** torch,
+torchvision.
 
 ```
 AI-Case-Sorter-Py/
@@ -143,8 +144,15 @@ sanctioned way for worker threads to update the UI.
 ### Persistence & configuration
 - **`db.py`** — `Database`: owns one `sqlite3.Connection` (WAL, foreign keys on,
   `check_same_thread=False` with an `RLock` serializing multi-statement
-  transactions / SAVEPOINTs). Schema is `PRAGMA user_version`-versioned
-  (`SCHEMA_VERSION = 4`) with idempotent DDL + `_apply_column_migrations`.
+  transactions / SAVEPOINTs). Schema: idempotent DDL plus ordered migration
+  steps run through `sqlite_utils.Migrations` (`MIGRATIONS`), whose
+  `_sqlite_migrations` tracking table is what decides run-once — `PRAGMA
+  user_version` (`SCHEMA_VERSION = 5`) is stamped informationally, never
+  downgraded. A legacy DB has no tracking table, so every step runs on first
+  open whatever the stamp claims; **every step is therefore presence-guarded
+  and idempotent** (that same property repairs databases stamped current by a
+  pre-ladder build but structurally incomplete). Step names are load-bearing:
+  renaming one makes every install run it again.
   `ensure_initialized()` creates the DB, runs a one-shot import from legacy
   `data/config.json` (renaming it `.bak`), or seeds a default cartridge+model.
   Tables: `cartridges`, `models`, `headstamp_parents`, `headstamps`,

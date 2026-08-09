@@ -7,13 +7,13 @@ import pytest
 pytest.importorskip("tkinter")
 pytest.importorskip("cv2")
 
-import tkinter as tk  # noqa: E402
+import tkinter as tk
 
-from sorter.config import Config  # noqa: E402
-from sorter.db import Database  # noqa: E402
-from sorter.events import EventBus  # noqa: E402
-from sorter.repository import ModelRepo, SettingsRepo  # noqa: E402
-from sorter.ui.tab_run import RunTab  # noqa: E402
+from sorter.config import Config
+from sorter.db import Database
+from sorter.events import EventBus
+from sorter.repository import ModelRepo, SettingsRepo
+from sorter.ui.tab_run import RunTab
 
 
 @pytest.fixture

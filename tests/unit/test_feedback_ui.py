@@ -11,25 +11,25 @@ import pytest
 pytest.importorskip("tkinter")
 pytest.importorskip("cv2")
 
-import tkinter as tk  # noqa: E402
+import tkinter as tk
 
-from sorter import paths  # noqa: E402
-from sorter.config import Config  # noqa: E402
-from sorter.db import Database  # noqa: E402
-from sorter.events import EventBus  # noqa: E402
-from sorter.models import Model  # noqa: E402
-from sorter.repository import (  # noqa: E402
+from sorter import paths
+from sorter.config import Config
+from sorter.db import Database
+from sorter.events import EventBus
+from sorter.models import Model
+from sorter.repository import (
     CartridgeRepo,
     ModelRepo,
     SettingsRepo,
 )
-from sorter.ui.dialog_model_editor import (  # noqa: E402
+from sorter.ui.dialog_model_editor import (
     _FEEDBACK_MODE_BY_LABEL,
     _FEEDBACK_MODE_LABELS,
     ModelEditorDialog,
     _is_community_model,
 )
-from sorter.ui.tab_run import RunTab  # noqa: E402
+from sorter.ui.tab_run import RunTab
 
 
 @pytest.fixture

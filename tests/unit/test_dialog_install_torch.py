@@ -4,6 +4,7 @@ display; skips cleanly without one."""
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import threading
 
@@ -11,10 +12,10 @@ import pytest
 
 pytest.importorskip("tkinter")
 
-import tkinter as tk  # noqa: E402
+import tkinter as tk
 
-from sorter.ui import dialog_install_torch  # noqa: E402
-from sorter.ui.dialog_install_torch import TorchInstallDialog  # noqa: E402
+from sorter.ui import dialog_install_torch
+from sorter.ui.dialog_install_torch import TorchInstallDialog
 
 
 @pytest.fixture
@@ -73,8 +74,17 @@ def test_install_uses_uv_pip_not_bare_pip(root, monkeypatch) -> None:
     dlg.destroy()
 
 
-def test_missing_uv_fails_without_spawning_a_process(root, monkeypatch) -> None:
+def test_missing_uv_and_pip_fails_without_spawning_a_process(root, monkeypatch) -> None:
     monkeypatch.setattr(dialog_install_torch, "find_uv", lambda: None)
+    # pip must be masked explicitly: the dialog legitimately falls back to
+    # `python -m pip` when it is importable, and since sqlite-utils (a core
+    # dependency) depends on pip, the app venv now always carries it.
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name, *a, **k: None if name == "pip" else real_find_spec(name, *a, **k),
+    )
     spawn_attempted = []
     monkeypatch.setattr(subprocess, "Popen", lambda *_a, **_k: spawn_attempted.append(1))
 
