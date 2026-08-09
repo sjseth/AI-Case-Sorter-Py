@@ -294,6 +294,116 @@ def test_json_config_payload_containing_ok_reaches_on_response(broker: SerialBro
     assert sink.ok == []
 
 
+# ----- the real firmware's vocabulary ----------------------------------------
+#
+# Everything above tests the parser against lines chosen to stress it. This
+# section tests it against the lines a real board actually emits.
+#
+# The anchored matcher's blast radius is whatever the firmware prints, and the
+# emulator only ever emits the clean tokens the parser wants — so it can never
+# disprove a parser bug. This is the only place the fix is checked against the
+# real vocabulary rather than against itself.
+#
+# Derived by reading every uncommented `Serial.print*` in the board firmware,
+# which is upstream and stays there — this repo does not vendor a copy:
+#
+#   https://github.com/sjseth/AI-Case-Sorter-CS7.2/blob/
+#     cd2d01ae3c6ef78a0eebcac13619e11fd5c7ca53/MicroController/
+#     CS72_Firmware_V1.7/CS72_Firmware_V1.7.ino   (FIRMWARE_VERSION 7.2.260128.7.1)
+#
+# The commit is pinned so a future reader can diff forward and see whether the
+# vocabulary moved. If it did, fix these cases against the newer firmware.
+
+
+@pytest.mark.parametrize(
+    ("line", "attr"),
+    [
+        # Boot banner and acks.
+        ("Ready", "response"),
+        ("ok", "ok"),
+        (" ok", "ok"),  # the `ping` reply — note the leading space
+        ("7.2.260128.7.1", "response"),  # `version`; try_open matches this separately
+        # The two lines a run actually waits on.
+        ("done", "done"),
+        ("waiting for brass", "waiting"),
+        # Every failure the board can report. All `error:`-prefixed, no space
+        # after the colon — the exact shape anchored matching is written for.
+        ("error:feed overtravel detected", "error"),
+        ("error:feed stallguard", "error"),
+        ("error:feed stallguard (homing)", "error"),
+        ("error:sort stallguard", "error"),
+        ("error:sort stallguard (homing)", "error"),
+        ("error:sort offset stallguard (homing)", "error"),
+        # Stall diagnostics, printed just before the error line. A feed stall
+        # splits across two lines (println twice), a sort stall does not.
+        ("STALL FEED SG_RESULT=112", "response"),
+        (", DIAG=0", "response"),
+        ("STALL SORT SG_RESULT=97, DIAG=1", "response"),
+        # `status`.
+        ("SORT microsteps: 16", "response"),
+        ("SORT current: 900", "response"),
+        ("SORT Stealth: 1", "response"),
+        ("FEED microsteps: 16", "response"),
+        ("FEED current: 1200", "response"),
+        ("FEED Stealth: 0", "response"),
+        # Test cycles.
+        ("testing started", "response"),
+        ("3 - 5", "response"),
+        ("3 - Sorting to: 5", "response"),
+        ("Sort Test Completed", "response"),
+    ],
+)
+def test_real_firmware_line_routes_to_the_expected_callback(
+    broker: SerialBroker, sink: _Sink, line: str, attr: str
+) -> None:
+    _feed(broker, line + "\n")
+    assert getattr(sink, attr) == [line.strip()]
+
+
+def test_real_getconfig_payload_reaches_on_response(broker: SerialBroker, sink: _Sink) -> None:
+    """The board's real `getconfig` reply, verbatim in shape (one line, no ack).
+
+    `get_config()` captures it from `on_response`, so any ack branch that
+    swallowed it would hang the Serial tab's config load.
+    """
+    payload = (
+        '{"FeedMotorCurrent":1200,"FeedMotorSpeed":60,"FeedCycleSteps":200,'
+        '"SortMotorCurrent":900,"SortMotorSpeed":80,"SortSteps":400,'
+        '"NotificationDelay":50,"SlotDropDelay":100,"AirDropEnabled":1,'
+        '"AirDropPostDelay":10,"AirDropPreDelay":20,"AirDropSignalTime":30,'
+        '"FeedHomingOffset":0,"SortHomingOffset":0,"AutoMotorStandbyTimeout":600,'
+        '"CaseFanSpeedEnabled":1,"CaseFanLevel":128,"CameraLEDLevel":200,'
+        '"DebounceTimeout":250,"DebouncePauseTime":40}'
+    )
+    _feed(broker, payload + "\n")
+    assert sink.response == [payload]
+    assert sink.ok == sink.done == sink.error == sink.waiting == []
+
+
+def test_a_real_stall_reports_as_an_error_after_its_diagnostic(broker: SerialBroker, sink: _Sink) -> None:
+    """A feed stall arrives as three lines, and only the last one is the error.
+
+    `triggerFeedStall` prints `STALL FEED SG_RESULT=` + the value with
+    `println`, so the `, DIAG=` half lands on its own line, then the
+    `error:…` message. The two diagnostic lines must stay noise — routing
+    either of them as an ack would let a stalled board look like a working one.
+    """
+    _feed(broker, "STALL FEED SG_RESULT=112\n, DIAG=0\nerror:feed stallguard\n")
+    assert sink.response == ["STALL FEED SG_RESULT=112", ", DIAG=0"]
+    assert sink.error == ["error:feed stallguard"]
+    assert sink.done == sink.ok == []
+
+
+def test_the_real_ping_ack_is_an_ok_despite_its_leading_space(broker: SerialBroker, sink: _Sink) -> None:
+    # The firmware answers `ping` with `" ok\n"`. The parser's strip is what
+    # makes that an ack rather than an unrecognized line, so pin it: the ping
+    # thread runs on every idle connection, so this is the most frequently
+    # exercised line in the whole protocol.
+    _feed(broker, " ok\n")
+    assert sink.ok == ["ok"]
+    assert sink.response == []
+
+
 # ----- try_open handshake ----------------------------------------------------
 
 
@@ -418,6 +528,25 @@ def test_try_open_accepts_a_real_version_string(broker: SerialBroker, monkeypatc
     try:
         assert broker.try_open() is True
         assert broker.firmware_version == "7.4.1"
+    finally:
+        broker.close()
+
+
+def test_try_open_accepts_the_real_boards_boot_banner_and_version(
+    broker: SerialBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The handshake as a real CS7.2 board actually plays it.
+
+    `setup()` prints `Ready`, then `version` answers with the firmware's
+    `FIRMWARE_VERSION`. Pinning the literal version keeps the `7.`-prefix
+    check honest: it is a firmware *series* match, and a future 8.x board
+    would fall back to the banner.
+    """
+    fake = _FakeSerial(lines=["Ready\n", "7.2.260128.7.1\n"])
+    _patch_serial(monkeypatch, fake)
+    try:
+        assert broker.try_open() is True
+        assert broker.firmware_version == "7.2.260128.7.1"
     finally:
         broker.close()
 
