@@ -5,9 +5,9 @@ Three modules used to carry their own copy of a "legacy" schema
 meant three things to keep in step and three chances to drift.
 
 The tables are deliberately kept to the **minimum the inserts need**, with the
-shape of each table the migration ladder touches driven by `SCHEMA_SHAPES` —
-one entry per `user_version` the ladder steps up from, so a fixture and the
-step that consumes it cannot drift apart.
+shape of each table the migration steps touch driven by `SCHEMA_SHAPES` — one
+entry per historical `user_version` a database in the wild can carry, so a
+fixture and the step that consumes it cannot drift apart.
 """
 
 from __future__ import annotations
@@ -17,13 +17,13 @@ import sqlite3
 from pathlib import Path
 
 # The columns `models` carried before any of the later additions. A real
-# pre-ladder database still has exactly these, because nothing used to migrate
+# legacy database still has exactly these, because no old build ever migrated
 # this table (issue #44).
 LEGACY_MODEL_COLUMNS = {"id", "name", "cartridge_id", "model_mode"}
 
-# What the database looked like on disk at each `user_version` the ladder can
-# step up from. `models` stays legacy throughout: no build before the ladder
-# ever migrated it, so a v4 database in the wild carries the v1 `models` table.
+# What the database looked like on disk at each historical `user_version`.
+# `models` stays legacy throughout: no old build ever migrated it, so a v4
+# database in the wild carries the v1 `models` table.
 SCHEMA_SHAPES: dict[int, dict[str, bool]] = {
     1: {},
     2: {"with_parents_table": True, "with_parent_id": True},
@@ -48,15 +48,16 @@ def write_legacy_db(
 ) -> None:
     """Lay down a pre-SCHEMA_VERSION database by hand.
 
-    Only the tables the ladder touches are given their *old* shape:
+    Only the tables the migration steps touch are given their *old* shape:
     `headstamps` without `parent_id` (unless `with_parent_id`), optionally a
     `headstamp_parents` that carries no `slot` of its own (unless
     `with_parent_slot`), and optionally `slot_templates`. Everything else is
     the minimum the seed rows below need.
 
-    `user_version` is what the ladder reads to decide which steps to run, so it
-    must match the shape being written — see `write_db_at_version`, which pairs
-    the two for you.
+    `user_version` no longer decides what runs (sqlite-utils' tracking table
+    does, and a legacy database has none — every presence-guarded step runs on
+    first open), but a real database of this shape carried this stamp, so the
+    fixture writes it too — see `write_db_at_version`, which pairs the two.
     """
     conn = sqlite3.connect(path, isolation_level=None)
     conn.executescript(
@@ -121,9 +122,9 @@ def write_legacy_db(
 def write_db_at_version(path: Path, version: int, *, stamped_as: int | None = None) -> None:
     """Write the on-disk shape of `version`, stamped `stamped_as` (default `version`).
 
-    `stamped_as` exists for the one case the ladder cannot express: a database
+    `stamped_as` exists for the historically common mismatch: a database
     already stamped at the current SCHEMA_VERSION while carrying an older
-    shape, which is what every pre-ladder build produced.
+    shape, which is what every pre-ladder build produced (issue #44).
     """
     write_legacy_db(
         path,

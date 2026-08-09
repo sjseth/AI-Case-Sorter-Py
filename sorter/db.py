@@ -2,13 +2,26 @@
 
 Exposes a single `Database` class that owns:
   - a `sqlite3.Connection` with row_factory = sqlite3.Row
-  - schema DDL plus an ordered, `PRAGMA user_version`-keyed migration ladder
+  - schema DDL plus an ordered set of migration steps run through
+    `sqlite_utils.Migrations`
   - `ensure_initialized()` that creates the DB if missing and runs the
     one-shot import from `data/config.json` when present.
 
-A fresh database is created wholesale from `SCHEMA_DDL` and stamped straight
-to `SCHEMA_VERSION`. An existing one is stepped up through `MIGRATIONS` in
-order, one rung at a time, so each step runs at most once.
+Every open lays down `SCHEMA_DDL` (idempotent, IF NOT EXISTS) and then applies
+`MIGRATIONS`: sqlite-utils records each applied step in its
+`_sqlite_migrations` table and skips it on every later open, so ordering and
+run-once bookkeeping live there. That tracking table is **authoritative**;
+`PRAGMA user_version` is still stamped to `SCHEMA_VERSION` after a successful
+run, but only as an informational marker (and it is never downgraded).
+
+Databases in the wild carry no tracking table — earlier builds versioned the
+schema by `user_version` alone, and the pre-ladder ones stamped it to current
+without actually migrating anything (issue #44). On first open under this
+code every registered step therefore looks un-applied and runs, whatever the
+stamp claims — which is exactly what repairs those installs. The price is
+that **every step must be presence-guarded and idempotent**: safe against any
+historical shape, and against a fresh database where the DDL pass already
+laid down the current schema.
 """
 
 from __future__ import annotations
@@ -18,9 +31,12 @@ import json
 import shutil
 import sqlite3
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+
+import sqlite_utils
+from sqlite_utils.migrations import Migrations
 
 from . import paths
 
@@ -128,14 +144,14 @@ DEFAULT_MODEL_NAME = "Default"
 DEFAULT_MODEL_MODE = "convnext_tiny"
 
 
-# ----- migration ladder -------------------------------------------------------
+# ----- schema migrations ------------------------------------------------------
 
 
 def _execute_script(conn: sqlite3.Connection, ddl: str) -> None:
     """Run a multi-statement DDL string one statement at a time.
 
     Not `executescript()`: that commits any open transaction before it runs,
-    which would tear the ladder out of its enclosing `transaction()` block.
+    which would tear a migration step out of its enclosing transaction.
     """
     for stmt in ddl.strip().split(";"):
         stmt = stmt.strip()
@@ -208,53 +224,60 @@ def _add_missing_model_columns(conn: sqlite3.Connection) -> None:
         conn.execute(f"UPDATE models SET {name} = datetime('now') WHERE {name} IS NULL")
 
 
-def _v1_to_v2(conn: sqlite3.Connection) -> None:
-    """Parent classifications: the `headstamp_parents` table and the child link.
+# The migration set. Steps run in registration order; sqlite-utils records
+# each one in `_sqlite_migrations` keyed by (set, name) and never reruns a
+# recorded step, so the explicit `name=` strings are load-bearing — renaming
+# one would make every install run it again. Numbered after the historical
+# `user_version` each change shipped at.
+#
+# Every step is presence-guarded (see the module docstring for why): it runs
+# once on every pre-existing database regardless of shape, and once on a
+# fresh one where the DDL pass has already done its work.
+MIGRATIONS = Migrations("casesorter")
 
-    The table itself is created by the DDL pass that runs before the ladder;
-    only the column on an already-present `headstamps` table needs an ALTER.
+
+@MIGRATIONS(name="0002_headstamps_parent_id")
+def _headstamps_parent_id(db: sqlite_utils.Database) -> None:
+    """Parent classifications: the child link on `headstamps`.
+
+    The `headstamp_parents` table itself is created by the DDL pass that runs
+    before the migrations; only the column on an already-present `headstamps`
+    table needs an ALTER.
     """
     # NULL default keeps this a legal ALTER even with a REFERENCES clause.
     _add_column(
-        conn,
+        db.conn,
         "headstamps",
         "parent_id",
         "INTEGER REFERENCES headstamp_parents(id) ON DELETE SET NULL",
     )
 
 
-def _v2_to_v3(conn: sqlite3.Connection) -> None:
+@MIGRATIONS(name="0003_headstamp_parents_slot")
+def _headstamp_parents_slot(db: sqlite_utils.Database) -> None:
     """Per-parent slot assignment."""
-    _add_column(conn, "headstamp_parents", "slot", "INTEGER NOT NULL DEFAULT 0")
+    _add_column(db.conn, "headstamp_parents", "slot", "INTEGER NOT NULL DEFAULT 0")
 
 
-def _v3_to_v4(conn: sqlite3.Connection) -> None:
-    """Named slot-assignment layouts for the Run tab."""
-    _execute_script(conn, SLOT_TEMPLATES_DDL)
+@MIGRATIONS(name="0004_slot_templates")
+def _slot_templates(db: sqlite_utils.Database) -> None:
+    """Named slot-assignment layouts for the Run tab.
 
-
-def _v4_to_v5(conn: sqlite3.Connection) -> None:
-    """The `models` columns no earlier build ever migrated (issue #44)."""
-    _add_missing_model_columns(conn)
-
-
-MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
-    2: _v1_to_v2,
-    3: _v2_to_v3,
-    4: _v3_to_v4,
-    5: _v4_to_v5,
-}
-
-
-def _reconcile_structure(conn: sqlite3.Connection) -> None:
-    """Catch-up for a DB stamped current but structurally incomplete.
-
-    Builds before the ladder existed stamped `user_version` to SCHEMA_VERSION
-    unconditionally while never migrating `models`, so on those installs the
-    stamp alone cannot be trusted and no version-keyed step can reach them.
-    Presence-based and idempotent: once the table is complete it does nothing.
+    Replays the shared `SLOT_TEMPLATES_DDL` constant (all IF NOT EXISTS), so
+    the step cannot drift from the schema.
     """
-    _add_missing_model_columns(conn)
+    _execute_script(db.conn, SLOT_TEMPLATES_DDL)
+
+
+@MIGRATIONS(name="0005_models_columns")
+def _models_columns(db: sqlite_utils.Database) -> None:
+    """The `models` columns no earlier build ever migrated (issue #44).
+
+    Presence-guarded per column, so this single step repairs every historical
+    shape — including a database stamped `user_version = SCHEMA_VERSION` by a
+    pre-ladder build while still carrying the original four-column table.
+    """
+    _add_missing_model_columns(db.conn)
 
 
 class Database:
@@ -340,39 +363,36 @@ class Database:
         conn = self.connect()
         # DDL is idempotent (IF NOT EXISTS) so re-running on an existing DB is safe.
         _execute_script(conn, SCHEMA_DDL)
+        self._migrate_schema()
 
         if was_fresh:
-            # Nothing to step through: the DDL just laid down the current shape.
-            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             if legacy_config_json and Path(legacy_config_json).exists():
                 self._migrate_from_json(Path(legacy_config_json))
             else:
                 self._seed_defaults()
-        else:
-            self._migrate_schema()
 
     # ----- migration ----------------------------------------------------------
 
     def _migrate_schema(self) -> None:
-        """Step an existing DB up to SCHEMA_VERSION, one ladder rung at a time.
+        """Apply every pending migration step, then stamp `user_version`.
 
-        `user_version` decides what runs, so every step runs at most once. The
-        stamp is advanced as each step lands; the whole run commits atomically,
-        so an interrupted upgrade leaves the DB at its previous version rather
-        than half-migrated.
+        sqlite-utils' `_sqlite_migrations` table decides what is pending, so
+        every step runs at most once per database — including on a fresh one,
+        where each step is a presence-guarded no-op that just gets recorded.
+
+        The whole run happens inside one `transaction()` (sqlite-utils'
+        per-step transactions nest as SAVEPOINTs), so an interrupted upgrade
+        rolls back whole: no step is left recorded as applied without its
+        changes, and the stamp never advances early. `user_version` is written
+        last, informationally, and never downgraded — a database stamped by a
+        newer build keeps its stamp.
         """
         with self.transaction() as conn:
-            start_version = conn.execute("PRAGMA user_version").fetchone()[0]
-            version = start_version
-            for target in sorted(MIGRATIONS):
-                if version < target <= SCHEMA_VERSION:
-                    MIGRATIONS[target](conn)
-                    conn.execute(f"PRAGMA user_version = {target}")
-                    version = target
-            if start_version >= SCHEMA_VERSION:
-                # The ladder had nothing to do, which on a pre-ladder install is
-                # not proof the schema is complete. See _reconcile_structure.
-                _reconcile_structure(conn)
+            # Wrapping our own connection: recursive_triggers/execute_plugins
+            # off so construction leaves the connection exactly as it was.
+            MIGRATIONS.apply(sqlite_utils.Database(conn, recursive_triggers=False, execute_plugins=False))
+            if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
+                conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def _migrate_from_json(self, json_path: Path) -> None:
         """One-shot import. Reads `config.json`, writes rows, renames to `.bak`."""

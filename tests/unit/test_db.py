@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from sorter import db as db_module
 from sorter.db import DEFAULT_CARTRIDGE_NAME, DEFAULT_MODEL_MODE, SCHEMA_VERSION, Database
 from sorter.repository import (
     CartridgeRepo,
@@ -20,6 +19,18 @@ from sorter.repository import (
 )
 
 from ._legacy_db import LEGACY_MODEL_COLUMNS, SCHEMA_SHAPES, columns, write_db_at_version
+
+# The registered migration steps, in application order. Spelled out rather
+# than read from sorter.db because the names are load-bearing: sqlite-utils
+# keys its `_sqlite_migrations` bookkeeping on them, so renaming one makes
+# every install in the wild run it again — this list failing is the alarm.
+MIGRATION_NAMES = [
+    "0002_headstamps_parent_id",
+    "0003_headstamp_parents_slot",
+    "0004_slot_templates",
+    "0005_models_columns",
+]
+MIGRATION_SET = "casesorter"
 
 
 def test_fresh_db_seeds_default_cartridge_and_model(tmp_path: Path) -> None:
@@ -130,11 +141,11 @@ def test_migration_from_v1_adds_columns_and_keeps_rows(tmp_path: Path) -> None:
 
     assert _user_version(db) == SCHEMA_VERSION
 
-    # The ladder added parent_id to the existing headstamps table.
+    # The migration added parent_id to the existing headstamps table.
     assert "parent_id" in columns(db.conn, "headstamps")
     # headstamp_parents and slot_templates did not exist at all, so these come
     # from the idempotent CREATE TABLE IF NOT EXISTS pass rather than from an
-    # ALTER — a ladder step only has to patch a table it finds already there.
+    # ALTER — a migration step only has to patch a table it finds already there.
     assert {"slot", "model_id", "name"} <= columns(db.conn, "headstamp_parents")
     assert db.conn.execute("SELECT COUNT(*) FROM slot_templates").fetchone()[0] == 0
 
@@ -245,57 +256,80 @@ def test_migration_is_idempotent_on_an_already_migrated_db(tmp_path: Path) -> No
     assert {table: columns(reopened.conn, table) for table in first} == cols
 
 
-def _record_ladder(monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    """Swap the ladder for steps that only note that they ran, in order."""
-    calls: list[int] = []
-    monkeypatch.setattr(
-        db_module,
-        "MIGRATIONS",
-        {v: (lambda conn, v=v: calls.append(v)) for v in sorted(db_module.MIGRATIONS)},
-    )
-    return calls
+def _applied_migrations(db: Database) -> list[tuple[str, str]]:
+    """The (name, applied_at) rows sqlite-utils recorded, in application order."""
+    rows = db.conn.execute(
+        "SELECT name, applied_at FROM _sqlite_migrations WHERE migration_set = ? ORDER BY rowid",
+        (MIGRATION_SET,),
+    ).fetchall()
+    return [(r["name"], r["applied_at"]) for r in rows]
 
 
-def test_ladder_steps_run_in_order_and_only_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Steps are keyed off `user_version`, so reopening replays nothing."""
-    calls = _record_ladder(monkeypatch)
-
+def test_migration_steps_are_recorded_in_order_and_only_once(tmp_path: Path) -> None:
+    """sqlite-utils' tracking table decides what runs, so reopening replays nothing."""
     db_path = tmp_path / "legacy.db"
     write_db_at_version(db_path, 1)
 
-    Database(db_path).ensure_initialized()
-    assert calls == [2, 3, 4, 5]
+    db = Database(db_path)
+    db.ensure_initialized()
+    first = _applied_migrations(db)
+    assert [name for name, _ in first] == MIGRATION_NAMES
+    db.close()
 
-    Database(db_path).ensure_initialized()
-    assert calls == [2, 3, 4, 5], "a second open must not rerun a landed step"
+    reopened = Database(db_path)
+    reopened.ensure_initialized()
+    # Identical applied_at timestamps prove the steps were skipped, not rerun.
+    assert _applied_migrations(reopened) == first, "a second open must not rerun a landed step"
 
 
-def test_ladder_starts_from_the_stamped_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _record_ladder(monkeypatch)
+def test_the_tracking_table_not_the_stamp_decides_what_runs(tmp_path: Path) -> None:
+    """A step recorded in `_sqlite_migrations` is skipped whatever `user_version` says.
 
+    The stamp is informational only: this database claims v1 — older than
+    every step — yet the pre-recorded `models` step must not run again.
+    """
     db_path = tmp_path / "legacy.db"
-    write_db_at_version(db_path, 3)
+    write_db_at_version(db_path, 1)
+    fixture = sqlite3.connect(db_path)
+    with fixture:
+        fixture.execute(
+            "CREATE TABLE _sqlite_migrations (id INTEGER PRIMARY KEY, migration_set TEXT, name TEXT, applied_at TEXT)"
+        )
+        fixture.execute("CREATE UNIQUE INDEX idx_sqlite_migrations ON _sqlite_migrations(migration_set, name)")
+        fixture.execute(
+            "INSERT INTO _sqlite_migrations (migration_set, name, applied_at) VALUES (?, ?, 'earlier')",
+            (MIGRATION_SET, MIGRATION_NAMES[-1]),
+        )
+    fixture.close()
 
-    Database(db_path).ensure_initialized()
-    assert calls == [4, 5]
+    db = Database(db_path)
+    db.ensure_initialized()
+
+    # The recorded models step was skipped, so the table kept its legacy shape...
+    assert columns(db.conn, "models") == LEGACY_MODEL_COLUMNS
+    # ...while every unrecorded step still ran (the pre-recorded row keeps its
+    # earlier rowid, so it lists first).
+    assert "parent_id" in columns(db.conn, "headstamps")
+    assert [name for name, _ in _applied_migrations(db)] == [MIGRATION_NAMES[-1], *MIGRATION_NAMES[:-1]]
 
 
-def test_a_fresh_db_stamps_current_without_running_the_ladder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _record_ladder(monkeypatch)
-
+def test_a_fresh_db_records_every_step_and_stamps_current(tmp_path: Path) -> None:
+    """On a fresh DB the DDL lays down the current shape, so every step is a
+    presence-guarded no-op — but each is still recorded, so only steps added
+    later will ever run against this database."""
     db = Database(tmp_path / "fresh.db")
     db.ensure_initialized()
 
-    assert calls == []
+    assert [name for name, _ in _applied_migrations(db)] == MIGRATION_NAMES
     assert _user_version(db) == SCHEMA_VERSION
 
 
-def test_a_db_stamped_current_but_incomplete_is_reconciled(tmp_path: Path) -> None:
+def test_a_db_stamped_current_but_incomplete_is_repaired(tmp_path: Path) -> None:
     """Every pre-ladder build stamped SCHEMA_VERSION without migrating `models`.
 
-    No version-keyed step can reach those installs — the stamp already says
-    they are current — so the reconciliation pass has to repair them by
-    inspecting the actual columns.
+    Under sqlite-utils the stamp is irrelevant: such a database has no
+    tracking table, so every presence-guarded step runs on first open and the
+    `models` step repairs it by inspecting the actual columns.
     """
     db_path = tmp_path / "stamped.db"
     write_db_at_version(db_path, 4, stamped_as=SCHEMA_VERSION)
@@ -313,8 +347,8 @@ def test_ensure_initialized_does_not_downgrade_user_version(tmp_path: Path) -> N
     db.ensure_initialized()
     db.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 10}")
     db.ensure_initialized()
-    # Every rung is guarded by `target <= SCHEMA_VERSION` and the stamp is only
-    # ever written by a step, so a DB written by a newer build keeps its stamp.
+    # The stamp is informational and only ever advanced (`current <
+    # SCHEMA_VERSION` guard), so a DB written by a newer build keeps its stamp.
     assert _user_version(db) == SCHEMA_VERSION + 10
 
 

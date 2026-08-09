@@ -30,6 +30,9 @@ dependencies = [
     "requests>=2.31",
     "msal>=1.28",
     "platformdirs>=4.0",
+    # Schema migrations: sorter/db.py runs its migration steps through
+    # sqlite_utils.Migrations (tracking table `_sqlite_migrations`).
+    "sqlite-utils>=4",
     # Windows-only: enumerates friendly DirectShow camera names so the Camera
     # tab can show real device names instead of just "Camera N".
     "pygrabber>=0.2; platform_system == 'Windows'",
