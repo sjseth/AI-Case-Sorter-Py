@@ -356,7 +356,7 @@ class RunController:
             traceback.print_exc()
             return _fail(str(exc) or exc.__class__.__name__)
 
-    def run_once(self) -> dict[str, Any]:  # noqa: C901
+    def run_once(self) -> dict[str, Any]:
         """One iteration of the continuous run: capture, classify, sort.
 
         IMPORTANT: This does NOT call feed_one(). The continuous loop primes

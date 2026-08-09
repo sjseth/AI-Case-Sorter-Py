@@ -12,10 +12,10 @@ import pytest
 pytest.importorskip("tkinter")
 pytest.importorskip("cv2")
 
-import tkinter as tk  # noqa: E402
+import tkinter as tk
 
-from sorter.events import EventBus  # noqa: E402
-from sorter.ui.monitor import SNAKE_COLORS, MonitorWindow, _Tile  # noqa: E402
+from sorter.events import EventBus
+from sorter.ui.monitor import SNAKE_COLORS, MonitorWindow, _Tile
 
 
 def _rec(label: str, slot: int, *, image=None) -> dict:

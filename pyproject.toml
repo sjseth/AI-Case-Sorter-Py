@@ -82,6 +82,7 @@ select = [
     "I",   # isort
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
+    "RUF100",  # unused `noqa` -- a suppression that outlives its finding reads as a live one
 ]
 ignore = [
     "E501",  # line length is enforced by the formatter, not the linter

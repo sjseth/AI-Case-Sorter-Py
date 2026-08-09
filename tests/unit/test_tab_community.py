@@ -12,7 +12,7 @@ import pytest
 pytest.importorskip("tkinter")
 pytest.importorskip("cv2")
 
-from sorter.ui.tab_community import CommunityTab  # noqa: E402
+from sorter.ui.tab_community import CommunityTab
 
 
 def test_format_identity_name_and_email() -> None:

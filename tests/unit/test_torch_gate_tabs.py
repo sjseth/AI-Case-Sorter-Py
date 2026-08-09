@@ -15,16 +15,16 @@ import pytest
 pytest.importorskip("tkinter")
 pytest.importorskip("cv2")
 
-import tkinter as tk  # noqa: E402
+import tkinter as tk
 
-from sorter.config import Config  # noqa: E402
-from sorter.db import Database  # noqa: E402
-from sorter.events import EventBus  # noqa: E402
-from sorter.models import Model  # noqa: E402
-from sorter.repository import CartridgeRepo, ModelRepo, SettingsRepo  # noqa: E402
-from sorter.ui import torch_gate  # noqa: E402
-from sorter.ui.tab_run import RunTab  # noqa: E402
-from sorter.ui.tab_train import TrainTab  # noqa: E402
+from sorter.config import Config
+from sorter.db import Database
+from sorter.events import EventBus
+from sorter.models import Model
+from sorter.repository import CartridgeRepo, ModelRepo, SettingsRepo
+from sorter.ui import torch_gate
+from sorter.ui.tab_run import RunTab
+from sorter.ui.tab_train import TrainTab
 
 
 @pytest.fixture

@@ -11,10 +11,10 @@ import pytest
 
 pytest.importorskip("tkinter")
 
-import tkinter as tk  # noqa: E402
+import tkinter as tk
 
-from sorter.ui import dialog_install_torch  # noqa: E402
-from sorter.ui.dialog_install_torch import TorchInstallDialog  # noqa: E402
+from sorter.ui import dialog_install_torch
+from sorter.ui.dialog_install_torch import TorchInstallDialog
 
 
 @pytest.fixture

@@ -12,18 +12,18 @@ import pytest
 pytest.importorskip("tkinter")
 pytest.importorskip("cv2")
 
-import tkinter as tk  # noqa: E402
-from tkinter import ttk  # noqa: E402
+import tkinter as tk
+from tkinter import ttk
 
-import requests  # noqa: E402
+import requests
 
-from sorter import updater  # noqa: E402
-from sorter.db import Database  # noqa: E402
-from sorter.repository import SettingsRepo  # noqa: E402
-from sorter.ui.app import MainWindow  # noqa: E402
-from sorter.ui.dialog_update import UpdateDialog  # noqa: E402
-from sorter.ui.theme import apply_theme  # noqa: E402
-from sorter.updater import PendingUpdate, UpdateInfo  # noqa: E402
+from sorter import updater
+from sorter.db import Database
+from sorter.repository import SettingsRepo
+from sorter.ui.app import MainWindow
+from sorter.ui.dialog_update import UpdateDialog
+from sorter.ui.theme import apply_theme
+from sorter.updater import PendingUpdate, UpdateInfo
 
 
 @pytest.fixture
@@ -257,7 +257,7 @@ class _StubWindow:
         self.worker_calls += 1
         try:
             result = fn()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             if on_error:
                 on_error(exc)
         else:

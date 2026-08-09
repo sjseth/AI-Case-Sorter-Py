@@ -23,9 +23,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sorter import paths  # noqa: E402
-from sorter.db import Database  # noqa: E402
-from sorter.repository import ModelRepo, SettingsRepo  # noqa: E402
+from sorter import paths
+from sorter.db import Database
+from sorter.repository import ModelRepo, SettingsRepo
 
 
 def main() -> int:

@@ -238,7 +238,7 @@ class UpdateDialog(tk.Toplevel):
                 pending = updater.stage_update(info, progress=self._on_progress)
             except UpdateError as exc:
                 self._events.put(("error", str(exc)))
-            except Exception as exc:  # noqa: BLE001 — surface, don't crash
+            except Exception as exc:
                 self._events.put(("error", f"Unexpected error: {exc}"))
             else:
                 self._events.put(("done", pending))

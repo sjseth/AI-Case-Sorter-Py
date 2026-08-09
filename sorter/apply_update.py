@@ -276,7 +276,7 @@ def main(argv: list[str] | None = None) -> int:
         # the updates/ tree lives.
         paths.migrate_legacy_data_dir()
         apply_pending(app_dir)
-    except Exception as exc:  # noqa: BLE001 — must not stop the launcher
+    except Exception as exc:
         _log(f"unexpected error: {exc}")
     return 0
 
