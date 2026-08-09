@@ -308,8 +308,10 @@ def list_cameras_with_metadata(max_index: int = 10, probe_timeout_s: float = 2.5
                 ok, _ = cap.read()
                 if not ok:
                     return
-                res["opened"] = True
+                # Publish `opened` last: the caller reads after a timed join,
+                # so it must not observe opened=True before resolutions lands.
                 res["resolutions"] = resolutions
+                res["opened"] = True
             finally:
                 cap.release()
 
