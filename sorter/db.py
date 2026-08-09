@@ -2,9 +2,13 @@
 
 Exposes a single `Database` class that owns:
   - a `sqlite3.Connection` with row_factory = sqlite3.Row
-  - schema DDL via `PRAGMA user_version`
+  - schema DDL plus an ordered, `PRAGMA user_version`-keyed migration ladder
   - `ensure_initialized()` that creates the DB if missing and runs the
     one-shot import from `data/config.json` when present.
+
+A fresh database is created wholesale from `SCHEMA_DDL` and stamped straight
+to `SCHEMA_VERSION`. An existing one is stepped up through `MIGRATIONS` in
+order, one rung at a time, so each step runs at most once.
 """
 
 from __future__ import annotations
@@ -14,15 +18,38 @@ import json
 import shutil
 import sqlite3
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 from . import paths
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
-SCHEMA_DDL = """
+# Split out of SCHEMA_DDL because the v3 -> v4 ladder step replays it verbatim;
+# one copy means the step cannot drift from the schema.
+SLOT_TEMPLATES_DDL = """
+-- Named slot-assignment layouts for the Run tab. Scoped to a model
+-- (model_id NULL = AI Config mode) and to a run mode ('standard'/'package'),
+-- which keep separate lists because their assignment rules differ.
+CREATE TABLE IF NOT EXISTS slot_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  model_id INTEGER REFERENCES models(id) ON DELETE CASCADE,
+  mode TEXT NOT NULL CHECK(mode IN ('standard','package')),
+  name TEXT NOT NULL,
+  assignments_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- IFNULL() because UNIQUE treats every NULL model_id (AI Config mode) as
+-- distinct, which would let duplicate AI-mode template names through.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_slot_templates_name
+  ON slot_templates(IFNULL(model_id, -1), mode, name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_slot_templates_scope ON slot_templates(model_id, mode);
+"""
+
+SCHEMA_DDL = (
+    """
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 
@@ -81,30 +108,15 @@ CREATE TABLE IF NOT EXISTS headstamps (
   UNIQUE(model_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_headstamps_model ON headstamps(model_id);
-
--- Named slot-assignment layouts for the Run tab. Scoped to a model
--- (model_id NULL = AI Config mode) and to a run mode ('standard'/'package'),
--- which keep separate lists because their assignment rules differ.
-CREATE TABLE IF NOT EXISTS slot_templates (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  model_id INTEGER REFERENCES models(id) ON DELETE CASCADE,
-  mode TEXT NOT NULL CHECK(mode IN ('standard','package')),
-  name TEXT NOT NULL,
-  assignments_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
--- IFNULL() because UNIQUE treats every NULL model_id (AI Config mode) as
--- distinct, which would let duplicate AI-mode template names through.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_slot_templates_name
-  ON slot_templates(IFNULL(model_id, -1), mode, name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_slot_templates_scope ON slot_templates(model_id, mode);
-
+"""
+    + SLOT_TEMPLATES_DDL
+    + """
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
 """
+)
 # NOTE: community feedback-loop captures are intentionally NOT tracked in the
 # DB. They live as JPEGs under data/models/<id>/feedback_images/ and that folder
 # is the queue (see sorter/feedback.py). A legacy DB may still carry an unused
@@ -114,6 +126,135 @@ CREATE TABLE IF NOT EXISTS settings (
 DEFAULT_CARTRIDGE_NAME = "9mm"
 DEFAULT_MODEL_NAME = "Default"
 DEFAULT_MODEL_MODE = "convnext_tiny"
+
+
+# ----- migration ladder -------------------------------------------------------
+
+
+def _execute_script(conn: sqlite3.Connection, ddl: str) -> None:
+    """Run a multi-statement DDL string one statement at a time.
+
+    Not `executescript()`: that commits any open transaction before it runs,
+    which would tear the ladder out of its enclosing `transaction()` block.
+    """
+    for stmt in ddl.strip().split(";"):
+        stmt = stmt.strip()
+        if stmt:
+            conn.execute(stmt)
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """The column names of `table`, empty when the table does not exist.
+
+    `PRAGMA` cannot take a bound parameter in sqlite3, hence the f-string; the
+    table name is always a literal from this module.
+    """
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+# Every `models` column the current DDL declares beyond the four the table
+# shipped with, in declaration order, as (name, ALTER definition).
+_LATE_MODEL_COLUMNS: tuple[tuple[str, str], ...] = (
+    (
+        "model_type",
+        "TEXT NOT NULL DEFAULT 'Standard' CHECK(model_type IN ('Standard','ReadOnly','CommunityManaged'))",
+    ),
+    ("community_model_uid", "TEXT"),
+    ("model_version", "INTEGER NOT NULL DEFAULT 1"),
+    ("enable_image_processing", "INTEGER NOT NULL DEFAULT 1"),
+    ("image_processing_json", "TEXT"),
+    ("training_config_json", "TEXT"),
+    ("ai_model_config_json", "TEXT"),
+    ("use_primer_mask", "INTEGER NOT NULL DEFAULT 0"),
+    ("hide_primer", "INTEGER NOT NULL DEFAULT 1"),
+    ("primer_mask_size", "INTEGER NOT NULL DEFAULT 135"),
+    ("last_training_date", "TEXT"),
+    ("last_training_duration", "INTEGER NOT NULL DEFAULT 0"),
+    ("trained_image_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("training_confusion_table", "TEXT"),
+    ("feedback_loop_enabled", "INTEGER NOT NULL DEFAULT 0"),
+    ("feedback_loop_confidence_floor", "INTEGER NOT NULL DEFAULT 95"),
+    ("feedback_loop_upload_mode", "TEXT NOT NULL DEFAULT 'Manual'"),
+    ("model_path", "TEXT"),
+    # SQLite rejects ADD COLUMN with a non-constant default on a populated
+    # table, so the two timestamps cannot carry the DDL's
+    # `NOT NULL DEFAULT (datetime('now'))`. They arrive nullable and are
+    # backfilled instead.
+    ("created_at", "TEXT"),
+    ("updated_at", "TEXT"),
+)
+
+_BACKFILLED_MODEL_COLUMNS = ("created_at", "updated_at")
+
+
+def _add_column(conn: sqlite3.Connection, table: str, name: str, definition: str) -> None:
+    """ALTER `table` to add `name`, unless it is already there.
+
+    A table the DDL pass had to create arrives complete and is skipped
+    wholesale, so a step only ever patches a table it found already present.
+    """
+    present = _columns(conn, table)
+    if present and name not in present:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+
+
+def _add_missing_model_columns(conn: sqlite3.Connection) -> None:
+    """Bring a pre-existing `models` table up to the current column set."""
+    if not _columns(conn, "models"):
+        return
+    for name, definition in _LATE_MODEL_COLUMNS:
+        _add_column(conn, "models", name, definition)
+    for name in _BACKFILLED_MODEL_COLUMNS:
+        conn.execute(f"UPDATE models SET {name} = datetime('now') WHERE {name} IS NULL")
+
+
+def _v1_to_v2(conn: sqlite3.Connection) -> None:
+    """Parent classifications: the `headstamp_parents` table and the child link.
+
+    The table itself is created by the DDL pass that runs before the ladder;
+    only the column on an already-present `headstamps` table needs an ALTER.
+    """
+    # NULL default keeps this a legal ALTER even with a REFERENCES clause.
+    _add_column(
+        conn,
+        "headstamps",
+        "parent_id",
+        "INTEGER REFERENCES headstamp_parents(id) ON DELETE SET NULL",
+    )
+
+
+def _v2_to_v3(conn: sqlite3.Connection) -> None:
+    """Per-parent slot assignment."""
+    _add_column(conn, "headstamp_parents", "slot", "INTEGER NOT NULL DEFAULT 0")
+
+
+def _v3_to_v4(conn: sqlite3.Connection) -> None:
+    """Named slot-assignment layouts for the Run tab."""
+    _execute_script(conn, SLOT_TEMPLATES_DDL)
+
+
+def _v4_to_v5(conn: sqlite3.Connection) -> None:
+    """The `models` columns no earlier build ever migrated (issue #44)."""
+    _add_missing_model_columns(conn)
+
+
+MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
+    2: _v1_to_v2,
+    3: _v2_to_v3,
+    4: _v3_to_v4,
+    5: _v4_to_v5,
+}
+
+
+def _reconcile_structure(conn: sqlite3.Connection) -> None:
+    """Catch-up for a DB stamped current but structurally incomplete.
+
+    Builds before the ladder existed stamped `user_version` to SCHEMA_VERSION
+    unconditionally while never migrating `models`, so on those installs the
+    stamp alone cannot be trusted and no version-keyed step can reach them.
+    Presence-based and idempotent: once the table is complete it does nothing.
+    """
+    _add_missing_model_columns(conn)
 
 
 class Database:
@@ -198,44 +339,40 @@ class Database:
         was_fresh = not self.path.exists()
         conn = self.connect()
         # DDL is idempotent (IF NOT EXISTS) so re-running on an existing DB is safe.
-        for stmt in SCHEMA_DDL.strip().split(";"):
-            stmt = stmt.strip()
-            if stmt:
-                conn.execute(stmt)
-        # Bring pre-existing tables up to the current shape. CREATE TABLE IF NOT
-        # EXISTS leaves an already-present `headstamps` table untouched, so new
-        # columns are added here with ALTER instead.
-        self._apply_column_migrations(conn)
-        current_version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if current_version < SCHEMA_VERSION:
-            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        _execute_script(conn, SCHEMA_DDL)
 
         if was_fresh:
+            # Nothing to step through: the DDL just laid down the current shape.
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             if legacy_config_json and Path(legacy_config_json).exists():
                 self._migrate_from_json(Path(legacy_config_json))
             else:
                 self._seed_defaults()
+        else:
+            self._migrate_schema()
 
     # ----- migration ----------------------------------------------------------
 
-    def _apply_column_migrations(self, conn: sqlite3.Connection) -> None:
-        """Add columns introduced after a table's first release.
+    def _migrate_schema(self) -> None:
+        """Step an existing DB up to SCHEMA_VERSION, one ladder rung at a time.
 
-        Idempotent: each ALTER runs only when the column is absent, so this
-        is safe to call on every startup (fresh DBs already have the column
-        from the DDL and skip the ALTER).
+        `user_version` decides what runs, so every step runs at most once. The
+        stamp is advanced as each step lands; the whole run commits atomically,
+        so an interrupted upgrade leaves the DB at its previous version rather
+        than half-migrated.
         """
-        headstamp_cols = {row[1] for row in conn.execute("PRAGMA table_info(headstamps)").fetchall()}
-        if "parent_id" not in headstamp_cols:
-            # NULL default keeps this a legal ALTER even with a REFERENCES clause.
-            conn.execute(
-                "ALTER TABLE headstamps ADD COLUMN parent_id INTEGER "
-                "REFERENCES headstamp_parents(id) ON DELETE SET NULL"
-            )
-
-        parent_cols = {row[1] for row in conn.execute("PRAGMA table_info(headstamp_parents)").fetchall()}
-        if parent_cols and "slot" not in parent_cols:
-            conn.execute("ALTER TABLE headstamp_parents ADD COLUMN slot INTEGER NOT NULL DEFAULT 0")
+        with self.transaction() as conn:
+            start_version = conn.execute("PRAGMA user_version").fetchone()[0]
+            version = start_version
+            for target in sorted(MIGRATIONS):
+                if version < target <= SCHEMA_VERSION:
+                    MIGRATIONS[target](conn)
+                    conn.execute(f"PRAGMA user_version = {target}")
+                    version = target
+            if start_version >= SCHEMA_VERSION:
+                # The ladder had nothing to do, which on a pre-ladder install is
+                # not proof the schema is complete. See _reconcile_structure.
+                _reconcile_structure(conn)
 
     def _migrate_from_json(self, json_path: Path) -> None:
         """One-shot import. Reads `config.json`, writes rows, renames to `.bak`."""

@@ -144,7 +144,10 @@ sanctioned way for worker threads to update the UI.
 - **`db.py`** — `Database`: owns one `sqlite3.Connection` (WAL, foreign keys on,
   `check_same_thread=False` with an `RLock` serializing multi-statement
   transactions / SAVEPOINTs). Schema is `PRAGMA user_version`-versioned
-  (`SCHEMA_VERSION = 4`) with idempotent DDL + `_apply_column_migrations`.
+  (`SCHEMA_VERSION = 5`) with idempotent DDL plus an ordered migration ladder
+  (`MIGRATIONS`, keyed by target version, each step run at most once) and a
+  presence-based `_reconcile_structure()` for databases stamped current by a
+  pre-ladder build but structurally incomplete.
   `ensure_initialized()` creates the DB, runs a one-shot import from legacy
   `data/config.json` (renaming it `.bak`), or seeds a default cartridge+model.
   Tables: `cartridges`, `models`, `headstamp_parents`, `headstamps`,

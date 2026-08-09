@@ -3,13 +3,23 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
 
+from sorter import db as db_module
 from sorter.db import DEFAULT_CARTRIDGE_NAME, DEFAULT_MODEL_MODE, SCHEMA_VERSION, Database
+from sorter.repository import (
+    CartridgeRepo,
+    HeadstampParentRepo,
+    HeadstampRepo,
+    ModelRepo,
+    SettingsRepo,
+    SlotTemplateRepo,
+)
 
-from ._legacy_db import LEGACY_MODEL_COLUMNS, columns, write_legacy_db
+from ._legacy_db import LEGACY_MODEL_COLUMNS, SCHEMA_SHAPES, columns, write_db_at_version
 
 
 def test_fresh_db_seeds_default_cartridge_and_model(tmp_path: Path) -> None:
@@ -101,20 +111,30 @@ def _user_version(db: Database) -> int:
     return db.conn.execute("PRAGMA user_version").fetchone()[0]
 
 
+def _fresh_columns(tmp_path: Path, table: str) -> set[str]:
+    """The columns `table` has on a brand-new database."""
+    db = Database(tmp_path / "reference.db")
+    db.ensure_initialized()
+    try:
+        return columns(db.conn, table)
+    finally:
+        db.close()
+
+
 def test_migration_from_v1_adds_columns_and_keeps_rows(tmp_path: Path) -> None:
     db_path = tmp_path / "legacy.db"
-    write_legacy_db(db_path, user_version=1, with_parents_table=False)
+    write_db_at_version(db_path, 1)
 
     db = Database(db_path)
     db.ensure_initialized()
 
     assert _user_version(db) == SCHEMA_VERSION
 
-    # The column migration added parent_id to the existing headstamps table.
+    # The ladder added parent_id to the existing headstamps table.
     assert "parent_id" in columns(db.conn, "headstamps")
     # headstamp_parents and slot_templates did not exist at all, so these come
-    # from the idempotent CREATE TABLE IF NOT EXISTS pass, NOT from a column
-    # migration — _apply_column_migrations skips a table it has to create.
+    # from the idempotent CREATE TABLE IF NOT EXISTS pass rather than from an
+    # ALTER — a ladder step only has to patch a table it finds already there.
     assert {"slot", "model_id", "name"} <= columns(db.conn, "headstamp_parents")
     assert db.conn.execute("SELECT COUNT(*) FROM slot_templates").fetchone()[0] == 0
 
@@ -134,32 +154,62 @@ def test_migration_from_v1_adds_columns_and_keeps_rows(tmp_path: Path) -> None:
     assert settings["api"]["model"] == "legacy"
 
 
-def test_an_existing_models_table_is_not_migrated_at_all(tmp_path: Path) -> None:
-    """Characterization: `models` has no column migration, so it stays legacy.
+@pytest.mark.parametrize("version", sorted(SCHEMA_SHAPES))
+def test_an_existing_models_table_is_migrated_to_the_current_shape(tmp_path: Path, version: int) -> None:
+    """`models` is brought up to the current column set from every old version.
 
-    `_apply_column_migrations` only ever touches `headstamps.parent_id` and
-    `headstamp_parents.slot`, and the schema DDL is CREATE TABLE IF NOT EXISTS,
-    so a `models` table that predates `model_type` / `community_model_uid` /
-    the feedback-loop columns keeps its old shape forever. Every repository
-    read of those columns then raises OperationalError on such a database.
-
-    See issue #44, which proposes making the migration a real ordered ladder.
-    Flipping this assertion is the point of that fix.
+    This is the fix for issue #44: `models` used to be left exactly as found,
+    because the DDL is CREATE TABLE IF NOT EXISTS and no column migration ever
+    touched it, so every repository read of a later column raised
+    OperationalError on such a database.
     """
     db_path = tmp_path / "legacy.db"
-    write_legacy_db(db_path, user_version=1, with_parents_table=False)
+    write_db_at_version(db_path, version)
+    with sqlite3.connect(db_path) as fixture:
+        assert columns(fixture, "models") == LEGACY_MODEL_COLUMNS, "the fixture must start out legacy"
 
     db = Database(db_path)
     db.ensure_initialized()
 
-    assert columns(db.conn, "models") == LEGACY_MODEL_COLUMNS
-    for missing in ("model_type", "community_model_uid", "feedback_loop_enabled"):
-        assert missing not in columns(db.conn, "models")
+    assert columns(db.conn, "models") == _fresh_columns(tmp_path, "models")
+
+    row = db.conn.execute("SELECT * FROM models WHERE id = 1").fetchone()
+    assert row["name"] == "Legacy", "the pre-existing row survives the migration"
+    assert row["model_type"] == "Standard"
+    assert row["model_version"] == 1
+    assert row["feedback_loop_enabled"] == 0
+    assert row["feedback_loop_upload_mode"] == "Manual"
+    assert row["community_model_uid"] is None
+    # ADD COLUMN cannot carry the DDL's datetime('now') default on a populated
+    # table, so these are backfilled instead of arriving NULL.
+    assert row["created_at"] is not None
+    assert row["updated_at"] is not None
+
+
+@pytest.mark.parametrize("version", sorted(SCHEMA_SHAPES))
+def test_every_repository_read_works_after_migrating_from_any_version(tmp_path: Path, version: int) -> None:
+    """Acceptance for issue #44: a legacy DB opens and reads cleanly."""
+    db_path = tmp_path / "legacy.db"
+    write_db_at_version(db_path, version)
+
+    db = Database(db_path)
+    db.ensure_initialized()
+
+    models = ModelRepo(db).list()
+    assert [m.name for m in models] == ["Legacy"]
+    assert models[0].model_type == "Standard"
+    assert ModelRepo(db).get(1) is not None
+    assert ModelRepo(db).find_by_community_uid("nope") is None
+    assert [c.name for c in CartridgeRepo(db).list()] == ["9mm"]
+    assert {h.name for h in HeadstampRepo(db).list_for_model(1)} == {"WIN", "FC"}
+    assert [p.name for p in HeadstampParentRepo(db).list_for_model(1)] in ([], ["Winchester"])
+    assert SlotTemplateRepo(db).list_for_scope(None, "standard") == []
+    assert SettingsRepo(db).get("api")["model"] == "legacy"
 
 
 def test_migration_adds_slot_to_an_existing_headstamp_parents_table(tmp_path: Path) -> None:
     db_path = tmp_path / "legacy.db"
-    write_legacy_db(db_path, user_version=3, with_parents_table=True)
+    write_db_at_version(db_path, 2)
 
     db = Database(db_path)
     db.ensure_initialized()
@@ -175,7 +225,7 @@ def test_migration_adds_slot_to_an_existing_headstamp_parents_table(tmp_path: Pa
 
 def test_migration_is_idempotent_on_an_already_migrated_db(tmp_path: Path) -> None:
     db_path = tmp_path / "legacy.db"
-    write_legacy_db(db_path, user_version=1, with_parents_table=True)
+    write_db_at_version(db_path, 2)
 
     db = Database(db_path)
     db.ensure_initialized()
@@ -195,13 +245,76 @@ def test_migration_is_idempotent_on_an_already_migrated_db(tmp_path: Path) -> No
     assert {table: columns(reopened.conn, table) for table in first} == cols
 
 
+def _record_ladder(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Swap the ladder for steps that only note that they ran, in order."""
+    calls: list[int] = []
+    monkeypatch.setattr(
+        db_module,
+        "MIGRATIONS",
+        {v: (lambda conn, v=v: calls.append(v)) for v in sorted(db_module.MIGRATIONS)},
+    )
+    return calls
+
+
+def test_ladder_steps_run_in_order_and_only_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Steps are keyed off `user_version`, so reopening replays nothing."""
+    calls = _record_ladder(monkeypatch)
+
+    db_path = tmp_path / "legacy.db"
+    write_db_at_version(db_path, 1)
+
+    Database(db_path).ensure_initialized()
+    assert calls == [2, 3, 4, 5]
+
+    Database(db_path).ensure_initialized()
+    assert calls == [2, 3, 4, 5], "a second open must not rerun a landed step"
+
+
+def test_ladder_starts_from_the_stamped_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _record_ladder(monkeypatch)
+
+    db_path = tmp_path / "legacy.db"
+    write_db_at_version(db_path, 3)
+
+    Database(db_path).ensure_initialized()
+    assert calls == [4, 5]
+
+
+def test_a_fresh_db_stamps_current_without_running_the_ladder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _record_ladder(monkeypatch)
+
+    db = Database(tmp_path / "fresh.db")
+    db.ensure_initialized()
+
+    assert calls == []
+    assert _user_version(db) == SCHEMA_VERSION
+
+
+def test_a_db_stamped_current_but_incomplete_is_reconciled(tmp_path: Path) -> None:
+    """Every pre-ladder build stamped SCHEMA_VERSION without migrating `models`.
+
+    No version-keyed step can reach those installs — the stamp already says
+    they are current — so the reconciliation pass has to repair them by
+    inspecting the actual columns.
+    """
+    db_path = tmp_path / "stamped.db"
+    write_db_at_version(db_path, 4, stamped_as=SCHEMA_VERSION)
+
+    db = Database(db_path)
+    db.ensure_initialized()
+
+    assert _user_version(db) == SCHEMA_VERSION
+    assert columns(db.conn, "models") == _fresh_columns(tmp_path, "models")
+    assert ModelRepo(db).list()[0].model_type == "Standard"
+
+
 def test_ensure_initialized_does_not_downgrade_user_version(tmp_path: Path) -> None:
     db = Database(tmp_path / "test.db")
     db.ensure_initialized()
     db.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 10}")
     db.ensure_initialized()
-    # The bump is guarded by `current_version < SCHEMA_VERSION`, so a DB
-    # written by a newer build keeps its stamp.
+    # Every rung is guarded by `target <= SCHEMA_VERSION` and the stamp is only
+    # ever written by a step, so a DB written by a newer build keeps its stamp.
     assert _user_version(db) == SCHEMA_VERSION + 10
 
 
