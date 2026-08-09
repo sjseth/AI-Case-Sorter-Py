@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from sorter import db as db_module
 from sorter.db import DEFAULT_CARTRIDGE_NAME, DEFAULT_MODEL_MODE, SCHEMA_VERSION, Database
 from sorter.repository import (
     CartridgeRepo,
@@ -340,6 +341,89 @@ def test_a_db_stamped_current_but_incomplete_is_repaired(tmp_path: Path) -> None
     assert _user_version(db) == SCHEMA_VERSION
     assert columns(db.conn, "models") == _fresh_columns(tmp_path, "models")
     assert ModelRepo(db).list()[0].model_type == "Standard"
+
+
+# How many of `_LATE_MODEL_COLUMNS` a partially-migrated `models` table already
+# carries. Not every install migrated *nothing*: a user whose database was
+# created fresh partway through the project's history got whatever columns the
+# DDL declared on that day, so `models` in the wild can hold any prefix of the
+# list. 18 stops just short of the two backfilled timestamps; 20 is a table
+# that is already complete on an otherwise-old database.
+@pytest.mark.parametrize("already_present", [1, 5, 10, 18, 20])
+def test_a_partially_migrated_models_table_is_completed(tmp_path: Path, already_present: int) -> None:
+    """The `models` step is guarded per column, not per table.
+
+    It has to be: a half-migrated table would otherwise either raise "duplicate
+    column name" on the first ALTER it repeats, or be skipped wholesale and
+    left missing the rest.
+    """
+    db_path = tmp_path / "partial.db"
+    write_db_at_version(db_path, 4)
+    carried = db_module._LATE_MODEL_COLUMNS[:already_present]
+    fixture = sqlite3.connect(db_path)
+    with fixture:
+        for name, definition in carried:
+            fixture.execute(f"ALTER TABLE models ADD COLUMN {name} {definition}")
+    fixture.close()
+
+    db = Database(db_path)
+    db.ensure_initialized()
+
+    assert columns(db.conn, "models") == _fresh_columns(tmp_path, "models")
+    row = db.conn.execute("SELECT * FROM models WHERE id = 1").fetchone()
+    assert row["name"] == "Legacy", "the pre-existing row survives"
+    assert row["model_type"] == "Standard"
+    assert row["feedback_loop_upload_mode"] == "Manual"
+    # Backfilled whether they arrived with this migration or an earlier one:
+    # a column added by ADD COLUMN cannot carry the DDL's datetime('now').
+    assert row["created_at"] is not None
+    assert row["updated_at"] is not None
+
+
+def test_a_failing_step_rolls_back_the_whole_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An interrupted upgrade must leave nothing behind — least of all a
+    tracking row claiming a step landed when its changes were rolled back.
+
+    That is the point of running the steps inside `transaction()`: sqlite-utils
+    commits each step as it goes, so without the enclosing transaction a later
+    failure would strand the earlier steps' bookkeeping.
+    """
+
+    def boom(conn: sqlite3.Connection) -> None:
+        raise RuntimeError("interrupted")
+
+    monkeypatch.setattr(db_module, "_add_missing_model_columns", boom)
+
+    db_path = tmp_path / "legacy.db"
+    write_db_at_version(db_path, 1)
+
+    db = Database(db_path)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        db.ensure_initialized()
+    db.close()
+
+    check = sqlite3.connect(db_path)
+    check.row_factory = sqlite3.Row
+    try:
+        recorded = check.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '_sqlite_migrations'"
+        ).fetchone()[0]
+        assert recorded == 0, "no step may be recorded when the run rolled back"
+        # The steps that ran before the failure are undone too — SQLite rolls
+        # DDL back with everything else.
+        assert "parent_id" not in columns(check, "headstamps")
+        assert columns(check, "models") == LEGACY_MODEL_COLUMNS
+        assert check.execute("PRAGMA user_version").fetchone()[0] == 1, "the stamp never advanced"
+    finally:
+        check.close()
+
+    # With the failure gone, the next launch migrates cleanly from the same
+    # untouched database — a rolled-back attempt is not a poisoned one.
+    monkeypatch.undo()
+    retried = Database(db_path)
+    retried.ensure_initialized()
+    assert [name for name, _ in _applied_migrations(retried)] == MIGRATION_NAMES
+    assert columns(retried.conn, "models") == _fresh_columns(tmp_path, "models")
 
 
 def test_ensure_initialized_does_not_downgrade_user_version(tmp_path: Path) -> None:
