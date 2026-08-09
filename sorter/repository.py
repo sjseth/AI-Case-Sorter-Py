@@ -156,7 +156,7 @@ class ModelRepo:
         return model
 
     def update(self, model: Model) -> None:
-        if model.id is None:
+        if not model.id:
             raise ValueError("Cannot update a model with no id")
         if model.model_mode not in SUPPORTED_MODEL_MODES:
             raise ValueError(f"Unsupported model_mode: {model.model_mode!r}")

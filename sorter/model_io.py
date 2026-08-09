@@ -178,7 +178,7 @@ def model_from_export_dict(d: dict[str, Any]) -> Model:
     ai_model_config = AIModelConfig.from_dict(_g(d, "ai_model_config", "AIModelConfig"))
     fb_enabled = bool(_g(d, "feedback_loop_enabled", "FeedbackLoopEnabled", default=False))
     return Model(
-        id=None,
+        id=0,
         name=_g(d, "name", "Name", default=""),
         cartridge_id=0,
         model_mode=_normalize_model_mode(_g(d, "model_mode", "ModelMode")),

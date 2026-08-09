@@ -27,7 +27,7 @@ def test_cartridge_crud(tmp_path: Path) -> None:
     repo = CartridgeRepo(db)
     initial_count = len(repo.list())
     new_cart = repo.create(".223 Rem")
-    assert new_cart.id is not None
+    assert new_cart.id
     assert repo.find_by_name(".223 Rem").id == new_cart.id
     assert len(repo.list()) == initial_count + 1
     repo.rename(new_cart.id, ".223 Remington")
@@ -44,7 +44,7 @@ def test_model_round_trip(tmp_path: Path) -> None:
     model.training_config.epochs = 25
     model.image_processing.primer_mode = "use"
     saved = repo.create(model)
-    assert saved.id is not None
+    assert saved.id
 
     loaded = repo.get(saved.id)
     assert loaded.name == "my45"
