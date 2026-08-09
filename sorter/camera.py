@@ -14,6 +14,7 @@ import os
 import sys
 import threading
 import time
+from typing import TypedDict
 
 import cv2
 import numpy as np
@@ -33,6 +34,21 @@ COMMON_RESOLUTIONS: list[tuple[int, int]] = [
     (2560, 1440),
     (3840, 2160),
 ]
+
+
+class CameraInfo(TypedDict):
+    """One entry in `list_cameras_with_metadata`'s result."""
+
+    index: int
+    name: str
+    resolutions: list[tuple[int, int]]
+
+
+class _ProbeResult(TypedDict):
+    """Accumulator a probe worker thread publishes into; read after a timed join."""
+
+    opened: bool
+    resolutions: list[tuple[int, int]]
 
 
 def _preferred_backend() -> int:
@@ -268,7 +284,7 @@ def _probe_resolutions(cap: cv2.VideoCapture) -> list[tuple[int, int]]:
     return sorted(supported, key=lambda wh: wh[0] * wh[1])
 
 
-def list_cameras_with_metadata(max_index: int = 10, probe_timeout_s: float = 2.5) -> list[dict]:
+def list_cameras_with_metadata(max_index: int = 10, probe_timeout_s: float = 2.5) -> list[CameraInfo]:
     """Enumerate cameras and return [{'index': int, 'name': str, 'resolutions': [(w,h), ...]}].
 
     Resolutions are sorted ascending by pixel count, so `resolutions[-1]` is the
@@ -287,11 +303,11 @@ def list_cameras_with_metadata(max_index: int = 10, probe_timeout_s: float = 2.5
     if sys.platform.startswith("win"):
         pre_resolutions = _windows_camera_resolutions(candidates)
 
-    out: list[dict] = []
+    out: list[CameraInfo] = []
     for idx in candidates:
-        result: dict = {"opened": False, "resolutions": [], "name": ""}
+        result: _ProbeResult = {"opened": False, "resolutions": []}
 
-        def _probe(i: int = idx, res: dict = result) -> None:
+        def _probe(i: int = idx, res: _ProbeResult = result) -> None:
             cap = cv2.VideoCapture(i, backend)
             try:
                 if not cap.isOpened():
