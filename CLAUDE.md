@@ -723,7 +723,10 @@ flowchart TD
   Still run `pytest` locally before pushing — faster feedback than waiting on
   CI. Most UI modules need a display — `xvfb-run -a pytest` covers them on a
   headless box; without tkinter installed those modules skip rather than
-  fail. `install-windows.ps1` gets its own workflow
+  fail. `lint.yml` also runs the [ty](https://docs.astral.sh/ty/) type checker
+  (`uv run ty check`), **advisory-only** (`continue-on-error`) until the
+  pre-existing diagnostic backlog is burned down — findings surface as
+  annotations but never fail the build. `install-windows.ps1` gets its own workflow
   (`.github/workflows/installer-smoke.yml`), not `build.yml`'s blanket
   trigger: it needs a real published release to exercise its interesting
   path (sdist matching, `tar.exe` extraction), so it's path-filtered to
