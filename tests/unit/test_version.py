@@ -37,7 +37,10 @@ def _restore_sorter_after():
 
 def test_prefers_the_generated_version_file(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_version_module = ModuleType("sorter._version")
-    fake_version_module.__version__ = "1.2.3"
+    # `ModuleType` has no statically-declared `__version__` — modules gain it
+    # dynamically (this stands in for the real hatch-vcs-generated one, which
+    # does the same) — so there's no static type to narrow to here.
+    fake_version_module.__version__ = "1.2.3"  # ty: ignore[unresolved-attribute]
     monkeypatch.setitem(sys.modules, "sorter._version", fake_version_module)
 
     importlib.reload(sorter)

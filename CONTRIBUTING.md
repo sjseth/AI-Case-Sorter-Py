@@ -94,6 +94,18 @@ a local test failure, not as something to wait out.
   CI runs both (`.github/workflows/lint.yml`) and fails the PR check if either
   would change anything. Match the style of the surrounding code beyond what
   ruff enforces too — naming, type hints, comment density.
+- **Type-check with [ty](https://docs.astral.sh/ty/)** before pushing:
+  ```bash
+  uv run ty check
+  ```
+  The tree is at **zero diagnostics** and CI (the `ty` job in `lint.yml`) fails
+  the PR check on any new one — so a finding you introduce is yours to fix, not
+  a pre-existing backlog to ignore. Fix the code rather than silencing the
+  checker; a `# ty: ignore[rule]` needs a comment saying why the finding is
+  genuinely unfixable. The ones already in the tree are all the same two cases:
+  optional dependencies that are absent by design (torch/torchvision are the
+  `[ml]` extra; pygrabber/comtypes are Windows-only) and gaps in opencv's
+  bundled stubs.
 - **Threading rule:** never touch Tk widgets off the main thread. Do blocking
   work in a worker/daemon thread and post results through the event bus.
 - **PyTorch is optional and lazily imported** — guard any torch use and add it
@@ -108,8 +120,9 @@ a local test failure, not as something to wait out.
 
 1. Branch off `main`.
 2. Keep PRs focused and write clear commit messages.
-3. Run `uv run pytest` and `uv run ruff check .` (and smoke-test UI changes)
-   before opening the PR — CI runs both, but catching it locally is faster.
+3. Run `uv run pytest`, `uv run ruff check .`, and `uv run ty check` (and
+   smoke-test UI changes) before opening the PR — CI runs all three, but
+   catching it locally is faster.
 4. Describe what changed and why in the PR.
 
 ### Commit messages and PR titles: Conventional Commits

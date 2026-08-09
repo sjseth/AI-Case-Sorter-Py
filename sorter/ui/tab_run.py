@@ -790,7 +790,8 @@ class SlotDetailsPanel(ttk.LabelFrame):
 class RunTab(ttk.Frame):
     def __init__(self, parent: tk.Misc, *, config, bus: EventBus, app):
         super().__init__(parent)
-        self.config = config
+        # Not `self.config` — that collides with ttk.Widget.config().
+        self.cfg = config
         self.bus = bus
         self.app = app
 
@@ -906,7 +907,7 @@ class RunTab(ttk.Frame):
         store_row = ttk.Frame(run_opts)
         store_row.pack(fill=tk.X, pady=2)
         ttk.Label(store_row, text="Store images", style="Muted.TLabel", width=14, anchor=tk.W).pack(side=tk.LEFT)
-        self._store_images_var = tk.StringVar(value=_STORE_IMAGES_LABELS.get(self.config.run_store_images, "None"))
+        self._store_images_var = tk.StringVar(value=_STORE_IMAGES_LABELS.get(self.cfg.run_store_images, "None"))
         self._store_combo = ttk.Combobox(
             store_row,
             state="readonly",
@@ -919,7 +920,7 @@ class RunTab(ttk.Frame):
         floor_row = ttk.Frame(run_opts)
         floor_row.pack(fill=tk.X, pady=2)
         ttk.Label(floor_row, text="Confidence floor", style="Muted.TLabel", width=14, anchor=tk.W).pack(side=tk.LEFT)
-        self._floor_var = tk.IntVar(value=self.config.run_confidence_floor)
+        self._floor_var = tk.IntVar(value=self.cfg.run_confidence_floor)
         self._floor_spin = ttk.Spinbox(
             floor_row,
             from_=0,
@@ -937,7 +938,7 @@ class RunTab(ttk.Frame):
         # Batch Size row only appears while it's on (mirrors panel_run_packageMode).
         pkg_row = ttk.Frame(run_opts)
         pkg_row.pack(fill=tk.X, pady=2)
-        self._package_var = tk.BooleanVar(value=self.config.run_package_mode)
+        self._package_var = tk.BooleanVar(value=self.cfg.run_package_mode)
         ttk.Checkbutton(
             pkg_row,
             text="Package Mode",
@@ -947,7 +948,7 @@ class RunTab(ttk.Frame):
 
         self._batch_row = ttk.Frame(run_opts)
         ttk.Label(self._batch_row, text="Batch size", style="Muted.TLabel", width=14, anchor=tk.W).pack(side=tk.LEFT)
-        self._batch_var = tk.IntVar(value=self.config.run_package_size)
+        self._batch_var = tk.IntVar(value=self.cfg.run_package_size)
         self._batch_spin = ttk.Spinbox(
             self._batch_row,
             from_=1,
@@ -959,7 +960,7 @@ class RunTab(ttk.Frame):
         self._batch_spin.pack(side=tk.LEFT)
         self._batch_spin.bind("<FocusOut>", lambda _e: self._on_batch_size_changed())
         self._batch_spin.bind("<Return>", lambda _e: self._on_batch_size_changed())
-        if self.config.run_package_mode:
+        if self.cfg.run_package_mode:
             self._batch_row.pack(fill=tk.X, pady=2)
 
         # Automatically Select Trays — assign an unmapped headstamp to the
@@ -967,7 +968,7 @@ class RunTab(ttk.Frame):
         auto_row = ttk.Frame(run_opts)
         self._auto_row = auto_row
         auto_row.pack(fill=tk.X, pady=2)
-        self._auto_select_var = tk.BooleanVar(value=self.config.run_auto_select_trays)
+        self._auto_select_var = tk.BooleanVar(value=self.cfg.run_auto_select_trays)
         ttk.Checkbutton(
             auto_row,
             text="Automatically Select Trays",
@@ -1194,10 +1195,10 @@ class RunTab(ttk.Frame):
     # ----- card construction --------------------------------------------------
 
     def _build_slot_cards(self) -> None:
-        slot_count = int(self.config.serial.get("slot_quantity", 8))
+        slot_count = int(self.cfg.serial.get("slot_quantity", 8))
         # Slot count is the TOTAL number of physical slots including the
         # catch-all. e.g. slot_count=8 -> slots 0..7, with 0 = Catch-All.
-        package = self.config.run_package_mode
+        package = self.cfg.run_package_mode
         for slot_num in range(0, max(1, slot_count)):
             card = SlotCard(
                 self.slot_grid,
@@ -1214,23 +1215,23 @@ class RunTab(ttk.Frame):
         # labels are parent groups + ungrouped headstamps; otherwise they are
         # individual headstamps.
         slot_map: dict[int, list[str]] = defaultdict(list)
-        if self.config.run_package_mode:
-            for slot, names in self.config.package_slot_map().items():
+        if self.cfg.run_package_mode:
+            for slot, names in self.cfg.package_slot_map().items():
                 if slot > 0 and names:
                     slot_map[slot].extend(names)
             for card in self._slot_cards:
                 card.set_headstamps(sorted(slot_map.get(card.slot_number, []), key=str.casefold))
             return
-        parents = self.config.parents_with_slots()
-        if parents and self.config.use_parent_classifications:
+        parents = self.cfg.parents_with_slots()
+        if parents and self.cfg.use_parent_classifications:
             for p in parents:
                 if int(p["slot"]) > 0:
                     slot_map[int(p["slot"])].append(p["name"])
-            for h in self.config.headstamps_with_parents():
+            for h in self.cfg.headstamps_with_parents():
                 if h["parent_id"] is None and int(h["slot"]) > 0:
                     slot_map[int(h["slot"])].append(h["name"])
         else:
-            for entry in self.config.headstamps:
+            for entry in self.cfg.headstamps:
                 name = entry.get("name")
                 slot = int(entry.get("slot", 0))
                 if name and slot > 0:
@@ -1242,9 +1243,9 @@ class RunTab(ttk.Frame):
 
     def _refresh_templates(self) -> None:
         """Repopulate the dropdown for the active model + current run mode."""
-        mode = self.config.slot_template_mode()
-        self._templates = self.config.list_slot_templates(mode)
-        active = self.config.active_slot_template(mode)
+        mode = self.cfg.slot_template_mode()
+        self._templates = self.cfg.list_slot_templates(mode)
+        active = self.cfg.active_slot_template(mode)
         self._template_combo["values"] = [t.name for t in self._templates]
         self._template_var.set(active.name)
         self._template_hint_var.set("Package-mode layout" if mode == "package" else "")
@@ -1268,7 +1269,7 @@ class RunTab(ttk.Frame):
         if self._template_busy():
             self._refresh_templates()  # snap the combobox back to the active one
             return
-        if self.config.activate_slot_template(target.id) is None:
+        if self.cfg.activate_slot_template(target.id) is None:
             self._refresh_templates()
             return
         self._after_template_change(f"Loaded sorting template “{target.name}”.")
@@ -1278,12 +1279,12 @@ class RunTab(ttk.Frame):
             return
         from .dialog_slot_template import NewSlotTemplateDialog
 
-        mode = self.config.slot_template_mode()
+        mode = self.cfg.slot_template_mode()
         NewSlotTemplateDialog(
             self,
-            config=self.config,
+            config=self.cfg,
             mode=mode,
-            current_name=self.config.active_slot_template(mode).name,
+            current_name=self.cfg.active_slot_template(mode).name,
             on_created=lambda t: self._after_template_change(f"Created sorting template “{t.name}”."),
         )
 
@@ -1292,12 +1293,12 @@ class RunTab(ttk.Frame):
             return
         from .dialog_slot_template import EditSlotTemplateDialog
 
-        mode = self.config.slot_template_mode()
+        mode = self.cfg.slot_template_mode()
         EditSlotTemplateDialog(
             self,
-            config=self.config,
-            template=self.config.active_slot_template(mode),
-            can_delete=len(self.config.list_slot_templates(mode)) > 1,
+            config=self.cfg,
+            template=self.cfg.active_slot_template(mode),
+            can_delete=len(self.cfg.list_slot_templates(mode)) > 1,
             on_changed=lambda _t: self._after_template_change("Sorting templates updated."),
         )
 
@@ -1317,8 +1318,8 @@ class RunTab(ttk.Frame):
     def _update_parent_option_visibility(self) -> None:
         """Show the parent-classification toggle only when the active model has
         parent groups; sync its checked state from the persisted preference."""
-        if self.config.model_has_parents():
-            self._use_parent_var.set(self.config.use_parent_classifications)
+        if self.cfg.model_has_parents():
+            self._use_parent_var.set(self.cfg.use_parent_classifications)
             self._parent_opt.pack(anchor=tk.W)
         else:
             self._parent_opt.pack_forget()
@@ -1326,7 +1327,7 @@ class RunTab(ttk.Frame):
 
     def _update_parent_result_row(self) -> None:
         """Show the 'Parent' readout row only while parent mode is active."""
-        active = self.config.model_has_parents() and self.config.use_parent_classifications
+        active = self.cfg.model_has_parents() and self.cfg.use_parent_classifications
         if active:
             self._parent_result_row.pack(fill=tk.X, pady=2, after=self._label_result_row)
         else:
@@ -1334,7 +1335,7 @@ class RunTab(ttk.Frame):
             self.last_parent_var.set("—")
 
     def _on_toggle_parent_mode(self) -> None:
-        self.config.set_use_parent_classifications(self._use_parent_var.get())
+        self.cfg.set_use_parent_classifications(self._use_parent_var.get())
         # Slot cards + details both render differently per mode.
         self._refresh_card_headstamps()
         self._update_parent_result_row()
@@ -1343,7 +1344,7 @@ class RunTab(ttk.Frame):
 
     def _on_store_images_changed(self) -> None:
         mode = _STORE_IMAGES_BY_LABEL.get(self._store_images_var.get(), "none")
-        self.config.set_run_store_images(mode)
+        self.cfg.set_run_store_images(mode)
         if mode != "none" and not self._store_warning_shown:
             self._store_warning_shown = True
             messagebox.showinfo(
@@ -1356,16 +1357,16 @@ class RunTab(ttk.Frame):
         try:
             value = int(self._floor_var.get())
         except (tk.TclError, ValueError):
-            value = self.config.run_confidence_floor
+            value = self.cfg.run_confidence_floor
         value = max(0, min(100, value))
         self._floor_var.set(value)
-        self.config.set_run_confidence_floor(value)
+        self.cfg.set_run_confidence_floor(value)
 
     # ----- package mode / auto-select / monitor ------------------------------
 
     def _on_toggle_package_mode(self) -> None:
         enabled = self._package_var.get()
-        self.config.set_run_package_mode(enabled)
+        self.cfg.set_run_package_mode(enabled)
         if enabled:
             # Keep Batch size directly above the auto-select row.
             self._batch_row.pack(fill=tk.X, pady=2, before=self._auto_row)
@@ -1385,13 +1386,13 @@ class RunTab(ttk.Frame):
         try:
             value = int(self._batch_var.get())
         except (tk.TclError, ValueError):
-            value = self.config.run_package_size
+            value = self.cfg.run_package_size
         value = max(1, value)
         self._batch_var.set(value)
-        self.config.set_run_package_size(value)
+        self.cfg.set_run_package_size(value)
 
     def _on_toggle_auto_select(self) -> None:
-        self.config.set_run_auto_select_trays(self._auto_select_var.get())
+        self.cfg.set_run_auto_select_trays(self._auto_select_var.get())
 
     def _on_card_reset(self, slot: int) -> None:
         """Live reset of one slot's batch counter (package mode)."""
@@ -1417,7 +1418,7 @@ class RunTab(ttk.Frame):
                     return
             except tk.TclError:
                 pass
-        self._monitor_window = MonitorWindow(self, bus=self.bus, config=self.config)
+        self._monitor_window = MonitorWindow(self, bus=self.bus, config=self.cfg)
 
     def _on_assignment_changed(self) -> None:
         """Auto-select assigned a headstamp to a slot during a run."""
@@ -1470,7 +1471,7 @@ class RunTab(ttk.Frame):
         """Return the active model iff it's a feedback-enabled community model."""
         if self._feedback is None:
             return None
-        mid = self.config.settings.get_active_model_id()
+        mid = self.cfg.settings.get_active_model_id()
         if mid is None:
             return None
         model = ModelRepo(self.app.db).get(mid)
@@ -1481,7 +1482,10 @@ class RunTab(ttk.Frame):
         non-empty queue. Instant/OnRunComplete upload automatically."""
         model = self._active_feedback_model()
         show = (
-            model is not None and model.feedback_loop_upload_mode == "Manual" and self._feedback.has_pending(model.id)
+            model is not None
+            and self._feedback is not None
+            and model.feedback_loop_upload_mode == "Manual"
+            and self._feedback.has_pending(model.id)
         )
         if show:
             self._feedback_btn.pack(padx=12, pady=2, fill=tk.X)
@@ -1532,7 +1536,7 @@ class RunTab(ttk.Frame):
         if controller is not None and hasattr(controller, "clear_wish_list"):
             controller.clear_wish_list()
         model = self._active_feedback_model()
-        if model is not None:
+        if model is not None and self._feedback is not None:
             debug_log(
                 f"tab_run: run stopped; active feedback model={model.id} "
                 f"mode={model.feedback_loop_upload_mode} "
@@ -1557,16 +1561,18 @@ class RunTab(ttk.Frame):
     def _trigger_feedback_drain(self, model_id: int) -> None:
         """Drain a model's feedback queue on a worker thread (it holds the
         network call + auth). Coalesced so drains never overlap."""
-        if self._feedback is None or self._feedback_upload_inflight:
+        feedback = self._feedback
+        if feedback is None or self._feedback_upload_inflight:
             debug_log(
-                f"tab_run: drain skipped (service={self._feedback is not None}, "
-                f"inflight={self._feedback_upload_inflight})"
+                f"tab_run: drain skipped (service={feedback is not None}, inflight={self._feedback_upload_inflight})"
             )
             return
         debug_log(f"tab_run: starting drain worker for model {model_id} (auth={self.app.auth is not None})")
         self._feedback_upload_inflight = True
         self.app.run_worker(
-            lambda: self._feedback.upload_pending(model_id, auth=self.app.auth),
+            # Bound to the local `feedback`, not `self._feedback` — inside
+            # the lambda the checker can't see the None-check above holds.
+            lambda: feedback.upload_pending(model_id, auth=self.app.auth),
             on_done=lambda res, mid=model_id: self._on_feedback_done(mid, res),
             on_error=lambda _exc: self._on_feedback_error(),
         )
@@ -1583,6 +1589,7 @@ class RunTab(ttk.Frame):
         model = self._active_feedback_model()
         if (
             model is not None
+            and self._feedback is not None
             and model.id == model_id
             and model.feedback_loop_upload_mode == "Instant"
             and model_id not in self._feedback_declined_models
@@ -1632,7 +1639,7 @@ class RunTab(ttk.Frame):
         if controller is None:
             messagebox.showerror("Not ready", "Connect to the board first.")
             return
-        if not self.config.api.get("api_key") or not self.config.api.get("model"):
+        if not self.cfg.api.get("api_key") or not self.cfg.api.get("model"):
             messagebox.showerror(
                 "AI not configured",
                 "Set endpoint, API key and model on the AI Config tab first.",
@@ -1667,7 +1674,7 @@ class RunTab(ttk.Frame):
                 "Stop the continuous run before triggering a manual feed.",
             )
             return
-        if not self.config.api.get("api_key") or not self.config.api.get("model"):
+        if not self.cfg.api.get("api_key") or not self.cfg.api.get("model"):
             messagebox.showerror(
                 "AI not configured",
                 "Set endpoint, API key and model on the AI Config tab first.",

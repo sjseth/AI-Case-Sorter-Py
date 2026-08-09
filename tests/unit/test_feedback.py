@@ -163,6 +163,7 @@ def test_upload_pending_happy_path(db, monkeypatch) -> None:
     m = _model(db, mode="Manual")
     p1 = svc.capture(m, _img(), "WIN", 10)
     p2 = svc.capture(m, _img(), "FC", 20)
+    assert p1 is not None and p2 is not None  # capture only returns None if the save itself fails
     result = svc.upload_pending(m.id, auth=_OkAuth())
     assert result["uploaded"] == 2
     assert result["declined"] is False
@@ -247,7 +248,11 @@ def wish_api(monkeypatch):
 
 def test_set_wish_list_normalises_and_clears(db) -> None:
     svc = FeedbackService(db)
-    svc.set_wish_list(1, ["  FC ", "R-P", "", None, "fc"])
+    # Deliberately includes a `None` — this list models the wire shape from
+    # `GET /Models/FetchWishList` (untrusted JSON), and `set_wish_list`'s
+    # `if n and n.strip()` filter is what makes that safe; the type signature
+    # (`Iterable[str]`) is the caller's contract, not what's fed here on purpose.
+    svc.set_wish_list(1, ["  FC ", "R-P", "", None, "fc"])  # ty: ignore[invalid-argument-type]
     assert svc.wish_list() == ["fc", "r-p"]
     svc.clear_wish_list()
     assert svc.wish_list() == []

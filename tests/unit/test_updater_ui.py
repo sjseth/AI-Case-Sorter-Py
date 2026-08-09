@@ -165,6 +165,7 @@ def test_download_stages_and_switches_to_restart(root, monkeypatch) -> None:
 
     dlg._on_primary()
     assert _pump_until(root, lambda: dlg._pending is not None), "download never completed"
+    assert dlg._pending is not None
     assert dlg._pending.version == "9.9.9"
     assert dlg._primary.cget("text") == "Restart Now"
     # The app is told, so the status-bar button can flip to "Restart to update".

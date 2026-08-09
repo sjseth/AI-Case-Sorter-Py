@@ -125,7 +125,11 @@ class FeedbackService:
         the feedback loop off.
         """
         names: list[str] = []
-        if not is_feedback_model(model) or auth is None:
+        # `model is None`/`community_model_uid is None` are folded into the
+        # guard (rather than relying solely on `is_feedback_model`'s own
+        # checks) so the type checker can narrow `model` to `Model` and
+        # `model.community_model_uid` to `str` for the rest of this branch.
+        if model is None or not is_feedback_model(model) or auth is None or model.community_model_uid is None:
             debug_log(f"wish list: not fetching (feedback_model={is_feedback_model(model)}, auth={auth is not None})")
         else:
             try:
@@ -191,7 +195,9 @@ class FeedbackService:
         Checking confidence first means a below-floor prediction of a wished
         headstamp is captured as it always was, without spending wish quota.
         """
-        if not is_feedback_model(model):
+        # `model is None` is folded into the guard so the type checker can
+        # narrow `model` to `Model` for the rest of this method.
+        if model is None or not is_feedback_model(model):
             debug_log(
                 "should_capture=False: not a feedback model "
                 f"(enabled={getattr(model, 'feedback_loop_enabled', None)}, "
@@ -287,7 +293,10 @@ class FeedbackService:
             return result
 
         model = ModelRepo(self.db).get(model_id)
-        if not is_feedback_model(model):
+        # `model is None`/`community_model_uid is None` are folded into the
+        # guard so the type checker can narrow `model` to `Model` and
+        # `model.community_model_uid` to `str` for the rest of this method.
+        if model is None or not is_feedback_model(model) or model.community_model_uid is None:
             debug_log(f"upload_pending: model {model_id} not feedback-enabled — dropping {len(files)} staged")
             self._drop_all(files, result)
             return result

@@ -41,10 +41,10 @@ jobs:
       - name: ruff format --check
         run: uv run --no-sync ruff format --check .
 
-  # Advisory only until the pre-existing diagnostic backlog is burned down:
-  # the step reports findings as annotations/logs but never blocks the build.
+  # Blocking. The tree is at zero diagnostics, so any finding here is one this
+  # PR introduced -- there is no backlog left to hide in.
   ty:
-    name: ty (type check, advisory)
+    name: ty (type check)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,9 +64,6 @@ jobs:
         run: uv sync --locked --no-install-project
 
       - name: ty check
-        # continue-on-error keeps this advisory -- findings surface, CI stays
-        # green. Drop it once the backlog reaches zero.
-        continue-on-error: true
         run: uv run --no-sync ty check --output-format github
 
   workflows:

@@ -266,7 +266,10 @@ def test_a_corrupt_settings_row_never_stops_startup() -> None:
     assert THEMES["Dark"] == BUILTIN_THEMES["Dark"]  # untouched
 
     assert load_custom_themes(None) == []
-    assert load_custom_themes("junk") == []
+    # "junk" (a str, not a dict) simulates a corrupted `ui.custom_themes`
+    # settings row — load_custom_themes's `isinstance(stored, dict)` guard is
+    # exactly what must survive that, hence the deliberately-wrong type here.
+    assert load_custom_themes("junk") == []  # ty: ignore[invalid-argument-type]
 
 
 # ----- the editor dialog ------------------------------------------------------

@@ -15,6 +15,9 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox, ttk
 
+from ..config import Config
+from ..models import SlotTemplate
+
 
 def _mode_noun(mode: str) -> str:
     """Wording that reminds the user which template list they're editing."""
@@ -27,7 +30,10 @@ class _TemplateDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, title: str) -> None:
         super().__init__(parent)
         self.title(title)
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(False, False)
 
         self.body = ttk.Frame(self, padding=(14, 12, 14, 8))
@@ -53,10 +59,10 @@ class NewSlotTemplateDialog(_TemplateDialog):
         self,
         parent: tk.Misc,
         *,
-        config,
+        config: Config,
         mode: str,
         current_name: str,
-        on_created: Callable[[object], None] | None = None,
+        on_created: Callable[[SlotTemplate], None] | None = None,
     ) -> None:
         super().__init__(parent, "New Sorting Template")
         self.config_obj = config
@@ -125,10 +131,10 @@ class EditSlotTemplateDialog(_TemplateDialog):
         self,
         parent: tk.Misc,
         *,
-        config,
-        template,
+        config: Config,
+        template: SlotTemplate,
         can_delete: bool,
-        on_changed: Callable[[object | None], None] | None = None,
+        on_changed: Callable[[SlotTemplate | None], None] | None = None,
     ) -> None:
         super().__init__(parent, "Edit Sorting Template")
         self.config_obj = config

@@ -57,6 +57,7 @@ def test_assignment_changes_sync_into_the_active_template(tmp_path: Path) -> Non
     cfg.set_headstamp_slot("FC", 2)
 
     stored = SlotTemplateRepo(cfg.db).get(active.id)
+    assert stored is not None
     assert stored.assignments["headstamps"] == {"FC": 2}
 
 
@@ -108,6 +109,7 @@ def test_applying_a_template_clears_slots_it_does_not_mention(tmp_path: Path) ->
 def test_parent_slots_travel_with_the_template(tmp_path: Path) -> None:
     cfg = _cfg(tmp_path)
     mid = cfg.settings.get_active_model_id()
+    assert mid is not None
     parent = HeadstampParentRepo(cfg.db).add(mid, "Federal")
     cfg.set_parent_slot(parent.id, 4)
     default = cfg.active_slot_template()
@@ -149,6 +151,7 @@ def test_delete_active_template_loads_the_next_one(tmp_path: Path) -> None:
     fresh = cfg.create_slot_template("Fresh", copy_current=False)
 
     now_active = cfg.delete_slot_template(fresh.id)
+    assert now_active is not None
     assert now_active.id == default.id
     assert _slots(cfg)["WIN"] == 3  # Default's layout came back
 
@@ -208,10 +211,12 @@ def test_templates_are_scoped_per_model(tmp_path: Path) -> None:
     cfg.create_slot_template("Model one layout")
 
     models = ModelRepo(db)
+    first_model = models.get(first)
+    assert first_model is not None
     second = models.create(
         Model(
             name="Second",
-            cartridge_id=models.get(first).cartridge_id,
+            cartridge_id=first_model.cartridge_id,
             model_mode="convnext_tiny",
         )
     )
@@ -248,10 +253,12 @@ def test_templates_are_dropped_with_their_model(tmp_path: Path) -> None:
     cfg.create_slot_template("Doomed")
 
     models = ModelRepo(db)
+    first_model = models.get(first)
+    assert first_model is not None
     keeper = models.create(
         Model(
             name="Keeper",
-            cartridge_id=models.get(first).cartridge_id,
+            cartridge_id=first_model.cartridge_id,
             model_mode="convnext_tiny",
         )
     )

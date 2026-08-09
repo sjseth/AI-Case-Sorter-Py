@@ -724,9 +724,17 @@ flowchart TD
   CI. Most UI modules need a display — `xvfb-run -a pytest` covers them on a
   headless box; without tkinter installed those modules skip rather than
   fail. `lint.yml` also runs the [ty](https://docs.astral.sh/ty/) type checker
-  (`uv run ty check`), **advisory-only** (`continue-on-error`) until the
-  pre-existing diagnostic backlog is burned down — findings surface as
-  annotations but never fail the build. `install-windows.ps1` gets its own workflow
+  (`uv run ty check`), and it is **blocking** — the tree is at zero
+  diagnostics, so anything it reports is something the PR introduced. Run it
+  locally alongside `pytest` and `ruff`. **Fix the code, don't silence the
+  checker:** every `# ty: ignore[rule]` in the tree carries a comment saying
+  why the finding is genuinely unfixable, and they are all one of two cases —
+  optional dependencies absent by design (torch/torchvision are the `[ml]`
+  extra, pygrabber/comtypes are Windows-only) or gaps in opencv's bundled
+  stubs. Note the job does a **full** `uv sync` rather than `--only-group dev`:
+  ty resolves third-party imports from the environment, so without the runtime
+  deps the output drowns in unresolved-import noise.
+  `install-windows.ps1` gets its own workflow
   (`.github/workflows/installer-smoke.yml`), not `build.yml`'s blanket
   trigger: it needs a real published release to exercise its interesting
   path (sdist matching, `tar.exe` extraction), so it's path-filtered to

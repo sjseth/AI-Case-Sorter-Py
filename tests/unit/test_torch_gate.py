@@ -9,6 +9,7 @@ than after the run dies on it.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -76,6 +77,7 @@ def test_a_deleted_checkpoint_is_reported_not_routed_to_http(
 ) -> None:
     db = _seed_db(tmp_path)
     model = _local_model(db, tmp_path)
+    assert model.model_path is not None  # _local_model always sets one
     Path(model.model_path).unlink()
     assert classifier.uses_local_inference(db) is True
     assert classifier.checkpoint_problem(db) is not None
@@ -146,7 +148,15 @@ def test_is_installed_survives_a_broken_module(monkeypatch) -> None:
 
 pytest.importorskip("tkinter")
 
+import tkinter as tk  # noqa: E402
+
 from sorter.ui import torch_gate  # noqa: E402
+
+# ensure_torch's `parent` only ever needs to be a valid `after()`/dialog
+# anchor; these tests replace the dialog with `_FakeDialog`, which never
+# touches it, so a real Tk widget (and the display it would require) is
+# unnecessary — stand in with `None` typed as the `tk.Misc` it never uses.
+_NO_PARENT = cast(tk.Misc, None)
 
 
 class _FakeDialog:
@@ -172,7 +182,7 @@ def fake_dialog(monkeypatch):
 
 def test_gate_passes_through_when_torch_is_installed(monkeypatch, fake_dialog) -> None:
     monkeypatch.setattr(torch_gate.local_inference, "is_installed", lambda: True)
-    assert torch_gate.ensure_torch(None, lambda: None) is True
+    assert torch_gate.ensure_torch(_NO_PARENT, lambda: None) is True
     assert fake_dialog.instances == []
 
 
@@ -184,7 +194,7 @@ def test_gate_blocks_and_offers_install_when_torch_is_missing(
     ran = []
     assert (
         torch_gate.ensure_torch(
-            None,
+            _NO_PARENT,
             lambda: ran.append("proceed"),
             reason="Sorting needs PyTorch",
         )
@@ -202,7 +212,7 @@ def test_gate_runs_the_action_only_after_a_successful_install(
 ) -> None:
     monkeypatch.setattr(torch_gate.local_inference, "is_installed", lambda: False)
     ran = []
-    torch_gate.ensure_torch(None, lambda: ran.append("proceed"))
+    torch_gate.ensure_torch(_NO_PARENT, lambda: ran.append("proceed"))
     assert ran == []
     fake_dialog.instances[0].on_success()  # pip finished
     assert ran == ["proceed"]
@@ -214,7 +224,7 @@ def test_cancelling_the_install_does_not_run_the_action(
 ) -> None:
     monkeypatch.setattr(torch_gate.local_inference, "is_installed", lambda: False)
     ran = []
-    torch_gate.ensure_torch(None, lambda: ran.append("proceed"))
+    torch_gate.ensure_torch(_NO_PARENT, lambda: ran.append("proceed"))
     dialog = fake_dialog.instances[0]
     if dialog.on_cancel is not None:
         dialog.on_cancel()

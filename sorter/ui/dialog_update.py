@@ -23,10 +23,20 @@ import sys
 import threading
 import tkinter as tk
 from tkinter import ttk
+from typing import Literal
 
 from .. import updater
 from ..updater import PendingUpdate, UpdateError, UpdateInfo
 from .theme import PALETTE
+
+# Tagged union for the worker->main-thread queue below: the "kind" string
+# picks which payload shape goes with it, so _poll_events can narrow by
+# literal instead of casting.
+_DownloadEvent = (
+    tuple[Literal["progress"], tuple[int, int | None]]
+    | tuple[Literal["done"], PendingUpdate]
+    | tuple[Literal["error"], str]
+)
 
 
 class UpdateDialog(tk.Toplevel):
@@ -40,7 +50,10 @@ class UpdateDialog(tk.Toplevel):
     ) -> None:
         super().__init__(parent)
         self.title("Software Update")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(True, True)
         self.geometry("620x520")
         self.minsize(520, 420)
@@ -52,7 +65,7 @@ class UpdateDialog(tk.Toplevel):
         self._pending = pending if pending is not None else updater.pending_update()
         self._cancelled = False
         self._downloading = False
-        self._events: queue.Queue[tuple[str, object]] = queue.Queue()
+        self._events: queue.Queue[_DownloadEvent] = queue.Queue()
         self._poll_id: str | None = None
 
         # Buttons first with side=BOTTOM so the resizable notes area above
@@ -231,7 +244,7 @@ class UpdateDialog(tk.Toplevel):
         # the main thread. So the worker only ever touches this queue, and a
         # main-thread poller below turns its messages into widget updates.
         # Same shape as the app-wide EventBus, scoped to one dialog.
-        self._events: queue.Queue[tuple[str, object]] = queue.Queue()
+        self._events: queue.Queue[_DownloadEvent] = queue.Queue()
 
         def _work() -> None:
             try:
@@ -252,18 +265,20 @@ class UpdateDialog(tk.Toplevel):
         terminal = False
         try:
             while True:
-                kind, payload = self._events.get_nowait()
-                if kind == "progress":
-                    done, total = payload  # type: ignore[misc]
-                    self._show_progress(done, total)
-                elif kind == "done":
-                    self._download_done(payload)  # type: ignore[arg-type]
-                    terminal = True
-                    break
-                elif kind == "error":
-                    self._download_failed(str(payload))
-                    terminal = True
-                    break
+                # match/case (rather than an if/elif on `kind` with a
+                # separately-unpacked `payload`) is what lets the checker
+                # narrow the payload's type per branch of this tagged union.
+                match self._events.get_nowait():
+                    case ("progress", (done, total)):
+                        self._show_progress(done, total)
+                    case ("done", pending):
+                        self._download_done(pending)
+                        terminal = True
+                        break
+                    case ("error", message):
+                        self._download_failed(str(message))
+                        terminal = True
+                        break
         except queue.Empty:
             pass
         except tk.TclError:

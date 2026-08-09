@@ -6,7 +6,7 @@ Uses a stubbed `requests.Session` so no network calls are made.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import requests
@@ -110,7 +110,11 @@ class _FakeAuth(AuthManager):
 def _api(session: _FakeSession) -> CommunityApi:
     # base_url pinned so these URL assertions don't depend on the developer's
     # CASESORTER_API_BASE; the override itself is covered below.
-    return CommunityApi(auth=_FakeAuth(), session=session, base_url=API_BASE)
+    # `_FakeSession` duck-types `requests.Session` (only the methods
+    # CommunityApi actually calls) rather than subclassing it — subclassing
+    # trips ty's method-override check since the fake's `get`/`post`/`put`
+    # signatures are narrower than `Session`'s.
+    return CommunityApi(auth=_FakeAuth(), session=cast(requests.Session, session), base_url=API_BASE)
 
 
 def test_authorization_header_added(tmp_path: Path) -> None:
@@ -573,6 +577,6 @@ def test_fetch_wish_list_signed_out_returns_empty() -> None:
             return None
 
     s = _FakeSession()
-    api = CommunityApi(auth=_NoAuth(), session=s)
+    api = CommunityApi(auth=_NoAuth(), session=cast(requests.Session, s))
     assert api.fetch_wish_list("uid-1") == []
     assert s.get_calls == []

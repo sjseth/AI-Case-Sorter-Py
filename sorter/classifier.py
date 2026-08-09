@@ -139,7 +139,10 @@ def classify_active(
     if model is None:
         return api_client.classify(image_bgr, headstamps, api_cfg)
 
-    if not has_local_checkpoint(model):
+    # `not model.model_path` is folded into the guard (redundant with
+    # `has_local_checkpoint`'s own check) so the type checker can narrow
+    # `model.model_path` from `str | None` to `str` below.
+    if not has_local_checkpoint(model) or not model.model_path:
         raise NoLocalCheckpointError(_checkpoint_summary(model))
 
     # Pass the trained image size from the model record so imported community

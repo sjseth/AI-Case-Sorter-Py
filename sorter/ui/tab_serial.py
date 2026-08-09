@@ -45,7 +45,8 @@ AIRDROP_FIELDS = [
 class SerialTab(ttk.Frame):
     def __init__(self, parent: tk.Misc, *, config, bus: EventBus, app):
         super().__init__(parent)
-        self.config = config
+        # Not `self.config` — that collides with ttk.Widget.config().
+        self.cfg = config
         self.bus = bus
         self.app = app
         ser_cfg = config.serial
@@ -150,7 +151,6 @@ class SerialTab(ttk.Frame):
         for idx, (label, key, lo, hi, dflt) in enumerate(INIT_FIELDS):
             value = int(init_settings.get(key, dflt))
             field = NumericField(init_box, label, from_=lo, to=hi, initial=value)
-            field.grid_master = init_box
             field.grid(row=idx // 3, column=idx % 3, padx=6, pady=4, sticky=tk.W)
             self.init_widgets[key] = field
 
@@ -204,12 +204,12 @@ class SerialTab(ttk.Frame):
             self.port_var.set(ports[0])
 
     def save(self) -> None:
-        self.config.serial["port"] = self.port_var.get()
-        self.config.serial["baud"] = int(self.baud_var.get())
-        self.config.serial["handshake_timeout_s"] = float(self.probe_timeout_var.get())
-        self.config.serial["slot_quantity"] = int(self.slot_count_var.get())
-        self.config.serial["init_on_startup"] = bool(self.init_on_startup_var.get())
-        init_settings = dict(self.config.serial.get("init_settings", {}))
+        self.cfg.serial["port"] = self.port_var.get()
+        self.cfg.serial["baud"] = int(self.baud_var.get())
+        self.cfg.serial["handshake_timeout_s"] = float(self.probe_timeout_var.get())
+        self.cfg.serial["slot_quantity"] = int(self.slot_count_var.get())
+        self.cfg.serial["init_on_startup"] = bool(self.init_on_startup_var.get())
+        init_settings = dict(self.cfg.serial.get("init_settings", {}))
         for key, field in self.init_widgets.items():
             init_settings[key] = int(field.get())
         init_settings["airdropenabled"] = 1 if self.airdrop_enabled_var.get() else 0
@@ -217,8 +217,8 @@ class SerialTab(ttk.Frame):
             init_settings["sortsteps"] = int(self.sort_steps_var.get())
         except (tk.TclError, ValueError):
             pass
-        self.config.serial["init_settings"] = init_settings
-        self.config.save()
+        self.cfg.serial["init_settings"] = init_settings
+        self.cfg.save()
         self.app.set_status("Serial settings saved.")
 
     # ----- Sort arm test helpers --------------------------------------------
@@ -258,7 +258,7 @@ class SerialTab(ttk.Frame):
         self.save()
         self.app.set_status("Pushing init settings to board…")
         self.app.run_worker(
-            lambda: broker.update_init_settings(self.config.serial["init_settings"]),
+            lambda: broker.update_init_settings(self.cfg.serial["init_settings"]),
             on_done=lambda _r: self.app.set_status("Init settings pushed."),
             on_error=lambda err: messagebox.showerror("Serial error", str(err)),
         )

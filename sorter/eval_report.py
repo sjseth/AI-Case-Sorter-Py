@@ -9,13 +9,19 @@ file. Everything here is cross-platform (pathlib + PIL only).
 from __future__ import annotations
 
 import base64
+import importlib
 import io
 import json
 from pathlib import Path
 from typing import Any
 
+# Routed through `importlib.import_module` (rather than a plain `from PIL
+# import Image`) so the checker infers an ordinary `<module> | None` union
+# from the two assignment branches below, instead of treating a successful
+# `import` statement as a fixed module-type declaration that the `except`
+# branch's `None` then conflicts with.
 try:  # Pillow is a hard dependency, but degrade gracefully if absent.
-    from PIL import Image
+    Image = importlib.import_module("PIL.Image")
 except Exception:  # pragma: no cover
     Image = None
 

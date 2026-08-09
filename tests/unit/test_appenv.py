@@ -10,8 +10,10 @@ import os
 from pathlib import Path
 
 import pytest
+import requests
 
 from sorter import appenv
+from sorter.auth import AuthManager
 
 
 @pytest.fixture(autouse=True)
@@ -182,11 +184,14 @@ def test_warnings_are_emitted_once(capsys, monkeypatch) -> None:
 def test_community_api_picks_up_the_override(monkeypatch) -> None:
     from sorter.community_api import API_BASE, CommunityApi
 
-    class _Auth:
+    class _Auth(AuthManager):
+        def __init__(self) -> None:
+            pass  # skip MSAL setup
+
         def acquire_token_silent(self, scopes=None):
             return None
 
-    class _Session:
+    class _Session(requests.Session):
         verify = True
 
     assert CommunityApi(auth=_Auth(), session=_Session()).base_url == API_BASE
@@ -197,11 +202,14 @@ def test_community_api_picks_up_the_override(monkeypatch) -> None:
 def test_community_api_resolves_tls_trust(tmp_path, monkeypatch) -> None:
     from sorter.community_api import CommunityApi
 
-    class _Auth:
+    class _Auth(AuthManager):
+        def __init__(self) -> None:
+            pass  # skip MSAL setup
+
         def acquire_token_silent(self, scopes=None):
             return None
 
-    class _Session:
+    class _Session(requests.Session):
         verify = True
 
     pem = tmp_path / "devcert.pem"
@@ -213,11 +221,14 @@ def test_community_api_resolves_tls_trust(tmp_path, monkeypatch) -> None:
 def test_explicit_verify_argument_wins(monkeypatch) -> None:
     from sorter.community_api import CommunityApi
 
-    class _Auth:
+    class _Auth(AuthManager):
+        def __init__(self) -> None:
+            pass  # skip MSAL setup
+
         def acquire_token_silent(self, scopes=None):
             return None
 
-    class _Session:
+    class _Session(requests.Session):
         verify = True
 
     monkeypatch.setenv("CASESORTER_API_INSECURE", "1")

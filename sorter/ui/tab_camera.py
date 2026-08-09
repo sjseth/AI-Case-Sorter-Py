@@ -56,7 +56,8 @@ def _parse_resolution(label: str) -> tuple[int, int] | None:
 class CameraTab(ttk.Frame):
     def __init__(self, parent: tk.Misc, *, config, bus: EventBus, app):
         super().__init__(parent)
-        self.config = config
+        # Not `self.config` — that collides with ttk.Widget.config().
+        self.cfg = config
         self.bus = bus
         self.app = app
         self._detected: list[dict] = []  # filled by quick or full enumeration
@@ -128,8 +129,8 @@ class CameraTab(ttk.Frame):
         if not cameras:
             return None
         chosen: dict | None = None
-        if bool(self.config.camera.get("device_chosen", False)):
-            saved_idx = int(self.config.camera.get("device_index", 0))
+        if bool(self.cfg.camera.get("device_chosen", False)):
+            saved_idx = int(self.cfg.camera.get("device_index", 0))
             chosen = next((c for c in cameras if c["index"] == saved_idx), None)
         if chosen is None:
             chosen = next(
@@ -299,8 +300,8 @@ class CameraTab(ttk.Frame):
         if not resolutions:
             # No resolution data yet (quick name-only enumeration). Keep
             # whatever the user has saved so the dropdown isn't empty.
-            saved_w = int(self.config.camera.get("width", 0))
-            saved_h = int(self.config.camera.get("height", 0))
+            saved_w = int(self.cfg.camera.get("width", 0))
+            saved_h = int(self.cfg.camera.get("height", 0))
             if saved_w and saved_h:
                 self.resolution_combo["values"] = [_format_resolution((saved_w, saved_h))]
                 self.resolution_var.set(_format_resolution((saved_w, saved_h)))
@@ -315,9 +316,9 @@ class CameraTab(ttk.Frame):
         # Default selection: saved resolution if this camera supports it,
         # otherwise the highest. resolutions is sorted ascending by pixel
         # count, so resolutions[-1] is the largest.
-        saved_w = int(self.config.camera.get("width", 0))
-        saved_h = int(self.config.camera.get("height", 0))
-        if (saved_w, saved_h) in resolutions and cam["index"] == int(self.config.camera.get("device_index", 0)):
+        saved_w = int(self.cfg.camera.get("width", 0))
+        saved_h = int(self.cfg.camera.get("height", 0))
+        if (saved_w, saved_h) in resolutions and cam["index"] == int(self.cfg.camera.get("device_index", 0)):
             self.resolution_var.set(_format_resolution((saved_w, saved_h)))
         else:
             self.resolution_var.set(_format_resolution(resolutions[-1]))
@@ -331,12 +332,12 @@ class CameraTab(ttk.Frame):
             return
 
         wh = _parse_resolution(self.resolution_var.get())
-        self.config.camera["device_index"] = int(cam["index"])
-        self.config.camera["device_chosen"] = True
+        self.cfg.camera["device_index"] = int(cam["index"])
+        self.cfg.camera["device_chosen"] = True
         if wh is not None:
-            self.config.camera["width"] = wh[0]
-            self.config.camera["height"] = wh[1]
-        self.config.save()
+            self.cfg.camera["width"] = wh[0]
+            self.cfg.camera["height"] = wh[1]
+        self.cfg.save()
         self.app.restart_camera(
             device_index=int(cam["index"]),
             width=wh[0] if wh else None,

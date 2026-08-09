@@ -91,7 +91,10 @@ def _windows_camera_names() -> dict[int, str]:
     optional dep).
     """
     try:
-        from pygrabber.dshow_graph import FilterGraph  # type: ignore[import-not-found]
+        # pygrabber is Windows-only and not installed in this (Linux) dev/CI
+        # environment; the surrounding try/except is exactly the runtime guard
+        # for that.
+        from pygrabber.dshow_graph import FilterGraph  # type: ignore[import-not-found]  # ty: ignore[unresolved-import]
     except Exception:
         return {}
     try:
@@ -120,7 +123,10 @@ def _windows_camera_resolutions(indices: list[int]) -> dict[int, list[tuple[int,
     {} if pygrabber isn't installed.
     """
     try:
-        from pygrabber.dshow_graph import FilterGraph  # type: ignore[import-not-found]
+        # pygrabber is Windows-only and not installed in this (Linux) dev/CI
+        # environment; the surrounding try/except is exactly the runtime guard
+        # for that.
+        from pygrabber.dshow_graph import FilterGraph  # type: ignore[import-not-found]  # ty: ignore[unresolved-import]
     except Exception:
         return {}
 
@@ -131,7 +137,10 @@ def _windows_camera_resolutions(indices: list[int]) -> dict[int, list[tuple[int,
     # broken graph and get_formats() return nothing. Init/uninit per-call
     # so we work regardless of caller thread.
     try:
-        import comtypes  # type: ignore[import-not-found]
+        # comtypes is Windows-only and not installed in this (Linux) dev/CI
+        # environment; the surrounding try/except is exactly the runtime guard
+        # for that.
+        import comtypes  # type: ignore[import-not-found]  # ty: ignore[unresolved-import]
 
         comtypes.CoInitialize()
         com_inited = True
@@ -172,11 +181,17 @@ def _windows_dshow_device_count() -> int | None:
     "unknown — try every index"). Returns 0 if no devices are connected.
     """
     try:
-        from pygrabber.dshow_graph import FilterGraph  # type: ignore[import-not-found]
+        # pygrabber is Windows-only and not installed in this (Linux) dev/CI
+        # environment; the surrounding try/except is exactly the runtime guard
+        # for that.
+        from pygrabber.dshow_graph import FilterGraph  # type: ignore[import-not-found]  # ty: ignore[unresolved-import]
     except Exception:
         return None
     try:
-        import comtypes  # type: ignore[import-not-found]
+        # comtypes is Windows-only and not installed in this (Linux) dev/CI
+        # environment; the surrounding try/except is exactly the runtime guard
+        # for that.
+        import comtypes  # type: ignore[import-not-found]  # ty: ignore[unresolved-import]
 
         comtypes.CoInitialize()
         com_inited = True
@@ -264,7 +279,7 @@ def _probe_resolutions(cap: cv2.VideoCapture) -> list[tuple[int, int]]:
     # so the Windows path uses _windows_camera_resolutions instead and only
     # falls back here if pygrabber isn't installed.
     if sys.platform.startswith("linux"):
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))  # ty: ignore[unresolved-attribute]  # opencv-python's bundled stubs omit VideoWriter_fourcc; it exists at runtime
     orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     supported: set[tuple[int, int]] = set()
@@ -365,7 +380,7 @@ class Camera:
         # default YUYV format often refuses 1920x1080 or caps the FPS so
         # low that the preview stutters. DirectShow on Windows already
         # negotiates MJPG for most webcams; setting it again is harmless.
-        self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))  # ty: ignore[unresolved-attribute]  # opencv-python's bundled stubs omit VideoWriter_fourcc; it exists at runtime
         if sys.platform.startswith("linux"):
             # V4L2 auto-exposure defaults blow out the image once the LED
             # ring is on — operators end up dropping cameraledlevel to 2-3

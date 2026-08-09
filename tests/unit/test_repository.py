@@ -28,10 +28,12 @@ def test_cartridge_crud(tmp_path: Path) -> None:
     initial_count = len(repo.list())
     new_cart = repo.create(".223 Rem")
     assert new_cart.id
-    assert repo.find_by_name(".223 Rem").id == new_cart.id
+    found = repo.find_by_name(".223 Rem")
+    assert found is not None and found.id == new_cart.id
     assert len(repo.list()) == initial_count + 1
     repo.rename(new_cart.id, ".223 Remington")
-    assert repo.get(new_cart.id).name == ".223 Remington"
+    renamed = repo.get(new_cart.id)
+    assert renamed is not None and renamed.name == ".223 Remington"
 
 
 def test_model_round_trip(tmp_path: Path) -> None:
@@ -47,6 +49,7 @@ def test_model_round_trip(tmp_path: Path) -> None:
     assert saved.id
 
     loaded = repo.get(saved.id)
+    assert loaded is not None
     assert loaded.name == "my45"
     assert loaded.model_mode == "convnext_small"
     assert loaded.training_config.epochs == 25
@@ -148,13 +151,16 @@ def test_find_by_community_uid_prefers_the_active_duplicate(tmp_path: Path) -> N
     second = repo.create(Model(name="Comm (2)", cartridge_id=cart.id, community_model_uid="uid-dup"))
 
     # No active model: oldest wins.
-    assert repo.find_by_community_uid("uid-dup").id == first.id
+    dup = repo.find_by_community_uid("uid-dup")
+    assert dup is not None and dup.id == first.id
 
     # Active model wins, whichever duplicate it is.
     settings = SettingsRepo(db)
     settings.set_active_model_id(second.id)
-    assert repo.find_by_community_uid("uid-dup").id == second.id
+    dup = repo.find_by_community_uid("uid-dup")
+    assert dup is not None and dup.id == second.id
     settings.set_active_model_id(first.id)
-    assert repo.find_by_community_uid("uid-dup").id == first.id
+    dup = repo.find_by_community_uid("uid-dup")
+    assert dup is not None and dup.id == first.id
 
     assert repo.find_by_community_uid("nope") is None

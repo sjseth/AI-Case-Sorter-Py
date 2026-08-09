@@ -58,7 +58,10 @@ class TorchInstallDialog(tk.Toplevel):
     ) -> None:
         super().__init__(parent)
         self.title("Install PyTorch")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(True, True)
         self.geometry("720x520")
         self.minsize(640, 460)

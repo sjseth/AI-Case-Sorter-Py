@@ -9,6 +9,7 @@ from __future__ import annotations
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox, ttk
+from typing import Any
 
 from ..models import TrainingConfig
 
@@ -23,7 +24,10 @@ class TrainingConfigDialog(tk.Toplevel):
     ) -> None:
         super().__init__(parent)
         self.title("Training settings")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(False, False)
         self._original = config
         self._on_saved = on_saved
@@ -55,8 +59,11 @@ class TrainingConfigDialog(tk.Toplevel):
         frm.pack(fill=tk.BOTH, expand=True)
 
         # (label, settings key, Spinbox kwargs) — every row is a Spinbox, so
-        # there is no widget-kind column to carry.
-        rows = [
+        # there is no widget-kind column to carry. Explicitly `Any`-valued:
+        # each row's kwargs mixes ints/floats/format strings, which the
+        # Spinbox constructor's per-keyword overloads don't unify — the
+        # dict is genuinely heterogeneous by design, not a typing gap.
+        rows: list[tuple[str, str, dict[str, Any]]] = [
             ("Epochs", "epochs", {"from_": 1, "to": 200}),
             ("Batch size", "batch_size", {"from_": 1, "to": 1024}),
             ("Learning rate", "learning_rate", {"from_": 1e-6, "to": 1.0, "increment": 1e-5, "format": "%.6f"}),

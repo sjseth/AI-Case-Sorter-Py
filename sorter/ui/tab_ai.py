@@ -19,7 +19,8 @@ from .widgets import ImagePanel, NumericField, build_button_row, build_labeled_e
 class AiTab(ttk.Frame):
     def __init__(self, parent: tk.Misc, *, config, bus: EventBus, app):
         super().__init__(parent)
-        self.config = config
+        # Not `self.config` — that collides with ttk.Widget.config().
+        self.cfg = config
         self.bus = bus
         self.app = app
         api_cfg = config.api
@@ -180,7 +181,7 @@ class AiTab(ttk.Frame):
     # ----- headstamp list helpers --------------------------------------------
 
     def _names(self) -> list[str]:
-        return [e.get("name", "") for e in self.config.headstamps if e.get("name")]
+        return [e.get("name", "") for e in self.cfg.headstamps if e.get("name")]
 
     def _refresh_list(self) -> None:
         self.listbox.delete(0, tk.END)
@@ -200,7 +201,7 @@ class AiTab(ttk.Frame):
         name = self.new_name_var.get().strip()
         if not name:
             return
-        if not self.config.add_headstamp(name):
+        if not self.cfg.add_headstamp(name):
             # Either AI Config mode (no active model) or duplicate name.
             self.app.set_status(f"Could not add '{name}'.")
             return
@@ -213,12 +214,12 @@ class AiTab(ttk.Frame):
         if not selection:
             return
         name = self.listbox.get(selection[0])
-        self.config.remove_headstamp(name)
+        self.cfg.remove_headstamp(name)
         self._refresh_list()
         self.app.set_status(f"Removed '{name}'.")
 
     def clear_all(self) -> None:
-        current = self.config.headstamps
+        current = self.cfg.headstamps
         if not current:
             return
         if not messagebox.askyesno(
@@ -226,20 +227,20 @@ class AiTab(ttk.Frame):
             f"Remove all {len(current)} headstamp(s)?",
         ):
             return
-        self.config.clear_headstamps()
+        self.cfg.clear_headstamps()
         self._refresh_list()
         self.app.set_status("Cleared all headstamps.")
 
     # ----- Save / Load --------------------------------------------------------
 
     def save(self) -> None:
-        self.config.api["endpoint_url"] = self.endpoint_var.get().strip()
-        self.config.api["api_key"] = self.apikey_var.get()
-        self.config.api["model"] = self.model_var.get().strip()
-        self.config.api["prompt"] = self.prompt_text.get("1.0", tk.END).rstrip("\n")
-        self.config.api["image_quality"] = int(self.quality_field.get())
-        self.config.api["image_scale"] = int(self.scale_field.get())
-        self.config.save()
+        self.cfg.api["endpoint_url"] = self.endpoint_var.get().strip()
+        self.cfg.api["api_key"] = self.apikey_var.get()
+        self.cfg.api["model"] = self.model_var.get().strip()
+        self.cfg.api["prompt"] = self.prompt_text.get("1.0", tk.END).rstrip("\n")
+        self.cfg.api["image_quality"] = int(self.quality_field.get())
+        self.cfg.api["image_scale"] = int(self.scale_field.get())
+        self.cfg.save()
         self.app.set_status("AI settings saved.")
 
     def load_headstamps(self) -> None:
@@ -258,7 +259,7 @@ class AiTab(ttk.Frame):
     def _on_headstamps_loaded(self, names) -> None:
         added = 0
         for name in names:
-            if name and self.config.add_headstamp(name):
+            if name and self.cfg.add_headstamp(name):
                 added += 1
         self._refresh_list()
         self.app.set_status(f"Loaded {added} new headstamp(s) from server.")
@@ -270,7 +271,7 @@ class AiTab(ttk.Frame):
         if broker is None or not broker.is_connected:
             messagebox.showerror("Not connected", "Connect to the board first.")
             return
-        if not self.config.api.get("api_key") or not self.config.api.get("model"):
+        if not self.cfg.api.get("api_key") or not self.cfg.api.get("model"):
             messagebox.showerror(
                 "AI not configured",
                 "Endpoint, API key and model must be set above first.",

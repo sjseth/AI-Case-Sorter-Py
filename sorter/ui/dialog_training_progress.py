@@ -32,7 +32,10 @@ class TrainingProgressDialog(tk.Toplevel):
         self.on_cancel = on_cancel
         self.on_closed = on_closed
         self.title(title)
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.configure(bg=PALETTE["bg_surface"])
         self.geometry("720x420")
         self.protocol("WM_DELETE_WINDOW", self._user_close)

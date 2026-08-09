@@ -601,8 +601,10 @@ class Config:
             self.settings.set(self._package_slots_key(), cleaned)
             return
 
-        hs_slots = data.get("headstamps") if isinstance(data.get("headstamps"), dict) else {}
-        parent_slots = data.get("parents") if isinstance(data.get("parents"), dict) else {}
+        raw_hs_slots = data.get("headstamps")
+        hs_slots: dict[str, Any] = raw_hs_slots if isinstance(raw_hs_slots, dict) else {}
+        raw_parent_slots = data.get("parents")
+        parent_slots: dict[str, Any] = raw_parent_slots if isinstance(raw_parent_slots, dict) else {}
 
         def _slot_of(table: dict[str, Any], name: str) -> int:
             try:

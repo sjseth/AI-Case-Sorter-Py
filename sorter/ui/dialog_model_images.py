@@ -63,7 +63,11 @@ class _ThumbTile(tk.Frame):
         self._img.pack(fill=tk.BOTH, expand=True)
 
         caption = headstamp if len(headstamp) <= 16 else headstamp[:15] + "…"
-        self._cap = tk.Label(self, text=caption, bg=PALETTE["bg_card"], fg=PALETTE["text"], font=(None, 8))
+        # `font=(None, 8)` isn't a valid family per the Tk font spec — Tcl
+        # took it literally as a family named "None" rather than "use the
+        # default family". "TkDefaultFont" is the named default font that
+        # actually resolves.
+        self._cap = tk.Label(self, text=caption, bg=PALETTE["bg_card"], fg=PALETTE["text"], font=("TkDefaultFont", 8))
         self._cap.pack(pady=(0, 4))
 
         for w in (self, holder, self._img, self._cap):
@@ -92,7 +96,10 @@ class ModelImagesDialog(tk.Toplevel):
         self._headstamp_names = [h.name for h in HeadstampRepo(db).list_for_model(model.id)]
 
         self.title(f"Images — {model.name}")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(True, True)
         self.minsize(820, 560)
         self.configure(bg=PALETTE["bg_window"])

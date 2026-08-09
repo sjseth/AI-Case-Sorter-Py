@@ -97,6 +97,7 @@ def test_community_download_is_marked_not_owned(tmp_path: Path) -> None:
         community_download=True,
     )
     saved = ModelRepo(db).get(model_id)
+    assert saved is not None
     # The manifest said Standard; how it arrived is what counts.
     assert saved.model_type == "CommunityManaged"
     assert not is_trainable(saved)
@@ -107,6 +108,7 @@ def test_plain_zip_import_stays_owned(tmp_path: Path) -> None:
     db = _seed_db(tmp_path)
     _cart, model_id = import_model(_archive(tmp_path), db=db)
     saved = ModelRepo(db).get(model_id)
+    assert saved is not None
     assert saved.model_type == "Standard"
     assert is_trainable(saved)
 

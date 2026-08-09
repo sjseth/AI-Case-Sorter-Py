@@ -40,7 +40,10 @@ class ImagePreviewDialog(tk.Toplevel):
         self._on_changed = on_changed
 
         self.title("Image preview")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(False, False)
         self.configure(bg=PALETTE["bg_window"])
 

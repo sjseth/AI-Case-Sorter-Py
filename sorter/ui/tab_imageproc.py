@@ -19,7 +19,8 @@ from .widgets import ImagePanel, NumericField, build_button_row
 class ImageProcTab(ttk.Frame):
     def __init__(self, parent: tk.Misc, *, config, bus: EventBus, app):
         super().__init__(parent)
-        self.config = config
+        # Not `self.config` — that collides with ttk.Widget.config().
+        self.cfg = config
         self.bus = bus
         self.app = app
         ip = config.image_proc
@@ -173,10 +174,10 @@ class ImageProcTab(ttk.Frame):
 
     def save(self) -> None:
         # Strategy is locked to "hough" while the line-scan UI is hidden.
-        self.config.image_proc["strategy"] = "hough"
-        self.config.image_proc["primer_mode"] = self.primer_mode_var.get()
-        self.config.image_proc["primer_radius"] = int(self.primer_radius.get())
-        self.config.image_proc["hough"] = {
+        self.cfg.image_proc["strategy"] = "hough"
+        self.cfg.image_proc["primer_mode"] = self.primer_mode_var.get()
+        self.cfg.image_proc["primer_radius"] = int(self.primer_radius.get())
+        self.cfg.image_proc["hough"] = {
             "dp": float(self.hough_dp.get()),
             "min_dist": int(self.hough_min_dist.get()),
             "param1": float(self.hough_p1.get()),
@@ -186,7 +187,7 @@ class ImageProcTab(ttk.Frame):
         }
         # Preserve line-scan params in config even though the UI doesn't expose
         # them, so they survive a save+reload if we ever bring the UI back.
-        self.config.save()
+        self.cfg.save()
         self.app.set_status("Image-processing settings saved.")
 
     def test_on_frame(self) -> None:
@@ -195,7 +196,7 @@ class ImageProcTab(ttk.Frame):
             self.app.set_status("No camera frame available.")
             return
         self.save()
-        cfg = self.config.image_proc
+        cfg = self.cfg.image_proc
         # Overlay the detected circle on the source preview so the operator
         # can see exactly what got picked while tuning the parameters.
         detection = image_proc.hough_detect(frame, image_proc.HoughParams.from_dict(cfg.get("hough", {})))
@@ -232,10 +233,10 @@ class ImageProcTab(ttk.Frame):
             return
         self._led_last_sent = value
         # Persist immediately so a restart picks up the same brightness.
-        init_settings = dict(self.config.serial.get("init_settings", {}))
+        init_settings = dict(self.cfg.serial.get("init_settings", {}))
         init_settings["cameraledlevel"] = value
-        self.config.serial["init_settings"] = init_settings
-        self.config.save()
+        self.cfg.serial["init_settings"] = init_settings
+        self.cfg.save()
         broker = self.app.broker
         if broker is None or not broker.is_connected:
             self.app.set_status(f"Camera LED level = {value} (saved; not connected).")

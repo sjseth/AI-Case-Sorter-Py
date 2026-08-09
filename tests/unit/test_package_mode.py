@@ -71,6 +71,7 @@ def test_first_empty_slot_ignores_other_modes_config(tmp_path) -> None:
     from sorter.repository import HeadstampParentRepo, SettingsRepo
 
     mid = SettingsRepo(db).get_active_model_id()
+    assert mid is not None
 
     # A parent assigned to slot 1 (a *parent-mode* configuration) plus a
     # package assignment in slot 1 must NOT mark slot 1 occupied for a plain
@@ -132,7 +133,7 @@ def test_package_fills_then_advances_then_halts(tmp_path) -> None:
     assert halt_events == []  # halt event is posted by _loop, not run_once
 
 
-def test_package_counts_persist_across_restart(tmp_path) -> None:
+def test_package_counts_persist_across_restart(tmp_path, monkeypatch) -> None:
     """Stopping and restarting a run resumes batches where they left off."""
     ctrl, cfg, _ = _make(tmp_path)
     cfg.set_run_package_mode(True)
@@ -145,7 +146,7 @@ def test_package_counts_persist_across_restart(tmp_path) -> None:
 
     # start() must NOT zero the counters. Stub the loop so the worker thread
     # exits immediately without running more cycles.
-    ctrl._loop = lambda: None  # type: ignore[assignment]
+    monkeypatch.setattr(ctrl, "_loop", lambda: None)
     ctrl.start()
     if ctrl._thread is not None:
         ctrl._thread.join(timeout=1)
