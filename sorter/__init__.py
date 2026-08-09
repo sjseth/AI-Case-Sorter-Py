@@ -21,7 +21,7 @@
 #      one workflow: it's a dev/contributor path, not the release path
 #      sorter.updater actually cares about.
 try:
-    from ._version import __version__
+    from ._version import __version__  # ty: ignore[unresolved-import]
 except ImportError:
     from importlib.metadata import PackageNotFoundError, version
 

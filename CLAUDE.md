@@ -733,7 +733,13 @@ flowchart TD
   extra, pygrabber/comtypes are Windows-only) or gaps in opencv's bundled
   stubs. Note the job does a **full** `uv sync` rather than `--only-group dev`:
   ty resolves third-party imports from the environment, so without the runtime
-  deps the output drowns in unresolved-import noise.
+  deps the output drowns in unresolved-import noise. The one `[tool.ty]` block
+  in `pyproject.toml` exists because `sorter/_version.py` is generated and
+  gitignored (§7): it is absent in CI (which never fires the build hook) and
+  present for anyone who has run `uv build`, so the `# ty: ignore` on its
+  import would otherwise flip to an *unused* ignore and fail the build for
+  contributors only. The override silences `unused-ignore-comment` for that
+  one file and nowhere else.
   `install-windows.ps1` gets its own workflow
   (`.github/workflows/installer-smoke.yml`), not `build.yml`'s blanket
   trigger: it needs a real published release to exercise its interesting

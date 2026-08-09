@@ -154,3 +154,23 @@ dev = [
     "ruff>=0.16.1",
     "ty>=0.0.69",
 ]
+
+# ty (type checker) configuration.
+#
+# `sorter/_version.py` is written by hatch-vcs's build hook and gitignored (see
+# sorter/__init__.py and CLAUDE.md §7), so whether it exists on disk depends
+# purely on whether this tree has ever been built. CI runs with
+# --no-install-project so the hook never fires and the file is absent; a
+# contributor who has run `uv build` locally has it. That makes the import in
+# sorter/__init__.py unresolvable in one case and perfectly fine in the other
+# -- and a bare `# ty: ignore` would then flip to an *unused* ignore for the
+# contributor, failing the build for them and nobody else.
+#
+# Suppressing unused-ignore-comment for that one file keeps the ignore honest
+# in both states while leaving the rule active everywhere else, which is what
+# catches ignores that have gone stale.
+[[tool.ty.overrides]]
+include = ["sorter/__init__.py"]
+
+[tool.ty.overrides.rules]
+unused-ignore-comment = "ignore"
