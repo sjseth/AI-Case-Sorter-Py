@@ -626,10 +626,34 @@ flowchart TD
   rejections as `model_io`, plus rejecting every non-regular-file entry, which
   only a tarball can carry, and a containment check on the resolved output
   path), strips the single top-level wrapper (the sdist's `<name>-<version>/`
-  or, on the fallback, GitHub's `<repo>-<tag>/`), requires `main.py` +
-  `sorter/__init__.py` to be present before trusting an archive, and caps
-  archive size and entry count. Staging is atomic: `pending/` only ever exists
-  complete.
+  or, on the fallback, GitHub's `<repo>-<tag>/`), requires at least one of
+  `REQUIRED_ENTRY_SETS` to be fully present before trusting an archive (today's
+  flat `main.py` + `sorter/__init__.py`, **or** a future `src/sorter/__init__.py`
+  layout — accepted ahead of #58's move for the reason below), and caps archive
+  size and entry count. Staging is atomic: `pending/` only ever exists complete.
+  - `check_for_update()` (`GET /releases/latest`) is unchanged: latest stable
+    only, newer-than-current only, used for the silent startup check and the
+    dialog's default. `list_releases()` (`GET /repos/{repo}/releases`) is
+    additive, for the version picker below — every published release, newest
+    first, drafts always excluded, pre-releases excluded unless
+    `include_prereleases=True`. Both run every tag through `_TAG_RE` (a
+    malformed one reaches the fallback archive URL and could redirect it to a
+    different repo) and resolve the download through `_pick_asset`, so a
+    version chosen in the picker resolves to the same archive the single-release
+    check would have handed back for it. The two diverge on how a bad tag
+    fails: `check_for_update` has exactly one release to report, so it raises;
+    `list_releases` has many, so it drops the offending one rather than hiding
+    every legitimate release behind it.
+  - **Why `REQUIRED_ENTRY_SETS` accepts a layout that doesn't exist yet:** the
+    updater that validates a new release archive is whatever version is
+    *already installed* on a user's machine. A `src/`-layout release can only
+    be accepted by installs that already run the relaxed check — there is no
+    way to patch that logic retroactively once the layout has actually moved.
+    So the acceptance has to ship, and propagate, before #58's move ships.
+    `REQUIRED_ENTRIES` (the flat-layout tuple) is still read directly by
+    `tests/integration/test_sdist_contents.py`, which asserts today's real
+    sdist against it — that test doesn't change just because the *acceptance*
+    check now tries a second shape too.
 - **`apply_update.py`** — **must stay stdlib-only.** It runs against a venv that
   may hold nothing at all yet; importing `requests` here would break the very
   launch it exists to fix. Backs up everything it will overwrite, rolls back on
@@ -647,6 +671,18 @@ flowchart TD
   from a status-bar button in `app.py` that appears only when there's something
   to do. A silent check runs 2.5 s after startup; opt out via the dialog's
   checkbox (`updates.check_on_startup`) or `CASESORTER_UPDATE_DISABLED=1`.
+  The dialog opens showing only what the startup check already found — the
+  latest stable release, or "up to date" — with nothing further fetched over
+  the network. A "Choose a different version…" button is what triggers
+  `updater.list_releases()` (on a worker thread, same dialog-local
+  `Queue`-and-poller pattern as the download progress below — a second,
+  independent queue/poller pair, since a picker load and a download can in
+  principle both be in flight); it reveals a version combobox plus a "Show
+  prereleases" opt-in. Picking an entry — including one older than what's
+  currently offered, and even when the plain check said there was nothing
+  newer — replaces what "Download & Install" targets and the notes/detail
+  text update to match; the detail text says explicitly when the selection
+  isn't the newest release available.
 - **`installer/`** — `install-windows.ps1` (+ `.bat` wrapper) provisions Python
   via winget or a silent python.org install, lays the app down in
   `%LOCALAPPDATA%\Programs\CaseSorter`, and hands off to `start.bat` (which just

@@ -66,6 +66,24 @@ DOWNLOAD_TIMEOUT = 60
 # folder — cheap insurance against a mis-tagged or truncated release.
 REQUIRED_ENTRIES = ("main.py", "sorter/__init__.py")
 
+# A future release may ship the `src/` layout from #58 instead of today's
+# flat one. Accepting either here, ahead of the move, is what makes the move
+# possible at all: the updater that validates a *new* release archive is
+# whatever version is already installed on a user's machine, so the relaxed
+# acceptance has to already be running before a src/-layout release exists —
+# there is no way to patch an already-installed updater after the fact. Ship
+# this first, let it propagate, and only then can #58 move `main.py` without
+# permanently breaking in-app updates for every install that predates it.
+#
+# The `src/` layout's entry point may end up at `src/sorter/__main__.py`
+# rather than a root `main.py`; that isn't asserted here because it isn't
+# decided yet, and this check only needs to rule out "an archive that isn't
+# this app at all" — not police where the launcher lives.
+REQUIRED_ENTRY_SETS: tuple[tuple[str, ...], ...] = (
+    REQUIRED_ENTRIES,
+    ("src/sorter/__init__.py",),
+)
+
 # Refuse absurd archives outright rather than filling the user's disk. The
 # source tree is ~1 MB; 200 MB is orders of magnitude of headroom.
 MAX_ARCHIVE_BYTES = 200 * 1024 * 1024
@@ -313,6 +331,90 @@ def check_for_update(
     )
 
 
+def list_releases(
+    *,
+    include_prereleases: bool = False,
+    session: requests.Session | None = None,
+    timeout: int = CHECK_TIMEOUT,
+) -> list[UpdateInfo]:
+    """Return published releases from newest to oldest, for the version picker.
+
+    Unlike ``check_for_update``, this doesn't compare against the running
+    version or stop at the first hit — the picker needs the whole list,
+    including releases older than what's installed. Everything else mirrors
+    ``/releases/latest``'s documented semantics so the two never disagree
+    about what counts as a real, installable release:
+
+    * Drafts are always excluded. The plain (list) endpoint can return them
+      for a caller with push access, unlike ``/releases/latest`` which never
+      does; the unauthenticated case here never sees one either, but the
+      filter costs nothing and keeps the contract explicit.
+    * Pre-releases are excluded unless ``include_prereleases=True``.
+    * Every tag must pass ``_TAG_RE`` before it's trusted — see the comment
+      on that pattern in ``check_for_update``: a malformed tag reaches the
+      fallback archive URL and could redirect it to a different repo. A
+      single-release check has no choice but to raise on that; a list does —
+      skipping the one bad entry rather than hiding every legitimate release
+      behind it.
+    * Asset selection goes through ``_pick_asset``, same as the single-release
+      path, so a picked version resolves to the same archive either endpoint
+      would have handed back for it.
+    """
+    if checks_disabled():
+        return []
+
+    url = f"{_api_base()}/repos/{update_repo()}/releases"
+    get = (session or requests).get
+    try:
+        resp = get(
+            url,
+            timeout=timeout,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": f"CaseSorter/{current_version()}",
+            },
+        )
+    except requests.RequestException as exc:
+        raise UpdateError(f"Could not reach the update server: {exc}") from exc
+
+    if resp.status_code == 404:
+        # No releases published yet — not an error worth surfacing.
+        return []
+    if resp.status_code != 200:
+        raise UpdateError(f"Update check failed (HTTP {resp.status_code}).")
+
+    try:
+        releases = resp.json()
+    except ValueError as exc:
+        raise UpdateError("Update server returned a malformed response.") from exc
+
+    if not isinstance(releases, list):
+        raise UpdateError("Update server returned a malformed response.")
+
+    out: list[UpdateInfo] = []
+    for release in releases:
+        if not isinstance(release, dict) or release.get("draft"):
+            continue
+        if release.get("prerelease") and not include_prereleases:
+            continue
+        tag = str(release.get("tag_name") or "").strip()
+        if not tag or not _TAG_RE.fullmatch(tag):
+            continue
+        version = _strip_tag_prefix(tag)
+        asset_url, size = _pick_asset(release, tag)
+        out.append(
+            UpdateInfo(
+                version=version,
+                tag=tag,
+                url=asset_url,
+                notes=str(release.get("body") or "").strip(),
+                size=size,
+                published_at=str(release.get("published_at") or ""),
+            )
+        )
+    return out
+
+
 # ----- staging ----------------------------------------------------------------
 
 
@@ -526,8 +628,18 @@ def stage_update(
             with tarfile.open(archive, mode="r:gz") as tf:
                 members = _safe_members(tf)
                 names = {str(rel) for _, rel in members}
-                missing = [e for e in REQUIRED_ENTRIES if e not in names]
-                if missing:
+                # Accepted if it satisfies *any one* required-entry set (see
+                # REQUIRED_ENTRY_SETS) — not all of them. The reported
+                # "missing" entries are always against the flat layout since
+                # that's still what ships today; a src/-layout archive that
+                # fails will report against src/sorter/__init__.py instead so
+                # the message still points at what's actually absent.
+                matched = next(
+                    (required for required in REQUIRED_ENTRY_SETS if all(e in names for e in required)),
+                    None,
+                )
+                if matched is None:
+                    missing = [e for e in REQUIRED_ENTRIES if e not in names]
                     raise UpdateError(f"Update archive does not look like the app (missing {', '.join(missing)}).")
                 staging.mkdir(parents=True, exist_ok=True)
                 base = staging.resolve()
