@@ -200,6 +200,161 @@ def test_restart_without_a_launcher_does_not_close_the_app(root, monkeypatch) ->
     dlg.destroy()
 
 
+# ----- version picker -----------------------------------------------------
+
+
+def _releases_payload() -> list[dict]:
+    return [
+        {
+            "tag_name": "v9.9.9",
+            "body": "- Faster sorting",
+            "assets": [],
+            "published_at": "2026-03-01T00:00:00Z",
+            "draft": False,
+            "prerelease": False,
+        },
+        {
+            "tag_name": "v9.9.9-rc1",
+            "body": "- Release candidate",
+            "assets": [],
+            "published_at": "2026-02-15T00:00:00Z",
+            "draft": False,
+            "prerelease": True,
+        },
+        {
+            "tag_name": "v9.9.8",
+            "body": "- Older release",
+            "assets": [],
+            "published_at": "2026-01-01T00:00:00Z",
+            "draft": False,
+            "prerelease": False,
+        },
+    ]
+
+
+class _ListResp:
+    def __init__(self, status: int, payload=None) -> None:
+        self.status_code = status
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+def test_dialog_defaults_to_latest_without_opening_the_picker(root, monkeypatch) -> None:
+    """A user who never touches "Choose a different version..." must see
+    exactly the pre-picker behaviour -- including no network call beyond the
+    single check MainWindow already made."""
+
+    def _boom(*a, **k):
+        raise AssertionError("must not fetch the release list unless asked")
+
+    monkeypatch.setattr(requests, "get", _boom)
+    dlg = UpdateDialog(root, info=_info(), app=_FakeApp())
+    assert dlg._selected is dlg._info
+    assert dlg._primary.cget("text") == "Download & Install"
+    assert dlg._combo_row.winfo_manager() == ""
+    dlg.destroy()
+
+
+def test_picker_lists_releases_and_hides_prereleases_by_default(root, monkeypatch) -> None:
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _ListResp(200, _releases_payload()))
+    dlg = UpdateDialog(root, info=_info(), app=_FakeApp())
+
+    dlg._open_picker()
+    assert _pump_until(root, lambda: dlg._combo_row.winfo_manager() != ""), "picker never appeared"
+
+    assert len(dlg._releases) == 2  # the prerelease is excluded by default
+    assert [r.tag for r in dlg._releases] == ["v9.9.9", "v9.9.8"]
+    # Default selection stays the latest stable release passed in.
+    assert dlg._selected is not None and dlg._selected.tag == "v9.9.9"
+    dlg.destroy()
+
+
+def test_picker_can_select_an_older_release_and_flags_it_as_not_newest(root, monkeypatch) -> None:
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _ListResp(200, _releases_payload()))
+    dlg = UpdateDialog(root, info=_info(), app=_FakeApp())
+
+    dlg._open_picker()
+    assert _pump_until(root, lambda: dlg._combo_row.winfo_manager() != ""), "picker never appeared"
+
+    dlg._version_combo.current(1)  # v9.9.8, the older release
+    dlg._on_pick_version()
+
+    assert dlg._selected is not None and dlg._selected.tag == "v9.9.8"
+    assert "not the newest" in dlg._detail_var.get()
+    assert "Older release" in dlg._notes.get("1.0", tk.END)
+    # Installing the selection is still offered, older or not.
+    assert dlg._primary.cget("text") == "Download & Install"
+    assert str(dlg._primary.cget("state")) == "normal"
+    dlg.destroy()
+
+
+def test_picker_can_opt_into_prereleases(root, monkeypatch) -> None:
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _ListResp(200, _releases_payload()))
+    dlg = UpdateDialog(root, info=_info(), app=_FakeApp())
+
+    dlg._open_picker()
+    assert _pump_until(root, lambda: dlg._combo_row.winfo_manager() != ""), "picker never appeared"
+
+    dlg._show_prereleases_var.set(True)
+    dlg._on_toggle_prereleases()
+    assert _pump_until(root, lambda: len(dlg._releases) == 3), "prerelease never showed up"
+    assert "v9.9.9-rc1" in [r.tag for r in dlg._releases]
+    dlg.destroy()
+
+
+def test_picker_selection_drives_what_gets_staged(root, monkeypatch) -> None:
+    """Downloading after picking a release in the picker has to install
+    *that* release, not whatever the plain check originally offered."""
+
+    def _fake_get(url, *a, **k):
+        if url.endswith("/releases"):
+            return _ListResp(200, _releases_payload())
+        return _StreamResp(_archive())
+
+    monkeypatch.setattr(requests, "get", _fake_get)
+    app = _FakeApp()
+    dlg = UpdateDialog(root, info=_info(), app=app)
+
+    dlg._open_picker()
+    assert _pump_until(root, lambda: dlg._combo_row.winfo_manager() != ""), "picker never appeared"
+    dlg._version_combo.current(1)  # v9.9.8
+    dlg._on_pick_version()
+
+    # stage_update is monkeypatched at the module level below so the fake
+    # archive (built for tag 9.9.9) doesn't have to also match 9.9.8's name.
+    staged: list = []
+    real_stage_update = updater.stage_update
+
+    def _spy_stage_update(info, **kwargs):
+        staged.append(info)
+        return real_stage_update(_info(), **kwargs)  # reuse a valid archive regardless of target
+
+    monkeypatch.setattr(updater, "stage_update", _spy_stage_update)
+    dlg._on_primary()
+    assert _pump_until(root, lambda: dlg._pending is not None), "download never completed"
+    assert staged and staged[0].tag == "v9.9.8"
+    dlg.destroy()
+
+
+def test_picker_available_when_already_up_to_date(root, monkeypatch) -> None:
+    """Acceptance: installing an older/different version has to work even
+    when the plain check says there's nothing newer."""
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _ListResp(200, _releases_payload()))
+    dlg = UpdateDialog(root, info=None, app=_FakeApp())
+    assert dlg._primary.winfo_manager() == ""  # nothing to install yet
+
+    dlg._open_picker()
+    assert _pump_until(root, lambda: dlg._combo_row.winfo_manager() != ""), "picker never appeared"
+    dlg._version_combo.current(1)
+    dlg._on_pick_version()
+
+    assert dlg._primary.winfo_manager() != ""
+    assert dlg._primary.cget("text") == "Download & Install"
+    dlg.destroy()
+
+
 # ----- the startup-check opt-out ---------------------------------------------
 
 
