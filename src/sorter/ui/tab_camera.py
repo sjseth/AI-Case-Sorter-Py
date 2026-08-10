@@ -16,8 +16,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from .. import camera as camera_mod
-from ..events import EventBus
+from ..control.events import EventBus
+from ..hardware import camera as camera_mod
 from .widgets import ImagePanel, build_button_row
 
 # Startup resolution preference: highest of these the camera supports,

@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 import requests
 
-from sorter import updater
-from sorter.updater import UpdateError, UpdateInfo
+from sorter.update import updater
+from sorter.update.updater import UpdateError, UpdateInfo
 
 
 @pytest.fixture(autouse=True)

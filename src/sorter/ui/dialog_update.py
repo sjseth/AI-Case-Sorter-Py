@@ -8,7 +8,7 @@ Three states, in order:
 
 The dialog never writes to the app folder. Downloading only *stages* the
 update under the data root; the launcher applies it on the next start (see
-``sorter/apply_update.py``). "Restart Now" re-execs the launcher script and
+``sorter/update/apply_update.py``). "Restart Now" re-execs the launcher script and
 closes the app — which is what makes the staged update take effect.
 
 Opening the dialog when an update is already staged jumps straight to
@@ -40,8 +40,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Literal
 
-from .. import updater
-from ..updater import PendingUpdate, UpdateError, UpdateInfo
+from ..update import updater
+from ..update.updater import PendingUpdate, UpdateError, UpdateInfo
 from .markdown_render import render_release_notes
 from .theme import PALETTE, get_fonts
 
@@ -215,7 +215,7 @@ class UpdateDialog(tk.Toplevel):
         db = getattr(self._app, "db", None)
         if db is None:
             return None
-        from ..repository import SettingsRepo
+        from ..data.repository import SettingsRepo
 
         return SettingsRepo(db)
 

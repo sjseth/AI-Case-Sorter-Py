@@ -14,11 +14,11 @@ pytest.importorskip("cv2")
 import tkinter as tk
 
 from sorter import paths
-from sorter.config import Config
-from sorter.db import Database
-from sorter.events import EventBus
-from sorter.models import Model
-from sorter.repository import (
+from sorter.control.events import EventBus
+from sorter.data.config import Config
+from sorter.data.db import Database
+from sorter.data.models import Model
+from sorter.data.repository import (
     CartridgeRepo,
     ModelRepo,
     SettingsRepo,
@@ -99,7 +99,7 @@ def test_is_community_model_helper() -> None:
 
 
 def test_feedback_mode_label_mapping_round_trips() -> None:
-    from sorter.models import FEEDBACK_UPLOAD_MODES
+    from sorter.data.models import FEEDBACK_UPLOAD_MODES
 
     for value in FEEDBACK_UPLOAD_MODES:
         assert _FEEDBACK_MODE_BY_LABEL[_FEEDBACK_MODE_LABELS[value]] == value

@@ -9,9 +9,9 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from .. import serial_broker
-from ..events import EventBus
-from ..serial_emulator import EMULATED_PORT
+from ..control.events import EventBus
+from ..hardware import serial_broker
+from ..hardware.serial_emulator import EMULATED_PORT
 from .widgets import NumericField, build_button_row
 
 # (UI label, init-settings key, min, max, default). Defaults are the

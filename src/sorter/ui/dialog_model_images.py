@@ -15,10 +15,11 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
 
-from .. import image_store, paths
-from ..db import Database
-from ..models import Model
-from ..repository import HeadstampRepo
+from .. import paths
+from ..data import image_store
+from ..data.db import Database
+from ..data.models import Model
+from ..data.repository import HeadstampRepo
 from . import sysutil
 from .dialog_image_preview import ImagePreviewDialog
 from .theme import PALETTE

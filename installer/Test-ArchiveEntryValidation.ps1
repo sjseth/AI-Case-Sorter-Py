@@ -9,7 +9,7 @@
     against a hostile archive, and it is the half of this repo that CANNOT
     be exercised by the Python suite -- so it gets its own tests.
 
-    These are the same shapes sorter/updater.py's _safe_members rejects, in
+    These are the same shapes sorter/update/updater.py's _safe_members rejects, in
     tests/unit/test_updater.py. The two extraction paths consume the *same*
     archives; a shape rejected by one and accepted by the other is a bug in
     whichever one accepts it.
@@ -81,14 +81,19 @@ Assert-Rejected 'pkg\..\..\evil.py'     'parent traversal via backslashes'
 
 Write-Host "== must accept: real sdist entries ==" -ForegroundColor Cyan
 # Guarding against the opposite failure: a check so broad it rejects the
-# archive every legitimate install depends on.
+# archive every legitimate install depends on. The `src/` layout (#58) is
+# what a real sdist ships today; the bare `main.py` case below is kept
+# because path-safety has to accept that shape too -- it's what an
+# *old*, pre-#58 release archive looked like, and install-windows.ps1 still
+# has to be able to unpack one of those from a pinned -Version.
 Assert-Accepted 'ai_case_sorter-1.2.3/main.py'
-Assert-Accepted 'ai_case_sorter-1.2.3/sorter/__init__.py'
-Assert-Accepted 'ai_case_sorter-1.2.3/sorter/_version.py'
+Assert-Accepted 'ai_case_sorter-1.2.3/bootstrap.py'
+Assert-Accepted 'ai_case_sorter-1.2.3/src/sorter/__init__.py'
+Assert-Accepted 'ai_case_sorter-1.2.3/src/sorter/_version.py'
 Assert-Accepted 'ai_case_sorter-1.2.3/PKG-INFO'
 Assert-Accepted 'ai_case_sorter-1.2.3/installer/install-windows.ps1'
 Assert-Accepted 'ai_case_sorter-1.2.3/.gitignore'
-Assert-Accepted 'ai_case_sorter-1.2.3/sorter/ui/tab_ai.py'
+Assert-Accepted 'ai_case_sorter-1.2.3/src/sorter/ui/tab_ai.py'
 Assert-Accepted 'pkg/a..b.py'           # dots, but no '..' component
 Assert-Accepted 'pkg/sub.dir/x.py'
 Assert-Accepted 'pkg/file with spaces.py'

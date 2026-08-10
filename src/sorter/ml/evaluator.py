@@ -1,7 +1,7 @@
 """Offline model evaluation: classify a folder of labelled images and score it.
 
 Provides the legacy app's batch-image-tester feature, but runs inference
-**in-process** via :mod:`sorter.local_inference` instead of shelling out to a
+**in-process** via :mod:`sorter.ml.local_inference` instead of shelling out to a
 worker. The ground-truth label for each image is taken from the
 training filename convention ``{label}__{ticks}.ext``; an optional
 folder-class -> model-class mapping lets a dataset labelled with different names
@@ -18,7 +18,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
-from .training.dataset import parse_label
+from ..training.dataset import parse_label
 
 IMAGE_EXTS: tuple[str, ...] = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 

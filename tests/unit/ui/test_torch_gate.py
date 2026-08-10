@@ -13,10 +13,10 @@ from typing import cast
 
 import pytest
 
-from sorter import classifier, local_inference
-from sorter.db import Database
-from sorter.models import Model
-from sorter.repository import CartridgeRepo, ModelRepo, SettingsRepo
+from sorter.data.db import Database
+from sorter.data.models import Model
+from sorter.data.repository import CartridgeRepo, ModelRepo, SettingsRepo
+from sorter.ml import classifier, local_inference
 
 
 def _seed_db(tmp_path: Path) -> Database:

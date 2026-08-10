@@ -21,8 +21,8 @@ from typing import Any
 
 import pytest
 
-from sorter import serial_broker
-from sorter.serial_broker import SerialBroker
+from sorter.hardware import serial_broker
+from sorter.hardware.serial_broker import SerialBroker
 
 
 class _Sink:

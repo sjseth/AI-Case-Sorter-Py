@@ -40,7 +40,7 @@ cd AI-Case-Sorter-Py
 **Prefer to drive `uv` yourself?**
 ```bash
 uv sync              # dependencies + dev tools (pytest, ruff) from uv.lock
-uv run python main.py
+uv run python src/sorter/__main__.py
 ```
 `uv sync`/`uv run` resolve against the committed `uv.lock`, so this is
 deterministic — no separate "install deps" step to remember or forget.

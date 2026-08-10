@@ -1,7 +1,7 @@
 """Shared single-image preview popup with reclassify + delete actions.
 
 Used by both the model image manager and the evaluator's results table. The
-dialog performs the file operation itself (via :mod:`sorter.image_store`) and
+dialog performs the file operation itself (via :mod:`sorter.data.image_store`) and
 notifies the caller through ``on_changed`` so each caller refreshes its own
 view.
 
@@ -18,7 +18,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
 
-from .. import image_store
+from ..data import image_store
 from .theme import PALETTE
 from .widgets import ImagePanel
 

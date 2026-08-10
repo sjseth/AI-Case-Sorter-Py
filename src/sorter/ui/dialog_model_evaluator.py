@@ -1,7 +1,7 @@
 """Model evaluator — score a trained model against a folder of labelled images.
 
 Recreates the legacy app's batch-image-tester feature using in-process
-inference (``sorter.evaluator``). Launched from the Models tab's per-row
+inference (``sorter.ml.evaluator``). Launched from the Models tab's per-row
 "Evaluate" button.
 
 Two dialogs:
@@ -24,10 +24,11 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
-from .. import eval_report, evaluator, paths
-from ..db import Database
-from ..models import Model
-from ..repository import CartridgeRepo, HeadstampRepo, SettingsRepo
+from .. import paths
+from ..data.db import Database
+from ..data.models import Model
+from ..data.repository import CartridgeRepo, HeadstampRepo, SettingsRepo
+from ..ml import eval_report, evaluator
 from . import torch_gate
 from .dialog_image_preview import ImagePreviewDialog
 from .theme import PALETTE
@@ -432,7 +433,7 @@ class ModelEvaluatorDialog(tk.Toplevel):
         self.app.run_worker(self._do_eval, on_done=self._on_done, on_error=self._on_error)
 
     def _do_eval(self) -> dict[str, Any]:
-        from .. import local_inference
+        from ..ml import local_inference
 
         if not local_inference.is_available():
             raise RuntimeError(

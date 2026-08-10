@@ -9,12 +9,12 @@ from unittest.mock import patch
 
 import numpy as np
 
-from sorter.config import Config
-from sorter.db import Database
-from sorter.events import EventBus
-from sorter.repository import ModelRepo, SettingsRepo
-from sorter.run_controller import RunController
-from sorter.serial_emulator import EmulatorBroker
+from sorter.control.events import EventBus
+from sorter.control.run_controller import RunController
+from sorter.data.config import Config
+from sorter.data.db import Database
+from sorter.data.repository import ModelRepo, SettingsRepo
+from sorter.hardware.serial_emulator import EmulatorBroker
 
 
 class _FakeCamera:
@@ -68,7 +68,7 @@ def test_first_empty_slot_skips_assigned(tmp_path) -> None:
 def test_first_empty_slot_ignores_other_modes_config(tmp_path) -> None:
     """Auto-select must only consult the slot config for the active mode."""
     _ctrl, cfg, db = _make(tmp_path)
-    from sorter.repository import HeadstampParentRepo, SettingsRepo
+    from sorter.data.repository import HeadstampParentRepo, SettingsRepo
 
     mid = SettingsRepo(db).get_active_model_id()
     assert mid is not None
@@ -115,7 +115,7 @@ def test_package_fills_then_advances_then_halts(tmp_path) -> None:
     ctrl.bus.subscribe("run/package_halt", halt_events.append)
 
     slots = []
-    with patch("sorter.classifier.classify_active", return_value=("CBC", 100)):
+    with patch("sorter.ml.classifier.classify_active", return_value=("CBC", 100)):
         for _ in range(4):
             r = ctrl.run_once()
             slots.append((r["slot"], r.get("halt")))
@@ -139,7 +139,7 @@ def test_package_counts_persist_across_restart(tmp_path, monkeypatch) -> None:
     cfg.set_run_package_mode(True)
     cfg.set_run_package_size(10)
     cfg.set_package_slot_headstamp(1, "CBC", True)
-    with patch("sorter.classifier.classify_active", return_value=("CBC", 100)):
+    with patch("sorter.ml.classifier.classify_active", return_value=("CBC", 100)):
         for _ in range(8):
             ctrl.run_once()
     assert ctrl.package_count(1) == 8
@@ -163,7 +163,7 @@ def test_reset_package_slot_lets_it_refill(tmp_path) -> None:
     cfg.set_run_package_size(2)
     cfg.set_package_slot_headstamp(1, "CBC", True)
 
-    with patch("sorter.classifier.classify_active", return_value=("CBC", 100)):
+    with patch("sorter.ml.classifier.classify_active", return_value=("CBC", 100)):
         ctrl.run_once()
         ctrl.run_once()  # slot 1 now full (2/2)
         assert ctrl.package_count(1) == 2
@@ -178,7 +178,7 @@ def test_package_unconfigured_label_goes_catch_all(tmp_path) -> None:
     ctrl, cfg, _ = _make(tmp_path)
     cfg.set_run_package_mode(True)
     cfg.set_package_slot_headstamp(1, "CBC", True)
-    with patch("sorter.classifier.classify_active", return_value=("FC", 100)):
+    with patch("sorter.ml.classifier.classify_active", return_value=("FC", 100)):
         r = ctrl.run_once()
     assert r["slot"] == 0
     assert r.get("halt") is not True
@@ -194,7 +194,7 @@ def test_auto_select_assigns_unmapped_to_empty_slot(tmp_path) -> None:
 
     events: list[dict] = []
     ctrl.bus.subscribe("run/assignment_changed", events.append)
-    with patch("sorter.classifier.classify_active", return_value=("FC", 100)):
+    with patch("sorter.ml.classifier.classify_active", return_value=("FC", 100)):
         r = ctrl.run_once()
     ctrl.bus.drain()
     # FC was unmapped → first empty slot (2).
@@ -207,7 +207,7 @@ def test_auto_select_respects_existing_assignment(tmp_path) -> None:
     ctrl, cfg, _ = _make(tmp_path)
     cfg.set_headstamp_slot("FC", 5)
     cfg.set_run_auto_select_trays(True)
-    with patch("sorter.classifier.classify_active", return_value=("FC", 100)):
+    with patch("sorter.ml.classifier.classify_active", return_value=("FC", 100)):
         r = ctrl.run_once()
     assert r["slot"] == 5  # untouched
     assert cfg.slot_for_headstamp("FC") == 5
@@ -217,7 +217,7 @@ def test_auto_select_skips_below_floor(tmp_path) -> None:
     ctrl, cfg, _ = _make(tmp_path)
     cfg.set_run_confidence_floor(80)
     cfg.set_run_auto_select_trays(True)
-    with patch("sorter.classifier.classify_active", return_value=("FC", 10)):
+    with patch("sorter.ml.classifier.classify_active", return_value=("FC", 10)):
         r = ctrl.run_once()
     assert r["slot"] == 0
     assert cfg.slot_for_headstamp("FC") == 0  # left unassigned (slot 0)

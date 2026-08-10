@@ -12,12 +12,14 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
-from . import classifier, image_proc, paths
-from .config import Config
+from .. import paths
+from ..community.feedback import FeedbackService, debug_log
+from ..data.config import Config
+from ..data.repository import ModelRepo
+from ..hardware import image_proc
+from ..ml import classifier
+from ..training.dataset import save_training_image
 from .events import EventBus
-from .feedback import FeedbackService, debug_log
-from .repository import ModelRepo
-from .training.dataset import save_training_image
 
 SlotCallback = Callable[[int], None]
 

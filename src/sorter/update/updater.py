@@ -9,12 +9,12 @@ update.
 The downloaded archive is the project's own **sdist** (`ai_case_sorter-
 <tag>.tar.gz`) — the same file `uv build`/`publish.yml` already produce and
 attach to every release, not a separately built artifact. hatch-vcs's build
-hook stamps `sorter/_version.py` into every build target, so the sdist
+hook stamps `src/sorter/_version.py` into every build target, so the sdist
 already carries the correct version with nothing extra to keep in sync.
 
 The flow is **stage now, apply at next launch**:
 
-    check_for_update()  →  stage_update()  →  [restart]  →  sorter.apply_update
+    check_for_update()  →  stage_update()  →  [restart]  →  sorter.update.apply_update
 
 Staging never touches the app folder. Windows keeps the venv's ``.pyd``/
 ``.dll`` files (opencv, numpy) locked while the app is running, so replacing
@@ -24,7 +24,7 @@ tree before ``uv sync`` runs. That also means a staged update's own
 changes install on the same restart.
 
 Everything in the ``updates/`` tree lives under the data root, which is
-outside the app folder (see ``sorter/paths.py``).
+outside the app folder (see ``sorter/paths.py`` at the package top level).
 
 Environment overrides:
   ``CASESORTER_UPDATE_REPO``      — ``owner/repo`` to check (default: upstream)
@@ -48,7 +48,7 @@ from urllib.parse import urlsplit
 
 import requests
 
-from . import __version__, paths
+from .. import __version__, paths
 
 DEFAULT_REPO = "sjseth/AI-Case-Sorter-Py"
 DEFAULT_API_BASE = "https://api.github.com"
@@ -63,22 +63,24 @@ CHECK_TIMEOUT = 10
 DOWNLOAD_TIMEOUT = 60
 
 # An update archive must look like this repo before we let it near the app
-# folder — cheap insurance against a mis-tagged or truncated release.
+# folder — cheap insurance against a mis-tagged or truncated release. This is
+# the *old*, pre-#58 flat layout (root `main.py`); kept as its own name
+# because REQUIRED_ENTRY_SETS below still has to accept it.
 REQUIRED_ENTRIES = ("main.py", "sorter/__init__.py")
 
-# A future release may ship the `src/` layout from #58 instead of today's
-# flat one. Accepting either here, ahead of the move, is what makes the move
-# possible at all: the updater that validates a *new* release archive is
-# whatever version is already installed on a user's machine, so the relaxed
-# acceptance has to already be running before a src/-layout release exists —
-# there is no way to patch an already-installed updater after the fact. Ship
-# this first, let it propagate, and only then can #58 move `main.py` without
-# permanently breaking in-app updates for every install that predates it.
-#
-# The `src/` layout's entry point may end up at `src/sorter/__main__.py`
-# rather than a root `main.py`; that isn't asserted here because it isn't
-# decided yet, and this check only needs to rule out "an archive that isn't
-# this app at all" — not police where the launcher lives.
+# #58 moved the app to a `src/` layout (root `main.py` -> `src/sorter/__main__.py`).
+# Accepting *either* set here — landed ahead of the move, in #62 — is what
+# made the move possible at all: the updater that validates a *new* release
+# archive is whatever version is already installed on a user's machine, so
+# the relaxed acceptance had to already be running before a src/-layout
+# release existed. There is no way to patch an already-installed updater
+# after the fact, and updates are not cumulative (a user on the old updater
+# who is offered the new layout directly would reject it) — so the old
+# REQUIRED_ENTRIES tuple stays here, unused by a src/-layout release itself,
+# purely so an updater built from *this* tree still recognizes one it somehow
+# receives. `src/sorter/__init__.py` alone is sufficient to recognize the new
+# layout: this check only needs to rule out "an archive that isn't this app
+# at all", not assert every file the new layout ships.
 REQUIRED_ENTRY_SETS: tuple[tuple[str, ...], ...] = (
     REQUIRED_ENTRIES,
     ("src/sorter/__init__.py",),

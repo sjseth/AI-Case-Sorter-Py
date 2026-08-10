@@ -33,7 +33,7 @@ from __future__ import annotations
 import tkinter as tk
 from collections.abc import Callable
 
-from .. import local_inference
+from ..ml import local_inference
 from .dialog_install_torch import TorchInstallDialog
 
 

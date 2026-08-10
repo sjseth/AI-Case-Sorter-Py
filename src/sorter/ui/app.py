@@ -9,12 +9,13 @@ from collections.abc import Callable
 from tkinter import ttk
 from typing import Any
 
-from .. import __version__, serial_broker
-from ..camera import Camera
-from ..config import Config
-from ..events import EventBus
-from ..run_controller import RunController
-from ..serial_emulator import EMULATED_PORT, EmulatorBroker
+from .. import __version__
+from ..control.events import EventBus
+from ..control.run_controller import RunController
+from ..data.config import Config
+from ..hardware import serial_broker
+from ..hardware.camera import Camera
+from ..hardware.serial_emulator import EMULATED_PORT, EmulatorBroker
 from .tab_ai import AiTab
 from .tab_camera import CameraTab
 from .tab_community import CommunityTab
@@ -226,7 +227,7 @@ class MainWindow:
         self.community_tab: CommunityTab | None = None
         self._community_container: ttk.Frame | None = None
         self._add_scrolled = _add_scrolled
-        from ..auth import AuthManager
+        from ..community.auth import AuthManager
 
         try:
             self.auth: AuthManager | None = AuthManager()
@@ -262,7 +263,7 @@ class MainWindow:
 
     def _check_for_updates_on_startup(self) -> None:
         """Silent startup check. Never surfaces an error — only good news."""
-        from .. import updater
+        from ..update import updater
 
         try:
             # An already-staged update outranks a fresh check: what the user
@@ -282,8 +283,8 @@ class MainWindow:
         if self.db is None:
             return True
         try:
-            from ..repository import SettingsRepo
-            from ..updater import SETTING_CHECK_ON_STARTUP
+            from ..data.repository import SettingsRepo
+            from ..update.updater import SETTING_CHECK_ON_STARTUP
 
             return bool(SettingsRepo(self.db).get(SETTING_CHECK_ON_STARTUP, True))
         except Exception:
@@ -296,7 +297,7 @@ class MainWindow:
         `silent=False` (explicit request) always opens the dialog so the user
         gets an answer either way.
         """
-        from .. import updater
+        from ..update import updater
 
         def _work() -> Any:
             return updater.check_for_update()
@@ -371,7 +372,7 @@ class MainWindow:
         """Show the AI Config tab in AI-Config mode; hide it when a local model is active."""
         if self.db is None:
             return
-        from ..repository import SettingsRepo
+        from ..data.repository import SettingsRepo
 
         active_id = SettingsRepo(self.db).get_active_model_id()
         try:
@@ -412,8 +413,8 @@ class MainWindow:
         """
         if self.db is None:
             return
-        from ..models import is_trainable
-        from ..repository import ModelRepo, SettingsRepo
+        from ..data.models import is_trainable
+        from ..data.repository import ModelRepo, SettingsRepo
 
         active_id = SettingsRepo(self.db).get_active_model_id()
         active = ModelRepo(self.db).get(active_id) if active_id is not None else None
@@ -659,7 +660,7 @@ class MainWindow:
         if self.db is None:
             return None
         try:
-            from ..repository import SettingsRepo
+            from ..data.repository import SettingsRepo
 
             return SettingsRepo(self.db).get(key)
         except Exception:
@@ -690,7 +691,7 @@ class MainWindow:
         if self.db is None:
             return
         try:
-            from ..repository import SettingsRepo
+            from ..data.repository import SettingsRepo
 
             SettingsRepo(self.db).set(key, value)
         except Exception:

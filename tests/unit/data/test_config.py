@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sorter.config import DEFAULT_INIT_SETTINGS, DEFAULTS, Config
-from sorter.db import Database
-from sorter.repository import ModelRepo, SettingsRepo
+from sorter.data.config import DEFAULT_INIT_SETTINGS, DEFAULTS, Config
+from sorter.data.db import Database
+from sorter.data.repository import ModelRepo, SettingsRepo
 
 
 def _new_db(tmp_path: Path) -> Database:

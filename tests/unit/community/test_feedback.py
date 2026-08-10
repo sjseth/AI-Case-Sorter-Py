@@ -1,4 +1,4 @@
-"""Tests for the community feedback-loop service (sorter/feedback.py).
+"""Tests for the community feedback-loop service (sorter/community/feedback.py).
 
 The queue is the on-disk ``data/models/<id>/feedback_images/`` folder — no DB
 rows. The upload path is exercised with a fake ``CommunityApi`` (monkeypatched
@@ -13,10 +13,10 @@ import numpy as np
 import pytest
 
 from sorter import paths
-from sorter.db import Database
-from sorter.feedback import FeedbackService, is_feedback_model
-from sorter.models import Model
-from sorter.repository import CartridgeRepo, ModelRepo
+from sorter.community.feedback import FeedbackService, is_feedback_model
+from sorter.data.db import Database
+from sorter.data.models import Model
+from sorter.data.repository import CartridgeRepo, ModelRepo
 from sorter.training.dataset import feedback_filename, parse_feedback_filename
 
 
@@ -157,7 +157,7 @@ def test_capture_empty_label_uses_unknown(db) -> None:
 
 
 def test_upload_pending_happy_path(db, monkeypatch) -> None:
-    monkeypatch.setattr("sorter.community_api.CommunityApi", _FakeApi)
+    monkeypatch.setattr("sorter.community.community_api.CommunityApi", _FakeApi)
     _FakeApi.accept = True
     svc = FeedbackService(db)
     m = _model(db, mode="Manual")
@@ -178,7 +178,7 @@ def test_upload_pending_happy_path(db, monkeypatch) -> None:
 
 
 def test_upload_pending_declined_stops_and_drops(db, monkeypatch) -> None:
-    monkeypatch.setattr("sorter.community_api.CommunityApi", _FakeApi)
+    monkeypatch.setattr("sorter.community.community_api.CommunityApi", _FakeApi)
     _FakeApi.accept = False
     svc = FeedbackService(db)
     m = _model(db)
@@ -239,7 +239,7 @@ class _WishApi:
 
 @pytest.fixture
 def wish_api(monkeypatch):
-    import sorter.community_api as ca
+    import sorter.community.community_api as ca
 
     _WishApi.names, _WishApi.boom, _WishApi.calls = [], False, []
     monkeypatch.setattr(ca, "CommunityApi", _WishApi)
@@ -293,7 +293,7 @@ def test_wish_list_requires_a_feedback_model(db) -> None:
 
 
 def test_wish_list_capped_per_label_per_run(db) -> None:
-    from sorter.feedback import MAX_WISH_LIST_CAPTURES_PER_LABEL as CAP
+    from sorter.community.feedback import MAX_WISH_LIST_CAPTURES_PER_LABEL as CAP
 
     svc = FeedbackService(db)
     m = _model(db, floor=95)
@@ -310,7 +310,7 @@ def test_wish_list_capped_per_label_per_run(db) -> None:
 
 
 def test_below_floor_capture_does_not_spend_wish_quota(db) -> None:
-    from sorter.feedback import MAX_WISH_LIST_CAPTURES_PER_LABEL as CAP
+    from sorter.community.feedback import MAX_WISH_LIST_CAPTURES_PER_LABEL as CAP
 
     svc = FeedbackService(db)
     m = _model(db, floor=95)

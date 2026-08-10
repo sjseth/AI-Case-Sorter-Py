@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from sorter.db import Database
-from sorter.model_io import (
+from sorter.data.db import Database
+from sorter.data.model_io import (
     ExportMode,
     export_model,
     find_update_target,
@@ -17,8 +17,8 @@ from sorter.model_io import (
     model_from_export_dict,
     read_manifest,
 )
-from sorter.models import Model
-from sorter.repository import CartridgeRepo, HeadstampRepo, ModelRepo, SettingsRepo
+from sorter.data.models import Model
+from sorter.data.repository import CartridgeRepo, HeadstampRepo, ModelRepo, SettingsRepo
 
 
 def _seed_db(tmp_path: Path) -> Database:
@@ -293,7 +293,7 @@ def test_winforms_pascal_manifest_picks_up_training_config(tmp_path: Path) -> No
 
 
 def test_normalize_upload_mode_handles_int_string_and_missing() -> None:
-    from sorter.models import normalize_upload_mode
+    from sorter.data.models import normalize_upload_mode
 
     # legacy enum int (Instant=0, OnRunComplete=1, Manual=2)
     assert normalize_upload_mode(0, feedback_enabled=True) == "Instant"
@@ -350,7 +350,7 @@ def test_manifest_with_int_upload_mode_imports_as_name() -> None:
 
 
 def test_model_mode_normalization_accepts_misc_spellings() -> None:
-    from sorter.model_io import _normalize_model_mode
+    from sorter.data.model_io import _normalize_model_mode
 
     # Snake case (this app's export)
     assert _normalize_model_mode("convnext_tiny") == "convnext_tiny"
@@ -366,7 +366,7 @@ def test_model_mode_normalization_accepts_misc_spellings() -> None:
 
 
 def test_export_for_share_writes_zip_and_manifest_sidecar(tmp_path: Path) -> None:
-    from sorter.model_io import export_for_share
+    from sorter.data.model_io import export_for_share
 
     db = _seed_db(tmp_path)
     cart = CartridgeRepo(db).get_or_create("9mm")
@@ -413,7 +413,7 @@ def test_export_for_share_writes_zip_and_manifest_sidecar(tmp_path: Path) -> Non
 
 
 def test_write_manifest_sidecar_roundtrips(tmp_path: Path) -> None:
-    from sorter.model_io import write_manifest_sidecar
+    from sorter.data.model_io import write_manifest_sidecar
 
     db = _seed_db(tmp_path)
     cart = CartridgeRepo(db).get_or_create("9mm")
@@ -543,7 +543,7 @@ def test_community_update_replaces_model_in_place(tmp_path: Path) -> None:
 def test_community_update_keeps_slots_and_templates(tmp_path: Path) -> None:
     """Slot assignments and sorting templates belong to the user, not the
     publisher: an in-place update must leave both untouched."""
-    from sorter.config import Config
+    from sorter.data.config import Config
 
     db = _seed_db(tmp_path)
     _, model_id = import_model(

@@ -837,7 +837,7 @@ def render_html(rows: list[dict[str, Any]]) -> str:
 
 
 def report_rows(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert :func:`sorter.evaluator` results to the report's row shape.
+    """Convert :func:`sorter.ml.evaluator` results to the report's row shape.
 
     Key order and the 0..1 confidence scale match the original exactly so the
     output is byte-identical for identical inputs.

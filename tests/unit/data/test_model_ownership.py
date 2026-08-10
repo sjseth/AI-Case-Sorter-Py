@@ -16,10 +16,10 @@ import json
 import zipfile
 from pathlib import Path
 
-from sorter.db import Database
-from sorter.model_io import import_model
-from sorter.models import Model, is_foreign_model, is_trainable
-from sorter.repository import ModelRepo
+from sorter.data.db import Database
+from sorter.data.model_io import import_model
+from sorter.data.models import Model, is_foreign_model, is_trainable
+from sorter.data.repository import ModelRepo
 
 
 def _seed_db(tmp_path: Path) -> Database:

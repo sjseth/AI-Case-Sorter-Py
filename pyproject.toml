@@ -1,7 +1,7 @@
 [project]
 name = "ai-case-sorter"
 # Derived from the git tag at build time (hatch-vcs, below) so the packaged
-# version and the release tag can never drift apart -- see sorter/__init__.py
+# version and the release tag can never drift apart -- see src/sorter/__init__.py
 # for how the running app resolves this without needing .git itself.
 dynamic = ["version"]
 description ="Cross-platform desktop app that sorts spent brass cartridge casings by headstamp using a camera, an image classifier, and a serial-connected sorting machine."
@@ -30,7 +30,7 @@ dependencies = [
     "requests>=2.31",
     "msal>=1.28",
     "platformdirs>=4.0",
-    # Schema migrations: sorter/db.py runs its migration steps through
+    # Schema migrations: sorter/data/db.py runs its migration steps through
     # sqlite_utils.Migrations (tracking table `_sqlite_migrations`).
     "sqlite-utils>=4",
     # Windows-only: enumerates friendly DirectShow camera names so the Camera
@@ -57,7 +57,7 @@ build-backend = "hatchling.build"
 # erroring; bootstrap.py's `--no-install-project`/`--no-sync` flags exist
 # specifically so this hook never runs at all for an end user, since running
 # it with no .git would silently overwrite a correctly pre-baked
-# sorter/_version.py with this fallback -- verified that failure mode
+# src/sorter/_version.py with this fallback -- verified that failure mode
 # directly before choosing this design; see bootstrap.py's docstring.
 [tool.hatch.version]
 source = "vcs"
@@ -67,10 +67,10 @@ fallback-version = "0.0.0"
 local_scheme = "no-local-version"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "sorter/_version.py"
+version-file = "src/sorter/_version.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["sorter"]
+packages = ["src/sorter"]
 
 [tool.ruff]
 line-length = 120
@@ -123,16 +123,16 @@ ignore = [
 # Contains an embedded HTML/JS template as a verbatim port of the legacy
 # WinForms app's report (see CLAUDE.md). Whitespace inside that string is
 # part of the port; don't rewrite it.
-"sorter/eval_report.py" = ["W291", "W293"]
+"src/sorter/ml/eval_report.py" = ["W291", "W293"]
 
 # --- deferred pre-existing findings (see the note above [tool.ruff.lint]) ---
-"sorter/community_api.py" = ["B904"]              # raise without `from` in except
-"sorter/evaluator.py" = ["B007"]                  # unused loop control variable
-"sorter/local_inference.py" = ["F841"]            # unused local
+"src/sorter/community/community_api.py" = ["B904"]  # raise without `from` in except
+"src/sorter/ml/evaluator.py" = ["B007"]              # unused loop control variable
+"src/sorter/ml/local_inference.py" = ["F841"]        # unused local
 # --- kept on purpose (see the note above [tool.ruff.lint]) ---
-"sorter/camera.py" = ["B023"]                     # backend-probe closures
-"sorter/model_io.py" = ["UP042"]                  # str+Enum -> StrEnum changes behavior subtly
-"tests/unit/test_db.py" = ["B017"]                # assert-raises-Exception, deliberate here
+"src/sorter/hardware/camera.py" = ["B023"]          # backend-probe closures
+"src/sorter/data/model_io.py" = ["UP042"]                # str+Enum -> StrEnum changes behavior subtly
+"tests/unit/data/test_db.py" = ["B017"]             # assert-raises-Exception, deliberate here
 
 [tool.ruff.lint.isort]
 known-first-party = ["sorter"]
@@ -157,20 +157,20 @@ dev = [
 
 # ty (type checker) configuration.
 #
-# `sorter/_version.py` is written by hatch-vcs's build hook and gitignored (see
-# sorter/__init__.py and CLAUDE.md §7), so whether it exists on disk depends
-# purely on whether this tree has ever been built. CI runs with
+# `src/sorter/_version.py` is written by hatch-vcs's build hook and gitignored
+# (see src/sorter/__init__.py and CLAUDE.md §7), so whether it exists on disk
+# depends purely on whether this tree has ever been built. CI runs with
 # --no-install-project so the hook never fires and the file is absent; a
 # contributor who has run `uv build` locally has it. That makes the import in
-# sorter/__init__.py unresolvable in one case and perfectly fine in the other
-# -- and a bare `# ty: ignore` would then flip to an *unused* ignore for the
-# contributor, failing the build for them and nobody else.
+# src/sorter/__init__.py unresolvable in one case and perfectly fine in the
+# other -- and a bare `# ty: ignore` would then flip to an *unused* ignore for
+# the contributor, failing the build for them and nobody else.
 #
 # Suppressing unused-ignore-comment for that one file keeps the ignore honest
 # in both states while leaving the rule active everywhere else, which is what
 # catches ignores that have gone stale.
 [[tool.ty.overrides]]
-include = ["sorter/__init__.py"]
+include = ["src/sorter/__init__.py"]
 
 [tool.ty.overrides.rules]
 unused-ignore-comment = "ignore"

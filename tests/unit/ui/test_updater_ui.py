@@ -17,15 +17,15 @@ from tkinter import ttk
 
 import requests
 
-from sorter import updater
-from sorter.db import Database
-from sorter.repository import SettingsRepo
+from sorter.data.db import Database
+from sorter.data.repository import SettingsRepo
 from sorter.ui import markdown_render
 from sorter.ui.app import CHECK_FOR_UPDATES_LABEL, MainWindow
 from sorter.ui.dialog_update import UpdateDialog
 from sorter.ui.markdown_render import render_release_notes
 from sorter.ui.theme import PALETTE, apply_theme, get_fonts
-from sorter.updater import PendingUpdate, UpdateInfo
+from sorter.update import updater
+from sorter.update.updater import PendingUpdate, UpdateInfo
 
 
 @pytest.fixture

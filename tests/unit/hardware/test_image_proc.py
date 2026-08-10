@@ -5,7 +5,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from sorter import image_proc
+from sorter.hardware import image_proc
 
 
 def _synthetic_headstamp(size: int = 640, radius: int = 180) -> np.ndarray:

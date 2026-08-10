@@ -23,9 +23,9 @@ from typing import Any
 from uuid import uuid4
 
 from .. import paths
-from ..community_api import CartridgeInfo, CommunityApi
-from ..model_io import ExportMode, export_for_share
-from ..repository import CartridgeRepo, HeadstampRepo, ModelRepo
+from ..community.community_api import CartridgeInfo, CommunityApi
+from ..data.model_io import ExportMode, export_for_share
+from ..data.repository import CartridgeRepo, HeadstampRepo, ModelRepo
 
 # Display label <-> ExportMode. ManifestOnly is intentionally omitted — there
 # is nothing useful to share without either a model or images.

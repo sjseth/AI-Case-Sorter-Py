@@ -1,6 +1,6 @@
 """Tests for the EventBus — the only sanctioned worker-thread -> UI channel.
 
-`sorter/events.py` had no test module at all. It is small, but every worker
+`sorter/control/events.py` had no test module at all. It is small, but every worker
 thread in the app funnels through it, so the delivery guarantees (and the
 non-guarantees) are worth pinning.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import threading
 
-from sorter.events import EventBus
+from sorter.control.events import EventBus
 
 
 def test_subscribe_post_drain_delivers_to_the_subscriber() -> None:

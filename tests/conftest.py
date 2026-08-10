@@ -9,11 +9,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 
-# Developer overrides (see sorter/appenv.py) must not leak into the suite: a
+# Developer overrides (see sorter/community/appenv.py) must not leak into the suite: a
 # contributor pointing their app at a local backend should still get the same
 # test results as CI. Tests that want an override set it themselves.
 _DEV_ENV_VARS = (

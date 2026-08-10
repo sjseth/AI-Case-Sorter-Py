@@ -27,8 +27,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..events import EventBus
-from ..models import TrainingConfig
+from ..control.events import EventBus
+from ..data.models import TrainingConfig
 
 _PROGRESS_PREFIX = "[PROGRESS] "
 _KILL_GRACE_S = 5.0

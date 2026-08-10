@@ -11,8 +11,8 @@ from typing import Any, cast
 import pytest
 import requests
 
-from sorter.auth import AuthManager, AuthResult
-from sorter.community_api import (
+from sorter.community.auth import AuthManager, AuthResult
+from sorter.community.community_api import (
     API_BASE,
     CartridgeInfo,
     CommunityApi,
@@ -364,7 +364,7 @@ def test_request_file_upload_posts_model_info() -> None:
 
 
 def test_upload_blob_puts_with_blob_headers(tmp_path: Path) -> None:
-    from sorter.community_api import SasResponse
+    from sorter.community.community_api import SasResponse
 
     s = _FakeSession()
     ticket = SasResponse(sas_token="zt", blob_path="models/uid.zip", container_uri="https://acct.blob/cn")
@@ -382,7 +382,7 @@ def test_upload_blob_puts_with_blob_headers(tmp_path: Path) -> None:
 def test_upload_blob_sends_sized_body_not_chunked(tmp_path: Path) -> None:
     """Body must expose a length so requests sets Content-Length and does NOT
     chunk — Azure Put-Blob rejects chunked encoding (the SSL-EOF on share)."""
-    from sorter.community_api import SasResponse
+    from sorter.community.community_api import SasResponse
 
     captured: dict[str, Any] = {}
 
@@ -407,7 +407,7 @@ def test_upload_blob_sends_sized_body_not_chunked(tmp_path: Path) -> None:
 def test_upload_blob_retries_on_ssl_error(tmp_path: Path) -> None:
     from unittest.mock import patch
 
-    from sorter.community_api import SasResponse
+    from sorter.community.community_api import SasResponse
 
     attempts = {"n": 0}
 
@@ -425,7 +425,7 @@ def test_upload_blob_retries_on_ssl_error(tmp_path: Path) -> None:
     ticket = SasResponse(sas_token="t", blob_path="b", container_uri="https://a/c")
     f = tmp_path / "x.zip"
     f.write_bytes(b"payload")
-    with patch("sorter.community_api.time.sleep"):
+    with patch("sorter.community.community_api.time.sleep"):
         _api(s).upload_blob(f, ticket, retries=3)
     assert attempts["n"] == 2  # failed once, succeeded on retry
 

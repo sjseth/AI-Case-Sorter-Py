@@ -30,10 +30,11 @@ from typing import Any
 
 import numpy as np
 
-from . import api_client, local_inference, paths
-from .db import Database
-from .models import Model
-from .repository import ModelRepo, SettingsRepo
+from .. import paths
+from ..data.db import Database
+from ..data.models import Model
+from ..data.repository import ModelRepo, SettingsRepo
+from . import api_client, local_inference
 
 
 class NoLocalCheckpointError(Exception):

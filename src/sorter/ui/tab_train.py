@@ -37,11 +37,13 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
 
-from .. import classifier, image_proc, local_inference, paths
-from ..config import Config
-from ..events import EventBus
-from ..models import Model, is_trainable
-from ..repository import HeadstampRepo, ModelRepo, SettingsRepo
+from .. import paths
+from ..control.events import EventBus
+from ..data.config import Config
+from ..data.models import Model, is_trainable
+from ..data.repository import HeadstampRepo, ModelRepo, SettingsRepo
+from ..hardware import image_proc
+from ..ml import classifier, local_inference
 from ..training.dataset import class_counts, save_training_image
 from ..training.manager import TrainingJob, TrainingManager
 from . import torch_gate
@@ -391,7 +393,7 @@ class TrainTab(ttk.Frame):
 
             result: dict[str, Any] = {"cropped": cropped, "image_proc_ms": ip_ms}
             if model_path and Path(model_path).exists():
-                from .. import local_inference
+                from ..ml import local_inference
 
                 try:
                     pr_start = time.perf_counter()

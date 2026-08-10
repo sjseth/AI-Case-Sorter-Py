@@ -7,13 +7,13 @@ backend and must NOT apply to anything else, however it is spelled.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import pytest
 import requests
 
-from sorter import appenv
-from sorter.auth import AuthManager
+from sorter import paths
+from sorter.community import appenv
+from sorter.community.auth import AuthManager
 
 
 @pytest.fixture(autouse=True)
@@ -182,7 +182,7 @@ def test_warnings_are_emitted_once(capsys, monkeypatch) -> None:
 
 
 def test_community_api_picks_up_the_override(monkeypatch) -> None:
-    from sorter.community_api import API_BASE, CommunityApi
+    from sorter.community.community_api import API_BASE, CommunityApi
 
     class _Auth(AuthManager):
         def __init__(self) -> None:
@@ -200,7 +200,7 @@ def test_community_api_picks_up_the_override(monkeypatch) -> None:
 
 
 def test_community_api_resolves_tls_trust(tmp_path, monkeypatch) -> None:
-    from sorter.community_api import CommunityApi
+    from sorter.community.community_api import CommunityApi
 
     class _Auth(AuthManager):
         def __init__(self) -> None:
@@ -219,7 +219,7 @@ def test_community_api_resolves_tls_trust(tmp_path, monkeypatch) -> None:
 
 
 def test_explicit_verify_argument_wins(monkeypatch) -> None:
-    from sorter.community_api import CommunityApi
+    from sorter.community.community_api import CommunityApi
 
     class _Auth(AuthManager):
         def __init__(self) -> None:
@@ -242,7 +242,7 @@ def test_env_file_candidate_order(tmp_path, monkeypatch) -> None:
     candidates = appenv.env_file_candidates()
     assert candidates[0] == tmp_path / "explicit.env"
     assert candidates[1] == tmp_path / "data" / "config" / ".env"
-    assert candidates[2] == Path(appenv.__file__).resolve().parent.parent / ".env"
+    assert candidates[2] == paths.app_root() / ".env"
 
 
 def test_verify_is_passed_per_request_not_on_the_session(tmp_path, monkeypatch) -> None:
@@ -253,7 +253,7 @@ def test_verify_is_passed_per_request_not_on_the_session(tmp_path, monkeypatch) 
     on any machine that sets one (corporate proxies do). Only a per-request
     ``verify=`` wins.
     """
-    from tests.unit.test_community_api import _api, _FakeResp, _FakeSession
+    from tests.unit.community.test_community_api import _api, _FakeResp, _FakeSession
 
     pem = tmp_path / "devcert.pem"
     pem.write_text("x")
@@ -269,7 +269,7 @@ def test_verify_is_passed_per_request_not_on_the_session(tmp_path, monkeypatch) 
 
 def test_default_verify_stays_true_so_env_ca_bundles_still_work(tmp_path) -> None:
     """Passing True (not None) keeps requests' own env-bundle handling intact."""
-    from tests.unit.test_community_api import _api, _FakeResp, _FakeSession
+    from tests.unit.community.test_community_api import _api, _FakeResp, _FakeSession
 
     s = _FakeSession()
     api = _api(s)

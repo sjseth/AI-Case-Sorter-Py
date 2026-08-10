@@ -40,7 +40,7 @@
     Install without starting the app afterwards.
 
 .PARAMETER Repo
-    Override the "owner/repo" to install from. Mirrors sorter/updater.py's
+    Override the "owner/repo" to install from. Mirrors sorter/update/updater.py's
     CASESORTER_UPDATE_REPO -- same reason: verifying against a fork's own
     releases without editing the script.
 
@@ -260,7 +260,7 @@ function Assert-SafeArchiveEntries {
        version anchored the drive-letter test with '^[A-Za-z]:', which
        matches only when the drive sits at the very start -- so the exact
        "pkg/D:/evil.py" this exists to stop went straight through it. That is
-       the same mistake sorter/updater.py's Python-side extraction had (it
+       the same mistake sorter/update/updater.py's Python-side extraction had (it
        tested name[1] of the whole name) and was fixed for; the two paths
        consume the same archives and must reject the same shapes. See
        Test-ArchiveEntryValidation.ps1, and _safe_members in updater.py. #>
@@ -311,7 +311,7 @@ function Select-ReleaseAsset {
 function Get-ReleaseInfo {
     <# Release tag + archive URL, latest by default or a specific tag via
        -Version. Prefers the published sdist, which is the same artifact
-       sorter/updater.py updates from; falls back to a source archive, and
+       sorter/update/updater.py updates from; falls back to a source archive, and
        (only when no -Version was requested) to the default branch if there
        are no releases at all yet.
 
@@ -319,7 +319,7 @@ function Get-ReleaseInfo {
        sorter/_version.py (hatch-vcs stamps it at build time). A source archive
        has neither that file nor .git, so an install made from one reports
        0.0.0+unknown -- which parses as a pre-release, so every launch would
-       see the current release as "newer" and re-prompt. sorter/apply_update.py
+       see the current release as "newer" and re-prompt. sorter/update/apply_update.py
        stamps a version after an in-app update, but nothing does so here.
 
        -Version used to skip all of this and always fetch the raw source
@@ -469,8 +469,14 @@ extract the release archive by hand:
             $entries[0].FullName
         } else { $unpack }
 
-        if (-not (Test-Path (Join-Path $src 'main.py'))) {
-            throw "The downloaded archive does not look like the app (no main.py)."
+        # Accepts either layout, same as sorter/update/updater.py's
+        # REQUIRED_ENTRY_SETS: the pre-#58 flat layout (root main.py) or the
+        # src/ layout it moved to (src/sorter/__init__.py). Both checks stay
+        # here indefinitely -- an old release published before the move is
+        # still a legitimate archive to install from a pinned -Version.
+        $looksLikeTheApp = (Test-Path (Join-Path $src 'main.py')) -or (Test-Path (Join-Path $src 'src\sorter\__init__.py'))
+        if (-not $looksLikeTheApp) {
+            throw "The downloaded archive does not look like the app (no main.py or src/sorter/__init__.py)."
         }
 
         New-Item -ItemType Directory -Path $Dest -Force | Out-Null
@@ -487,7 +493,7 @@ extract the release archive by hand:
         # version string, say '1.0.0' -> '0.3.0') passes both checks and the
         # stale .pyc wins. The app then runs the previous release's code.
         # .venv/.uv are skipped: their caches belong to packages this did not
-        # touch. sorter/apply_update.py gets this for free, since its stale
+        # touch. sorter/update/apply_update.py gets this for free, since its stale
         # sweep already removes .pyc the new tree does not ship.
         Get-ChildItem -LiteralPath $Dest -Directory -Filter '__pycache__' -Recurse -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -notlike '*\.venv\*' -and $_.FullName -notlike '*\.uv\*' } |
@@ -566,7 +572,7 @@ try {
     if ($LogFile) { Write-Note "Log          : $LogFile" }
     Write-Host ""
 
-    if (Test-Path (Join-Path $InstallDir 'main.py')) {
+    if ((Test-Path (Join-Path $InstallDir 'main.py')) -or (Test-Path (Join-Path $InstallDir 'src\sorter\__init__.py'))) {
         Write-Step "Updating the existing install at $InstallDir"
     } else {
         Write-Step "Installing to $InstallDir"

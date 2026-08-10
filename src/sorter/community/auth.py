@@ -18,7 +18,7 @@ from typing import Any
 
 import msal
 
-from . import paths
+from .. import paths
 
 CLIENT_ID = "9b0e9de2-e652-47f6-ad7d-c93a90be8a2e"
 TENANT_ID = "704a9dfb-f600-47db-b95f-28ea72de1ab3"

@@ -23,7 +23,7 @@ exactly:
 Markdown links (``[text](url)``) and bare ``https://`` URLs are handled too,
 defensively: nothing in the current template emits either, but a release
 body is attacker-influenced in principle (any repo
-``CASESORTER_UPDATE_REPO`` points at -- see ``sorter/updater.py``), and a
+``CASESORTER_UPDATE_REPO`` points at -- see ``sorter/update/updater.py``), and a
 hand-edited or differently-templated body could carry them. Rather than
 special-case "did the shape change", the same tokenizer just also
 recognises them.

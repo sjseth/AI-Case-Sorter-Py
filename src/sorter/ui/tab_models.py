@@ -25,12 +25,12 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Any
 
 from .. import paths
-from ..config import Config
-from ..db import Database
-from ..events import EventBus
-from ..model_io import ExportMode, export_model, find_update_target, import_model
-from ..models import Headstamp, HeadstampParent, Model, is_foreign_model
-from ..repository import (
+from ..control.events import EventBus
+from ..data.config import Config
+from ..data.db import Database
+from ..data.model_io import ExportMode, export_model, find_update_target, import_model
+from ..data.models import Headstamp, HeadstampParent, Model, is_foreign_model
+from ..data.repository import (
     CartridgeRepo,
     HeadstampParentRepo,
     HeadstampRepo,

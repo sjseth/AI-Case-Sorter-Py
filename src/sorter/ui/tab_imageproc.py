@@ -1,9 +1,9 @@
 """Image processing tab — Hough configuration + primer mask + live test.
 
 Note: the line-scan crop strategy is currently hidden in the UI but still
-present in sorter.image_proc (LineScanParams, linescan_crop). To bring it
+present in sorter.hardware.image_proc (LineScanParams, linescan_crop). To bring it
 back, restore the strategy radio + line-scan parameters section here and
-uncomment the dispatch in sorter.image_proc.crop_headstamp.
+uncomment the dispatch in sorter.hardware.image_proc.crop_headstamp.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from .. import image_proc
-from ..events import EventBus
+from ..control.events import EventBus
+from ..hardware import image_proc
 from .widgets import ImagePanel, NumericField, build_button_row
 
 

@@ -38,7 +38,7 @@ from typing import Any
 import sqlite_utils
 from sqlite_utils.migrations import Migrations
 
-from . import paths
+from .. import paths
 
 SCHEMA_VERSION = 5
 
@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS settings (
 )
 # NOTE: community feedback-loop captures are intentionally NOT tracked in the
 # DB. They live as JPEGs under data/models/<id>/feedback_images/ and that folder
-# is the queue (see sorter/feedback.py). A legacy DB may still carry an unused
+# is the queue (see sorter/community/feedback.py). A legacy DB may still carry an unused
 # feedback_queue table from an earlier schema; it is simply ignored.
 
 

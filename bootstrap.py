@@ -36,15 +36,20 @@ What it does, in order:
      stay deterministic and offline-safe (CI uses `--locked` instead, which
      fails if the lock has drifted from pyproject.toml -- see
      .github/workflows/build.yml). --no-install-project skips building the
-     sorter package itself: main.py imports it straight from the source
+     sorter package itself: __main__.py imports it straight from the source
      tree, so it was never needed for that, and building it is actively
      harmful when there's no .git to derive a version from (see
      pyproject.toml's [tool.hatch.version] and sorter/__init__.py).
      --no-dev keeps the `dev` group (pytest, ruff) out of a user's venv --
      uv installs it by default, and it is pure CI tooling.
-  5. Launch the app: `uv run --no-sync python main.py <forwarded args>`.
-     --no-sync, not --frozen: `uv run` syncs implicitly by default even with
-     --frozen, which would redo the very build step 4 skipped.
+  5. Launch the app: `uv run --no-sync python src/sorter/__main__.py
+     <forwarded args>`. --no-sync, not --frozen: `uv run` syncs implicitly by
+     default even with --frozen, which would redo the very build step 4
+     skipped. `src/sorter/__main__.py` (not `python -m sorter`) because the
+     sorter package is deliberately never installed into the venv -- see
+     step 4 -- so there is nothing for `-m` to resolve; the script path
+     imports it straight from the source tree instead, same as the old root
+     `main.py` did.
 """
 
 from __future__ import annotations
@@ -57,6 +62,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+SRC = ROOT / "src"
 
 # Bump deliberately, not automatically -- re-verify tkinter/libGL behavior
 # (see the module docstring) after bumping, the same way this version was
@@ -81,7 +87,7 @@ def open_log():
     """
     global _log_file, _log_path
     try:
-        sys.path.insert(0, str(ROOT))
+        sys.path.insert(0, str(SRC))
         from sorter.paths import logs_dir
 
         directory = logs_dir()
@@ -110,7 +116,7 @@ def _record(line: str) -> None:
 
 
 # flush=True because stdout is block-buffered whenever it isn't a terminal,
-# and this process ends by being killed while still inside main.py's Tk loop
+# and this process ends by being killed while still inside __main__.py's Tk loop
 # -- so an unflushed buffer is never written at all. That is not theoretical:
 # build.yml's launcher-smoke redirects to a file and dumped it afterwards,
 # and the file came back empty every run, which is why its comment used to
@@ -141,7 +147,7 @@ def find_uv() -> str | None:
     # The logic lives in sorter/paths.py, not duplicated here, because
     # dialog_install_torch.py needs the same lookup after launch (a
     # uv-managed venv doesn't ship pip, so it uses `uv pip install` instead).
-    sys.path.insert(0, str(ROOT))
+    sys.path.insert(0, str(SRC))
     from sorter.paths import find_uv as _find_uv
 
     return _find_uv()
@@ -308,15 +314,15 @@ def ensure_linux_runtime_libs(uv: str, auto_install: bool) -> None:
 
 # ---------------------------------------------------------------------------
 # Staged self-update -- must run before `uv sync` so a staged update's own
-# pyproject.toml/uv.lock is what gets synced. sorter.apply_update is
+# pyproject.toml/uv.lock is what gets synced. sorter.update.apply_update is
 # stdlib-only by design (see its module docstring) specifically so it's
 # importable here, before uv has put anything in a venv yet.
 # ---------------------------------------------------------------------------
 
 
 def apply_pending_update() -> None:
-    sys.path.insert(0, str(ROOT))
-    from sorter.apply_update import main as apply_main
+    sys.path.insert(0, str(SRC))
+    from sorter.update.apply_update import main as apply_main
 
     apply_main()  # always exits 0 internally; a broken updater must never block launch
 
@@ -340,7 +346,7 @@ def run_app(uv: str, forward_args: list[str]) -> int:
     # would silently redo the project build main() went out of its way to
     # skip. --no-sync trusts that sync and skips its own.
     proc = subprocess.Popen(
-        [uv, "run", "--no-sync", "python", "main.py"] + forward_args,
+        [uv, "run", "--no-sync", "python", "src/sorter/__main__.py"] + forward_args,
         cwd=ROOT,
         env=env,
         stdout=subprocess.PIPE,
@@ -400,11 +406,15 @@ def main(argv: list[str] | None = None) -> int:
     uv = find_uv() or install_uv()
     log(f"uv: {uv}")
 
+    from sorter.paths import is_installed_package
+
+    log(f"installed package: {is_installed_package()}")
+
     apply_pending_update()
 
     log("Syncing dependencies with uv ...")
     # --no-install-project: don't build/install the sorter package itself as
-    # part of the sync. main.py imports it straight from the source tree
+    # part of the sync. __main__.py imports it straight from the source tree
     # (sys.path.insert), so it was never needed for that -- and building it
     # is actively harmful in exactly the context this matters most: a
     # downloaded release has no .git, and hatch-vcs's build hook (see

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from sorter import api_client
+from sorter.ml import api_client
 
 
 def _frame() -> np.ndarray:
@@ -34,7 +34,7 @@ def test_classify_uses_server_confidence_when_present() -> None:
         "choices": [{"message": {"content": "WIN"}}],
         "confidence": 0.999429832,
     }
-    with patch("sorter.api_client._session.post", return_value=fake_response):
+    with patch("sorter.ml.api_client._session.post", return_value=fake_response):
         label, confidence = api_client.classify(_frame(), [], _cfg())
     assert label == "WIN"
     assert confidence == pytest.approx(99.9429832, rel=1e-6)
@@ -46,7 +46,7 @@ def test_classify_returns_minus_one_when_server_omits_confidence() -> None:
     fake_response.json.return_value = {
         "choices": [{"message": {"content": "WIN"}}],
     }
-    with patch("sorter.api_client._session.post", return_value=fake_response):
+    with patch("sorter.ml.api_client._session.post", return_value=fake_response):
         label, confidence = api_client.classify(_frame(), ["WIN"], _cfg())
     assert label == "WIN"
     assert confidence == -1.0
@@ -59,7 +59,7 @@ def test_classify_returns_minus_one_when_server_confidence_is_unparseable() -> N
         "choices": [{"message": {"content": "WIN"}}],
         "confidence": "nan-not-a-float",
     }
-    with patch("sorter.api_client._session.post", return_value=fake_response):
+    with patch("sorter.ml.api_client._session.post", return_value=fake_response):
         label, confidence = api_client.classify(_frame(), [], _cfg())
     assert label == "WIN"
     assert confidence == -1.0
@@ -73,7 +73,7 @@ def test_classify_request_shape_and_label() -> None:
         "confidence": 1.0,
     }
 
-    with patch("sorter.api_client._session.post", return_value=fake_response) as post:
+    with patch("sorter.ml.api_client._session.post", return_value=fake_response) as post:
         label, confidence = api_client.classify(_frame(), ["WIN", "FC"], _cfg())
 
     assert label == "WIN"
@@ -99,7 +99,7 @@ def test_classify_uses_server_confidence_even_for_off_list_label() -> None:
         "choices": [{"message": {"content": "Unknown"}}],
         "confidence": 0.25,
     }
-    with patch("sorter.api_client._session.post", return_value=fake_response):
+    with patch("sorter.ml.api_client._session.post", return_value=fake_response):
         label, confidence = api_client.classify(_frame(), ["WIN", "FC"], _cfg())
     assert label == "Unknown"
     assert confidence == pytest.approx(25.0)
@@ -112,7 +112,7 @@ def test_classify_strips_quoted_label() -> None:
         "choices": [{"message": {"content": '"WIN"'}}],
         "confidence": 1.0,
     }
-    with patch("sorter.api_client._session.post", return_value=fake_response):
+    with patch("sorter.ml.api_client._session.post", return_value=fake_response):
         label, confidence = api_client.classify(_frame(), ["WIN"], _cfg())
     assert label == "WIN"
     assert confidence == 100.0
@@ -124,7 +124,7 @@ def test_classify_omits_headstamp_placeholder_when_absent() -> None:
     fake_response.json.return_value = {"choices": [{"message": {"content": "WIN"}}]}
     cfg = _cfg()
     cfg["prompt"] = "No placeholder here"
-    with patch("sorter.api_client._session.post", return_value=fake_response) as post:
+    with patch("sorter.ml.api_client._session.post", return_value=fake_response) as post:
         api_client.classify(_frame(), ["WIN"], cfg)
     body = json.loads(post.call_args.kwargs["data"])
     assert body["messages"][0]["content"][0]["text"] == "No placeholder here"
@@ -134,7 +134,7 @@ def test_classify_raises_on_http_error() -> None:
     fake_response = MagicMock()
     fake_response.status_code = 500
     fake_response.text = "boom"
-    with patch("sorter.api_client._session.post", return_value=fake_response):
+    with patch("sorter.ml.api_client._session.post", return_value=fake_response):
         with pytest.raises(api_client.ApiError):
             api_client.classify(_frame(), [], _cfg())
 
@@ -143,7 +143,7 @@ def test_get_headstamps_parses_array() -> None:
     fake_response = MagicMock()
     fake_response.status_code = 200
     fake_response.json.return_value = ["WIN", "FC", "Federal"]
-    with patch("sorter.api_client._session.get", return_value=fake_response) as get:
+    with patch("sorter.ml.api_client._session.get", return_value=fake_response) as get:
         names = api_client.get_headstamps("https://example.com/", "9mm")
     assert names == ["WIN", "FC", "Federal"]
     args, kwargs = get.call_args
@@ -155,6 +155,6 @@ def test_get_headstamps_rejects_non_array() -> None:
     fake_response = MagicMock()
     fake_response.status_code = 200
     fake_response.json.return_value = {"oops": "not an array"}
-    with patch("sorter.api_client._session.get", return_value=fake_response):
+    with patch("sorter.ml.api_client._session.get", return_value=fake_response):
         with pytest.raises(api_client.ApiError):
             api_client.get_headstamps("https://example.com", "9mm")

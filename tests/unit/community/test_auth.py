@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from sorter.auth import AuthError, AuthManager, PortInUseError
+from sorter.community.auth import AuthError, AuthManager, PortInUseError
 
 
 class _FakeClient:
@@ -168,7 +168,7 @@ def _make_jwt(claims: dict) -> str:
 
 
 def test_decode_jwt_claims_roundtrip() -> None:
-    from sorter.auth import _decode_jwt_claims
+    from sorter.community.auth import _decode_jwt_claims
 
     token = _make_jwt({"name": "Jane", "emails": ["jane@example.com"]})
     claims = _decode_jwt_claims(token)
@@ -177,14 +177,14 @@ def test_decode_jwt_claims_roundtrip() -> None:
 
 
 def test_decode_jwt_claims_garbage_returns_empty() -> None:
-    from sorter.auth import _decode_jwt_claims
+    from sorter.community.auth import _decode_jwt_claims
 
     assert _decode_jwt_claims("not-a-jwt") == {}
     assert _decode_jwt_claims("") == {}
 
 
 def test_extract_name_falls_back_to_given_family() -> None:
-    from sorter.auth import _extract_name
+    from sorter.community.auth import _extract_name
 
     assert _extract_name({"name": "Full Name"}) == "Full Name"
     assert _extract_name({"given_name": "Ada", "family_name": "Lovelace"}) == "Ada Lovelace"
@@ -260,7 +260,7 @@ def test_cache_file_persisted_and_chmod(tmp_path: Path) -> None:
     import sys
 
     if sys.platform == "win32":
-        # os.chmod on Windows doesn't raise for the bits sorter/auth.py sets
+        # os.chmod on Windows doesn't raise for the bits sorter/community/auth.py sets
         # (matching its own try/except OSError comment), but it also doesn't
         # apply POSIX permission semantics -- real access control there is
         # NTFS ACLs, not st_mode. A new file's owner-only ACL is inherited

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sorter import image_store
+from sorter.data import image_store
 
 
 def _touch(folder: Path, *names: str) -> None:

@@ -21,7 +21,7 @@ from typing import Any
 import cv2
 from PIL import Image, ImageTk
 
-from ..events import EventBus
+from ..control.events import EventBus
 from .theme import PALETTE
 
 # Tile geometry (px). The image is square; text sits to its right.

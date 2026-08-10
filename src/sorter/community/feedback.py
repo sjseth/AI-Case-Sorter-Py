@@ -38,10 +38,10 @@ from typing import Any
 
 import numpy as np
 
-from . import paths
-from .models import Model
-from .repository import ModelRepo
-from .training.dataset import parse_feedback_filename, save_feedback_image
+from .. import paths
+from ..data.models import Model
+from ..data.repository import ModelRepo
+from ..training.dataset import parse_feedback_filename, save_feedback_image
 
 # Floor on the publisher's floor: even if a publisher set a very low
 # threshold, anything under 50% confidence is worth moderating.

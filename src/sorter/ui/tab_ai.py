@@ -11,8 +11,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from .. import api_client
-from ..events import EventBus
+from ..control.events import EventBus
+from ..ml import api_client
 from .widgets import ImagePanel, NumericField, build_button_row, build_labeled_entry
 
 

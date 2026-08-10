@@ -20,11 +20,11 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
 
-from ..community_api import CartridgeInfo, CommunityApi, ModelInfo
-from ..config import Config
-from ..events import EventBus
-from ..model_io import import_model
-from ..repository import ModelRepo
+from ..community.community_api import CartridgeInfo, CommunityApi, ModelInfo
+from ..control.events import EventBus
+from ..data.config import Config
+from ..data.model_io import import_model
+from ..data.repository import ModelRepo
 
 _TYPE_VALUES = ("All", "ModelOnly", "ModelAndImages", "ImagesOnly")
 

@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from sorter import db as db_module
-from sorter.db import DEFAULT_CARTRIDGE_NAME, DEFAULT_MODEL_MODE, SCHEMA_VERSION, Database
-from sorter.repository import (
+from sorter.data import db as db_module
+from sorter.data.db import DEFAULT_CARTRIDGE_NAME, DEFAULT_MODEL_MODE, SCHEMA_VERSION, Database
+from sorter.data.repository import (
     CartridgeRepo,
     HeadstampParentRepo,
     HeadstampRepo,
@@ -22,7 +22,7 @@ from sorter.repository import (
 from ._legacy_db import LEGACY_MODEL_COLUMNS, SCHEMA_SHAPES, columns, write_db_at_version
 
 # The registered migration steps, in application order. Spelled out rather
-# than read from sorter.db because the names are load-bearing: sqlite-utils
+# than read from sorter.data.db because the names are load-bearing: sqlite-utils
 # keys its `_sqlite_migrations` bookkeeping on them, so renaming one makes
 # every install in the wild run it again — this list failing is the alarm.
 MIGRATION_NAMES = [

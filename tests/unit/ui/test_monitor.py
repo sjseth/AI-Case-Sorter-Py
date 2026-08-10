@@ -14,7 +14,7 @@ pytest.importorskip("cv2")
 
 import tkinter as tk
 
-from sorter.events import EventBus
+from sorter.control.events import EventBus
 from sorter.ui.monitor import SNAKE_COLORS, MonitorWindow, _Tile
 
 

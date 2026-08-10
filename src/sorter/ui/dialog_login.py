@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Any
 
-from ..auth import AuthError, PortInUseError
+from ..community.auth import AuthError, PortInUseError
 
 
 class LoginDialog(tk.Toplevel):

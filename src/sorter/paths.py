@@ -14,12 +14,12 @@ per process. Layout:
     │       ├── feedback_images/ ← below-threshold community feedback queue
     │       ├── reports/         ← evaluator HTML reports
     │       └── trainedmodel/    ← <model_id>.pth (PyTorch zip archive)
-    └── updates/             ← staged app updates (see sorter/updater.py)
+    └── updates/             ← staged app updates (see sorter/update/updater.py)
 
 Resolution order:
 
 1. ``CASESORTER_DATA_DIR`` — explicit override; wins over everything.
-2. A ``portable.txt`` marker next to ``main.py`` — keeps the data in
+2. A ``portable.txt`` marker next to ``bootstrap.py`` — keeps the data in
    ``<app>/data`` for USB-stick / self-contained installs.
 3. The per-user OS location: ``%LOCALAPPDATA%\\CaseSorter`` on Windows,
    ``$XDG_DATA_HOME/CaseSorter`` (default ``~/.local/share/CaseSorter``)
@@ -33,8 +33,8 @@ construction rather than by remembering to exclude the right paths.
 run so this is invisible to anyone upgrading.
 
 This module is deliberately **stdlib-only and import-light**: the pre-launch
-update step (``main.py --apply-update``) imports it before the virtualenv has
-any third-party packages in it.
+update step (``__main__.py --apply-update``) imports it before the virtualenv
+has any third-party packages in it.
 """
 
 from __future__ import annotations
@@ -46,13 +46,59 @@ from pathlib import Path
 
 APP_NAME = "CaseSorter"
 
-# Presence of this file next to main.py pins the data root to <app>/data.
+# Presence of this file next to bootstrap.py pins the data root to <app>/data.
 PORTABLE_MARKER = "portable.txt"
 
 
 def app_root() -> Path:
-    """App folder (one level above ``sorter/``) — where ``main.py`` lives."""
-    return Path(__file__).resolve().parent.parent
+    """App folder (one level above ``src/``) — where ``bootstrap.py`` lives.
+
+    ``paths.py`` sits at ``src/sorter/paths.py``, so this is three levels up:
+    ``src/sorter`` → ``src`` → the app folder.
+    """
+    return Path(__file__).resolve().parent.parent.parent
+
+
+# Whether this process is running from an installed package (e.g. `pip`/`uv`
+# installed a wheel and something ran `python -m sorter`) vs. a source
+# checkout run as a script (`python src/sorter/__main__.py`, which is how
+# bootstrap.py always launches this app — see its module docstring). ``None``
+# until something has actually recorded it.
+#
+# Set once, by ``__main__.py``'s ``sys.path`` shim: whether that shim's branch
+# ran is a direct fact about how the process started (``__package__`` empty
+# means "run as a bare script"), not a guess. Anything asking earlier than
+# that — or a process that imports ``sorter`` some other way entirely, e.g. a
+# test — falls back to ``is_installed_package()``'s heuristic below.
+_installed_package: bool | None = None
+
+
+def set_installed_package(value: bool) -> None:
+    """Record whether this process's ``sorter`` is an installed package.
+
+    Called by ``__main__.py``'s script-run shim; see the module-level
+    ``_installed_package`` comment for why that's authoritative rather than a
+    guess.
+    """
+    global _installed_package
+    _installed_package = value
+
+
+def is_installed_package() -> bool:
+    """Whether the running ``sorter`` package is installed vs. a source checkout.
+
+    Uses whatever ``set_installed_package`` recorded, if anything did. Falls
+    back to a heuristic when nothing has: whether this file's path runs
+    through a ``site-packages``/``dist-packages`` directory, the standard
+    layout an actual wheel install unpacks into. Deliberately not "does
+    ``_version.py`` exist" — that answers "was this ever built", which is a
+    different question (a source checkout that's had `uv build` run in it
+    once would answer ``True`` for the wrong reason).
+    """
+    if _installed_package is not None:
+        return _installed_package
+    parts = Path(__file__).resolve().parts
+    return "site-packages" in parts or "dist-packages" in parts
 
 
 # Retained for callers that predate the rename.
@@ -164,7 +210,7 @@ def models_dir() -> Path:
 
 
 def updates_dir() -> Path:
-    """Scratch + staging area for in-app updates (see ``sorter/updater.py``)."""
+    """Scratch + staging area for in-app updates (see ``sorter/update/updater.py``)."""
     return app_data_dir() / "updates"
 
 
@@ -173,7 +219,7 @@ def logs_dir() -> Path:
 
     Under the data root like everything else here, and deliberately not in
     the app folder: the in-app updater replaces that wholesale (see
-    ``sorter/updater.py``), so a log kept there would be deleted by the very
+    ``sorter/update/updater.py``), so a log kept there would be deleted by the very
     update whose failure you are trying to read about. The Windows installer
     writes its own logs beside these, computing the same path itself -- it
     runs before there is a Python that could import this.

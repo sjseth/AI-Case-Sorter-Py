@@ -61,7 +61,7 @@ def bootstrap(monkeypatch):
 
 
 def test_bootstrap_py_is_stdlib_only_at_module_level() -> None:
-    """Deferred, function-scoped imports (e.g. sorter.apply_update) are fine
+    """Deferred, function-scoped imports (e.g. sorter.update.apply_update) are fine
     -- sorter itself is stdlib-only by design (see CLAUDE.md). What must
     never happen is a *module-level* import of anything third-party, since
     that would break before this script gets a chance to provision uv."""
@@ -76,6 +76,38 @@ def test_bootstrap_py_is_stdlib_only_at_module_level() -> None:
     allowed = set(sys.stdlib_module_names) | {"__future__"}
     offenders = top_level_modules - allowed
     assert not offenders, f"bootstrap.py imports non-stdlib module(s) at module level: {offenders}"
+
+
+def test_prelaunch_sorter_modules_import_without_third_party_packages() -> None:
+    """``sorter.paths`` and ``sorter.update.apply_update`` are imported by
+    ``bootstrap.py`` *before* ``uv sync`` runs (see its module docstring),
+    against a venv that may hold zero third-party packages. Neither must ever
+    pull one in -- not even transitively through a subpackage's
+    ``__init__.py``, which is exactly why every subpackage ``__init__.py``
+    under ``src/sorter/`` (``hardware/``, ``data/``, ``ml/``, ``community/``,
+    ``update/``) is deliberately empty: a re-export added to one of them
+    would silently break every end user's first launch, and nothing in the
+    normal test suite would catch it, because the suite always runs in a
+    fully-synced venv where the extra import just succeeds.
+
+    ``-S`` drops site-packages from ``sys.path`` (stdlib itself is found via
+    the interpreter's own path configuration, not `site`), which is the same
+    view of the world this code has at the point ``bootstrap.py`` actually
+    imports it.
+    """
+    src = ROOT / "src"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); import sorter.paths, sorter.update.apply_update",
+            str(src),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_bootstrap_py_compiles() -> None:

@@ -12,7 +12,7 @@ import pytest
 cv2 = pytest.importorskip("cv2")
 pytest.importorskip("PIL")
 
-from sorter import eval_report  # noqa: E402
+from sorter.ml import eval_report  # noqa: E402
 
 
 def _results(img_dir: Path) -> list[dict]:

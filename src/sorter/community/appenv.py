@@ -12,7 +12,7 @@ one that exists is applied (first value wins):
 
   1. ``$CASESORTER_ENV_FILE`` — explicit path,
   2. ``<data dir>/config/.env`` — per-installation,
-  3. ``<app>/.env`` — next to ``main.py``, the usual developer spot.
+  3. ``<app>/.env`` — next to ``bootstrap.py``, the usual developer spot.
 
 Recognised keys (see ``.env.example``):
 
@@ -41,7 +41,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import paths
+from .. import paths
 
 DEFAULT_API_BASE = "https://www.reloadingrecipes.com/api"
 
@@ -133,7 +133,7 @@ def env_file_candidates() -> list[Path]:
     if explicit:
         candidates.append(Path(explicit).expanduser())
     candidates.append(paths.config_dir() / ".env")
-    candidates.append(Path(__file__).resolve().parent.parent / ".env")
+    candidates.append(paths.app_root() / ".env")
     return candidates
 
 

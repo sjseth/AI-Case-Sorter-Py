@@ -11,8 +11,8 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox, ttk
 
-from ..db import Database
-from ..models import (
+from ..data.db import Database
+from ..data.models import (
     FEEDBACK_UPLOAD_MODES,
     SUPPORTED_MODEL_MODES,
     AIModelConfig,
@@ -20,7 +20,7 @@ from ..models import (
     Model,
     TrainingConfig,
 )
-from ..repository import CartridgeRepo, ModelRepo
+from ..data.repository import CartridgeRepo, ModelRepo
 
 # Upload-mode value (persisted) <-> display label (shown in the combobox).
 _FEEDBACK_MODE_LABELS = {

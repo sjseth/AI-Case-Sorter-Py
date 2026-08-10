@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from sorter.serial_emulator import EmulatorBroker
+from sorter.hardware.serial_emulator import EmulatorBroker
 
 
 def test_emulator_feed_one_returns_done() -> None:

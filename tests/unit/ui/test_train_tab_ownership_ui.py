@@ -13,11 +13,11 @@ pytest.importorskip("cv2")
 import tkinter as tk
 from tkinter import ttk
 
-from sorter.config import Config
-from sorter.db import Database
-from sorter.events import EventBus
-from sorter.models import Model
-from sorter.repository import CartridgeRepo, ModelRepo, SettingsRepo
+from sorter.control.events import EventBus
+from sorter.data.config import Config
+from sorter.data.db import Database
+from sorter.data.models import Model
+from sorter.data.repository import CartridgeRepo, ModelRepo, SettingsRepo
 from sorter.ui.app import MainWindow
 from sorter.ui.tab_train import TrainTab
 

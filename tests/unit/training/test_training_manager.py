@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from sorter.events import EventBus
-from sorter.models import TrainingConfig
+from sorter.control.events import EventBus
+from sorter.data.models import TrainingConfig
 from sorter.training.manager import TrainingJob, TrainingManager, build_command
 
 

@@ -31,10 +31,10 @@ from collections import defaultdict
 from collections.abc import Callable
 from tkinter import messagebox, ttk
 
-from .. import classifier
-from ..events import EventBus
-from ..feedback import FeedbackService, debug_log, is_feedback_model
-from ..repository import ModelRepo
+from ..community.feedback import FeedbackService, debug_log, is_feedback_model
+from ..control.events import EventBus
+from ..data.repository import ModelRepo
+from ..ml import classifier
 from . import torch_gate
 from .theme import PALETTE, row_style
 from .widgets import ImagePanel

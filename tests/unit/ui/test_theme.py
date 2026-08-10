@@ -433,8 +433,8 @@ def test_status_dots_keep_their_meaning_across_a_switch(root) -> None:
 
 def test_theme_choice_round_trips_through_settings(root) -> None:
     pytest.importorskip("cv2")
-    from sorter.db import Database
-    from sorter.repository import SettingsRepo
+    from sorter.data.db import Database
+    from sorter.data.repository import SettingsRepo
 
     db = Database()
     db.ensure_initialized()

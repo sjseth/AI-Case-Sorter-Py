@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sorter import evaluator
+from sorter.ml import evaluator
 
 cv2 = pytest.importorskip("cv2")
 

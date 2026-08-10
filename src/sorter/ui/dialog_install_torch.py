@@ -30,7 +30,7 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
-from ..gpu_detect import GpuInfo, detect_supported_nvidia_gpu
+from ..ml.gpu_detect import GpuInfo, detect_supported_nvidia_gpu
 from ..paths import find_uv
 from .theme import PALETTE
 

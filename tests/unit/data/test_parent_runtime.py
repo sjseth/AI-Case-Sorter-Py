@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sorter.config import Config
-from sorter.db import Database
-from sorter.models import Model
-from sorter.repository import (
+from sorter.data.config import Config
+from sorter.data.db import Database
+from sorter.data.models import Model
+from sorter.data.repository import (
     HeadstampParentRepo,
     HeadstampRepo,
     ModelRepo,

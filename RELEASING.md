@@ -52,7 +52,7 @@ directions. A draft is invisible to the verification too: `/releases/tags/<tag>`
 the unauthenticated fetch the installer makes, so there would be nothing to install.
 
 A prerelease is readable by exact tag, but `/releases/latest` excludes it -- and that is the
-endpoint both `sorter/updater.py` and `install-windows.ps1` use. So the release is fully
+endpoint both `sorter/update/updater.py` and `install-windows.ps1` use. So the release is fully
 testable while staying invisible to every real client until step 9.
 
 If verification fails the release stays a prerelease: nobody was served it, and PyPI never ran.
@@ -68,7 +68,7 @@ reporting `0.0.0+unknown`.
 
 **There is no version to bump by hand.** The tag is the single source of truth: hatch-vcs
 derives the version from it at build time (`pyproject.toml`'s `[tool.hatch.version] source =
-"vcs"`), writing `sorter/_version.py`, which `sorter/__init__.py` reads. Don't edit a version
+"vcs"`), writing `src/sorter/_version.py`, which `src/sorter/__init__.py` reads. Don't edit a version
 string anywhere -- there isn't one to edit.
 
 That's the point of the setup: the old arrangement had a static `__version__` that had to be
@@ -80,8 +80,8 @@ How the version reaches a user who never has `.git`:
 
 - **A downloaded release** gets `ai_case_sorter-<tag>.tar.gz` -- the project's own sdist,
   the same file `uv build` already produces for every push to `main`, not a separately built
-  artifact. hatch-vcs's build hook stamps `sorter/_version.py` into it automatically.
-  `sorter/updater.py` looks for that asset by exact name.
+  artifact. hatch-vcs's build hook stamps `src/sorter/_version.py` into it automatically.
+  `sorter/update/updater.py` looks for that asset by exact name.
 - **A pip/uv install** (if PyPI is ever enabled) reads it from package metadata.
 - **A plain `git clone` that was never built** falls back to `0.0.0+unknown`. Expected -- it's
   a contributor path, not a release path.

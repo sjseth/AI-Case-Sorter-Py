@@ -13,7 +13,7 @@ from collections.abc import Callable
 from tkinter import ttk
 from typing import Any
 
-from ..events import EventBus
+from ..control.events import EventBus
 from .theme import PALETTE
 
 

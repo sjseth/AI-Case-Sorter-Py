@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from sorter import gpu_detect
+from sorter.ml import gpu_detect
 
 
 def _fake_run(stdout: str = "", returncode: int = 0):

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from sorter.db import Database
-from sorter.models import Model
-from sorter.repository import (
+from sorter.data.db import Database
+from sorter.data.models import Model
+from sorter.data.repository import (
     CartridgeRepo,
     HeadstampRepo,
     ModelRepo,

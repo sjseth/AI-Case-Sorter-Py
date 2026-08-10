@@ -36,7 +36,7 @@ from dataclasses import asdict
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from . import paths
+from .. import paths
 from .models import (
     SUPPORTED_MODEL_MODES,
     AIModelConfig,

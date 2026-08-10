@@ -15,8 +15,8 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox, ttk
 
-from ..config import Config
-from ..models import SlotTemplate
+from ..data.config import Config
+from ..data.models import SlotTemplate
 
 
 def _mode_noun(mode: str) -> str:

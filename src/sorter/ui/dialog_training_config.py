@@ -11,7 +11,7 @@ from collections.abc import Callable
 from tkinter import messagebox, ttk
 from typing import Any
 
-from ..models import TrainingConfig
+from ..data.models import TrainingConfig
 
 
 class TrainingConfigDialog(tk.Toplevel):
