@@ -22,20 +22,39 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Image Recognition",
 ]
+# Pinning policy: exact `==` pins throughout this file (dependencies, the
+# `ml` extra, the dev dependency-group, and build-system requires). This
+# ships as an application (a desktop app with an entry point, not a library
+# other packages import), so the diamond-dependency risk that normally
+# argues for loose ranges on a published package doesn't apply -- nobody
+# resolves ai-case-sorter alongside another library that also constrains,
+# say, `requests`. What exact pins buy instead: a version bump becomes a
+# reviewable git diff -- one Renovate PR per bump (see .github/renovate.json5)
+# -- rather than whatever a resolver silently picks on the next `uv lock` or
+# `pip install` of the sdist; a compromised release doesn't reach anyone
+# building from source until that PR is reviewed and merged (Renovate's
+# `minimumReleaseAge` already delays the PR by several days, so pinning is
+# the half that makes the accepted version an explicit, git-tracked fact
+# rather than "whatever resolved that day"); and a regression bisects to one
+# commit instead of a date range of resolver noise. uv.lock separately pins
+# the full transitive graph for local installs, but it does not travel with
+# the published sdist -- these ranges are what `pip install ai-case-sorter`
+# resolves against, so they're the ones that actually need pinning for a
+# reproducible install from PyPI.
 dependencies = [
-    "pyserial>=3.5",
-    "opencv-python>=4.8",
-    "numpy>=1.24",
-    "Pillow>=10.0",
-    "requests>=2.31",
-    "msal>=1.28",
-    "platformdirs>=4.0",
+    "pyserial==3.5",
+    "opencv-python==5.0.0.93",
+    "numpy==2.5.2",
+    "Pillow==12.3.0",
+    "requests==2.34.2",
+    "msal==1.37.0",
+    "platformdirs==4.11.1",
     # Schema migrations: sorter/db.py runs its migration steps through
     # sqlite_utils.Migrations (tracking table `_sqlite_migrations`).
-    "sqlite-utils>=4",
+    "sqlite-utils==4.1.1",
     # Windows-only: enumerates friendly DirectShow camera names so the Camera
     # tab can show real device names instead of just "Camera N".
-    "pygrabber>=0.2; platform_system == 'Windows'",
+    "pygrabber==0.2; platform_system == 'Windows'",
 ]
 
 [project.urls]
@@ -45,10 +64,20 @@ Issues = "https://github.com/sjseth/AI-Case-Sorter-Py/issues"
 
 [project.optional-dependencies]
 # Local PyTorch training/inference. Install with `pip install .[ml]`.
-ml = ["torch>=2.2", "torchvision>=0.17"]
+#
+# Kept in lock-step with sorter/ui/dialog_install_torch.py's `_TARGETS`
+# ("the versions the legacy project validates against" -- an untethered
+# `torch>=2.2` regressed ConvNeXt inference on the RTX 50-series before).
+# That dialog is how PyTorch actually gets installed at runtime (it shells
+# out to `uv pip install torch==... torchvision==...`, optionally against
+# the CUDA wheel index) -- this extra exists so `pip install .[ml]` (a
+# plain-venv checkout, or a library consumer) resolves the *same* pair
+# rather than drifting to whatever is newest on PyPI. If you bump one, bump
+# the other in the same change.
+ml = ["torch==2.9.1", "torchvision==0.24.1"]
 
 [build-system]
-requires = ["hatchling>=1.27", "hatch-vcs>=0.4"]
+requires = ["hatchling==1.31.0", "hatch-vcs==0.5.0"]
 build-backend = "hatchling.build"
 
 # Version comes from the git tag at build time -- only ever meaningful when
@@ -150,6 +179,6 @@ markers = [
 
 [dependency-groups]
 dev = [
-    "pytest>=9.1.1",
-    "ruff>=0.16.1",
+    "pytest==9.1.1",
+    "ruff==0.16.2",
 ]
