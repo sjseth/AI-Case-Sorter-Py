@@ -20,9 +20,11 @@ import requests
 from sorter import updater
 from sorter.db import Database
 from sorter.repository import SettingsRepo
+from sorter.ui import markdown_render
 from sorter.ui.app import CHECK_FOR_UPDATES_LABEL, MainWindow
 from sorter.ui.dialog_update import UpdateDialog
-from sorter.ui.theme import apply_theme
+from sorter.ui.markdown_render import render_release_notes
+from sorter.ui.theme import PALETTE, apply_theme, get_fonts
 from sorter.updater import PendingUpdate, UpdateInfo
 
 
@@ -597,3 +599,178 @@ def test_a_later_check_clears_a_stale_update_label(root, monkeypatch) -> None:
     root.update()
 
     assert win.update_button_var.get() == CHECK_FOR_UPDATES_LABEL
+
+
+# ----- release-notes Markdown rendering ---------------------------------------
+#
+# The subset covered here is exactly what cliff.toml's `body` template
+# produces for this project's real releases (see markdown_render.py's module
+# docstring): `###` headings, `-` bullets, a `**BREAKING**` bold prefix,
+# `by @user` / `in #123` references, and inline `` `code` `` spans that show
+# up routinely in this repo's commit-message style. Links / bare URLs are
+# also covered even though the template never emits them, since the parser
+# treats them the same defensive way.
+
+
+def _notes_widget(root):
+    fonts = get_fonts(root)
+    return tk.Text(root), fonts
+
+
+def test_heading_and_bullets_get_their_own_tags(root) -> None:
+    widget, fonts = _notes_widget(root)
+    render_release_notes(
+        widget,
+        "### Bug Fixes\n- Fix the thing\n- Fix another thing",
+        fonts=fonts,
+        repo="sjseth/AI-Case-Sorter-Py",
+    )
+    text = widget.get("1.0", tk.END)
+    assert "Bug Fixes" in text
+    assert text.count("•") == 2  # bullet glyph, not the literal "- "
+    assert widget.tag_ranges("h3")  # the heading text carries the h3 tag
+    assert widget.tag_ranges("bullet")
+    assert str(widget.cget("state")) == "disabled"  # left read-only
+
+
+def test_bold_breaking_marker_and_inline_code_get_their_tags(root) -> None:
+    widget, fonts = _notes_widget(root)
+    render_release_notes(
+        widget,
+        "- **BREAKING** Require Python 3.12, rename `ui.theme`",
+        fonts=fonts,
+        repo="sjseth/AI-Case-Sorter-Py",
+    )
+    text = widget.get("1.0", tk.END)
+    # The `**`/`` ` `` markers themselves must not leak into the rendered text.
+    assert "**" not in text
+    assert "BREAKING Require Python 3.12" in text
+    assert "`" not in text
+    assert "ui.theme" in text
+    assert widget.tag_ranges("bold")
+    assert widget.tag_ranges("code")
+
+
+def test_user_and_pr_references_become_clickable_links(root, monkeypatch) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(markdown_render.webbrowser, "open", lambda url: opened.append(url))
+
+    widget, fonts = _notes_widget(root)
+    render_release_notes(
+        widget,
+        "- Stop installing dev dependencies by @jimisola in #50",
+        fonts=fonts,
+        repo="sjseth/AI-Case-Sorter-Py",
+    )
+    tags = widget._md_link_tags
+    assert len(tags) == 2  # @jimisola and #50
+
+    # Each link tag is colored (not left at the default text color) and
+    # underlined, so it visually reads as a link.
+    for tag in tags:
+        assert widget.tag_cget(tag, "foreground") == PALETTE["accent"]
+        assert widget.tag_cget(tag, "underline")
+        assert widget.tag_ranges(tag)  # actually covers some text
+
+    assert (
+        markdown_render._pr_url("sjseth/AI-Case-Sorter-Py", "50")
+        == "https://github.com/sjseth/AI-Case-Sorter-Py/issues/50"
+    )
+
+    # Now click the first link (the @jimisola span) for real, via a
+    # synthetic Tk event at its on-screen position, to exercise the actual
+    # bound handler rather than just the URL-building helpers it calls. The
+    # `root` fixture starts withdrawn (no display geometry, so `bbox` can't
+    # resolve), hence the temporary deiconify.
+    widget.pack()
+    root.deiconify()
+    root.update()
+    start = widget.tag_ranges(tags[0])[0]
+    x, y, _w, h = widget.bbox(start)
+    cx, cy = x + 1, y + h // 2
+    # Tk only knows which tag the pointer is "current"-ly over from motion
+    # tracking, so a bare synthetic Button-1 (with no real pointer movement
+    # behind it) doesn't trigger a tag's binding -- a Motion event first
+    # brings the "current" tag up to date, exactly as a real click would via
+    # the mouse move that precedes it.
+    widget.event_generate("<Motion>", x=cx, y=cy)
+    widget.event_generate("<Button-1>", x=cx, y=cy)
+    widget.event_generate("<ButtonRelease-1>", x=cx, y=cy)
+    root.update()
+    root.withdraw()
+    assert opened == ["https://github.com/jimisola"]
+
+
+def test_bot_username_links_to_the_apps_page(root) -> None:
+    assert markdown_render._user_url("renovate[bot]") == "https://github.com/apps/renovate"
+
+
+def test_open_url_refuses_non_http_schemes(root, monkeypatch) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(markdown_render.webbrowser, "open", lambda url: opened.append(url))
+
+    markdown_render._open_url("javascript:alert(1)")
+    markdown_render._open_url("file:///etc/passwd")
+
+    assert opened == []  # neither scheme was ever handed to the browser
+
+
+def test_markdown_links_and_bare_urls_are_clickable(root) -> None:
+    widget, fonts = _notes_widget(root)
+    render_release_notes(
+        widget,
+        "See [the docs](https://example.com/docs) or https://example.com/bare directly.",
+        fonts=fonts,
+        repo="x/y",
+    )
+    text = widget.get("1.0", tk.END)
+    assert "the docs" in text
+    assert "https://example.com/docs" not in text  # the raw URL is hidden behind the label
+    assert "https://example.com/bare" in text  # a bare URL has no label to hide behind
+    assert len(widget._md_link_tags) == 2
+
+
+def test_malformed_input_degrades_to_plain_text(root, monkeypatch) -> None:
+    """Any parsing failure must fall back to showing the raw body, never raise."""
+    monkeypatch.setattr(markdown_render, "_render_body", lambda *a, **k: (_ for _ in ()).throw(ValueError("boom")))
+
+    widget, fonts = _notes_widget(root)
+    junk = "### heading\n- bullet **oops"
+    render_release_notes(widget, junk, fonts=fonts, repo="x/y")
+
+    assert widget.get("1.0", "end-1c") == junk
+    assert widget._md_link_tags == []
+    assert str(widget.cget("state")) == "disabled"
+
+
+def test_empty_body_renders_without_error(root) -> None:
+    widget, fonts = _notes_widget(root)
+    render_release_notes(widget, "", fonts=fonts, repo="x/y")
+    assert widget.get("1.0", tk.END).strip() == ""
+
+
+def test_huge_body_is_truncated_rather_than_hanging(root) -> None:
+    widget, fonts = _notes_widget(root)
+    huge = ("- " + "x" * 200 + "\n") * 20_000
+    render_release_notes(widget, huge, fonts=fonts, repo="x/y")
+    assert "truncated" in widget.get("1.0", tk.END)
+
+
+def test_notes_tags_follow_the_theme(root) -> None:
+    """The same source rendered under two themes must pick up each palette's
+    colors -- confirms tags are (re)configured from the live PALETTE on every
+    render rather than baked in once."""
+    apply_theme(root, theme="Dark")
+    widget, fonts = _notes_widget(root)
+    render_release_notes(widget, "### Heading\n- item by @user in #1", fonts=fonts, repo="x/y")
+    dark_h3 = widget.tag_cget("h3", "foreground")
+    dark_link = widget.tag_cget(widget._md_link_tags[0], "foreground")
+
+    apply_theme(root, theme="Light")
+    render_release_notes(widget, "### Heading\n- item by @user in #1", fonts=fonts, repo="x/y")
+    light_h3 = widget.tag_cget("h3", "foreground")
+    light_link = widget.tag_cget(widget._md_link_tags[0], "foreground")
+
+    assert dark_h3 != light_h3
+    assert dark_link != light_link
+    apply_theme(root, theme="Dark")  # leave the shared root as other tests expect it

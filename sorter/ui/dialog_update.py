@@ -42,7 +42,8 @@ from typing import Literal
 
 from .. import updater
 from ..updater import PendingUpdate, UpdateError, UpdateInfo
-from .theme import PALETTE
+from .markdown_render import render_release_notes
+from .theme import PALETTE, get_fonts
 
 # Tagged union for the worker->main-thread queue below: the "kind" string
 # picks which payload shape goes with it, so _poll_events can narrow by
@@ -176,6 +177,10 @@ class UpdateDialog(tk.Toplevel):
         )
         self._notes.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         ttk.Scrollbar(self._notes_wrap, orient=tk.VERTICAL, command=self._notes.yview).pack(side=tk.RIGHT, fill=tk.Y)
+        # Font choice doesn't change with the theme (it's a host-availability
+        # pick, not a palette value), so this is computed once per dialog and
+        # reused by every `_set_notes` call rather than re-probed each time.
+        self._fonts = get_fonts(self)
 
     def _build_progress(self, parent: tk.Misc) -> None:
         self._progress_row = ttk.Frame(parent)
@@ -352,10 +357,12 @@ class UpdateDialog(tk.Toplevel):
     # ----- rendering ----------------------------------------------------------
 
     def _set_notes(self, text: str) -> None:
-        self._notes.config(state=tk.NORMAL)
-        self._notes.delete("1.0", tk.END)
-        self._notes.insert("1.0", text)
-        self._notes.config(state=tk.DISABLED)
+        # Release bodies are Markdown (git-cliff generates them from
+        # cliff.toml); render the subset this project's own notes actually
+        # use instead of dumping the raw `### heading` / `- bullet` syntax at
+        # the user. See markdown_render.py's module docstring for exactly
+        # which shapes were pinned against real release bodies.
+        render_release_notes(self._notes, text, fonts=self._fonts, repo=updater.update_repo())
 
     def _render(self) -> None:
         current = updater.current_version()
