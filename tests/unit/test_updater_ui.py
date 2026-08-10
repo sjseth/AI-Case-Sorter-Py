@@ -20,7 +20,7 @@ import requests
 from sorter import updater
 from sorter.db import Database
 from sorter.repository import SettingsRepo
-from sorter.ui.app import MainWindow
+from sorter.ui.app import CHECK_FOR_UPDATES_LABEL, MainWindow
 from sorter.ui.dialog_update import UpdateDialog
 from sorter.ui.theme import apply_theme
 from sorter.updater import PendingUpdate, UpdateInfo
@@ -395,12 +395,16 @@ class _StubWindow:
     check_for_updates = MainWindow.check_for_updates
     note_pending_update = MainWindow.note_pending_update
     _show_update_button = MainWindow._show_update_button
+    _on_update_button_click = MainWindow._on_update_button_click
 
     def __init__(self, root, db=None) -> None:
         self.db = db
         self.root = root
-        self.update_button_var = tk.StringVar(value="Update available")
+        self.update_button_var = tk.StringVar(value=CHECK_FOR_UPDATES_LABEL)
         self.update_button = ttk.Button(root, textvariable=self.update_button_var)
+        # Mirrors MainWindow: always packed, the label carries the state.
+        self.update_button.pack()
+        self.dialogs_opened = 0
         self._update_info = None
         self._pending_update = None
         self.status = ""
@@ -408,6 +412,11 @@ class _StubWindow:
 
     def set_status(self, msg: str) -> None:
         self.status = msg
+
+    def open_update_dialog(self) -> None:
+        # Counted rather than constructed: these tests are about when the app
+        # decides to show the dialog, not about the dialog itself.
+        self.dialogs_opened += 1
 
     def run_worker(self, fn, *, on_done=None, on_error=None) -> None:
         self.worker_calls += 1
@@ -433,14 +442,20 @@ def test_startup_check_reveals_the_button_when_an_update_exists(root, monkeypatc
 
 
 def test_startup_check_stays_quiet_when_current(root, monkeypatch) -> None:
+    """A silent startup check that finds nothing must not say anything.
+
+    The button is always present now, so "quiet" is about the label and the
+    status line, not about whether the widget is packed.
+    """
     win = _StubWindow(root)
     monkeypatch.setattr(updater, "check_for_update", lambda **k: None)
 
     win._check_for_updates_on_startup()
     root.update()
 
-    assert win.update_button.winfo_manager() == ""
+    assert win.update_button_var.get() == CHECK_FOR_UPDATES_LABEL
     assert win.status == ""
+    assert win.dialogs_opened == 0
 
 
 def test_startup_check_swallows_network_errors(root, monkeypatch) -> None:
@@ -453,8 +468,11 @@ def test_startup_check_swallows_network_errors(root, monkeypatch) -> None:
     win._check_for_updates_on_startup()
     root.update()
 
-    assert win.update_button.winfo_manager() == ""
+    # The button is always packed now, so "swallowed" means the failure never
+    # reached the label, the status line, or a dialog.
+    assert win.update_button_var.get() == CHECK_FOR_UPDATES_LABEL
     assert win.status == ""  # a silent check never nags
+    assert win.dialogs_opened == 0
 
 
 def test_explicit_check_reports_failure(root, monkeypatch) -> None:
@@ -514,3 +532,68 @@ def test_startup_check_honours_the_stored_opt_out(root, monkeypatch) -> None:
         assert win.worker_calls == 0
     finally:
         db.close()
+
+
+def test_update_button_is_always_available_as_a_manual_check(root, monkeypatch) -> None:
+    """The button must be reachable with no update pending.
+
+    It used to be packed only once a check had found something, which left a
+    user who was up to date unable to open the dialog at all -- and so unable
+    to read release notes or reach the version picker.
+    """
+    win = _StubWindow(root)
+    root.update()
+
+    assert win.update_button.winfo_manager() != ""
+    assert win.update_button_var.get() == CHECK_FOR_UPDATES_LABEL
+
+
+def test_manual_check_opens_the_dialog_even_when_up_to_date(root, monkeypatch) -> None:
+    win = _StubWindow(root)
+    monkeypatch.setattr(updater, "check_for_update", lambda **k: None)
+
+    win._on_update_button_click()
+    root.update()
+
+    assert win.dialogs_opened == 1
+    assert win.status == "You're up to date."
+    assert win.update_button_var.get() == CHECK_FOR_UPDATES_LABEL
+
+
+def test_manual_check_finding_a_release_relabels_the_button(root, monkeypatch) -> None:
+    win = _StubWindow(root)
+    monkeypatch.setattr(updater, "check_for_update", lambda **k: _info())
+
+    win._on_update_button_click()
+    root.update()
+
+    assert win.update_button_var.get() == "Update to 9.9.9"
+
+
+def test_button_click_skips_the_check_once_something_is_known(root, monkeypatch) -> None:
+    """With a result already in hand the button is a shortcut, not a re-check."""
+    win = _StubWindow(root)
+    win._update_info = _info()
+
+    def _boom(**k):
+        raise AssertionError("must not re-check when a result is already known")
+
+    monkeypatch.setattr(updater, "check_for_update", _boom)
+
+    win._on_update_button_click()
+    root.update()
+
+    assert win.dialogs_opened == 1
+    assert win.worker_calls == 0
+
+
+def test_a_later_check_clears_a_stale_update_label(root, monkeypatch) -> None:
+    """Going from "update found" back to "nothing" must not strand the label."""
+    win = _StubWindow(root)
+    win._show_update_button("Update to 9.9.9")
+    monkeypatch.setattr(updater, "check_for_update", lambda **k: None)
+
+    win.check_for_updates(silent=True)
+    root.update()
+
+    assert win.update_button_var.get() == CHECK_FOR_UPDATES_LABEL
