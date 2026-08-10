@@ -80,6 +80,24 @@ app. CI (`.github/workflows/build.yml`) runs the same suite across
 a Python version matrix on every push and PR — treat a red CI run the same as
 a local test failure, not as something to wait out.
 
+### The Windows installer's validation tests
+
+`installer/install-windows.ps1` checks archive entry names itself before
+letting `tar.exe` write a byte, and that check is the one part of this repo
+the Python suite cannot reach. It has its own tests, and they need neither
+Windows nor a local PowerShell:
+
+```bash
+docker run --rm -v "$PWD:/w" -w /w mcr.microsoft.com/powershell:7.4-ubuntu-22.04 \
+  pwsh -File installer/Test-ArchiveEntryValidation.ps1
+```
+
+Run them if you touch `installer/**` or `sorter/updater.py`'s `_safe_members`
+— the two extraction paths consume the *same* archives, so a shape one
+rejects and the other accepts is a bug in whichever accepts it. Everything
+else about the installer needs a real Windows machine; see
+[`installer/README.md`](installer/README.md).
+
 ## Coding guidelines
 
 - **Read [`CLAUDE.md`](CLAUDE.md) first** — it maps the architecture (event bus,
