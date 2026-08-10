@@ -22,25 +22,9 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Image Recognition",
 ]
-# Pinning policy: exact `==` pins throughout this file (dependencies, the
-# `ml` extra, the dev dependency-group, and build-system requires). This
-# ships as an application (a desktop app with an entry point, not a library
-# other packages import), so the diamond-dependency risk that normally
-# argues for loose ranges on a published package doesn't apply -- nobody
-# resolves ai-case-sorter alongside another library that also constrains,
-# say, `requests`. What exact pins buy instead: a version bump becomes a
-# reviewable git diff -- one Renovate PR per bump (see .github/renovate.json5)
-# -- rather than whatever a resolver silently picks on the next `uv lock` or
-# `pip install` of the sdist; a compromised release doesn't reach anyone
-# building from source until that PR is reviewed and merged (Renovate's
-# `minimumReleaseAge` already delays the PR by several days, so pinning is
-# the half that makes the accepted version an explicit, git-tracked fact
-# rather than "whatever resolved that day"); and a regression bisects to one
-# commit instead of a date range of resolver noise. uv.lock separately pins
-# the full transitive graph for local installs, but it does not travel with
-# the published sdist -- these ranges are what `pip install ai-case-sorter`
-# resolves against, so they're the ones that actually need pinning for a
-# reproducible install from PyPI.
+# Every dependency is pinned exactly; see .github/renovate.json5 for how
+# bumps arrive. This ships as an application, not a library others resolve
+# against, so exact pins cost nothing in dependency conflicts.
 dependencies = [
     "pyserial==3.5",
     "opencv-python==5.0.0.93",
@@ -64,16 +48,8 @@ Issues = "https://github.com/sjseth/AI-Case-Sorter-Py/issues"
 
 [project.optional-dependencies]
 # Local PyTorch training/inference. Install with `pip install .[ml]`.
-#
-# Kept in lock-step with sorter/ui/dialog_install_torch.py's `_TARGETS`
-# ("the versions the legacy project validates against" -- an untethered
-# `torch>=2.2` regressed ConvNeXt inference on the RTX 50-series before).
-# That dialog is how PyTorch actually gets installed at runtime (it shells
-# out to `uv pip install torch==... torchvision==...`, optionally against
-# the CUDA wheel index) -- this extra exists so `pip install .[ml]` (a
-# plain-venv checkout, or a library consumer) resolves the *same* pair
-# rather than drifting to whatever is newest on PyPI. If you bump one, bump
-# the other in the same change.
+# Must match _TARGETS in sorter/ui/dialog_install_torch.py, which is how
+# PyTorch actually gets installed at runtime. Bump both together.
 ml = ["torch==2.9.1", "torchvision==0.24.1"]
 
 [build-system]

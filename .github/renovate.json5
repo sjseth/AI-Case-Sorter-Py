@@ -15,13 +15,7 @@
 
   branchPrefix: "renovate/",
 
-  // pyproject.toml pins every Python dependency exactly (`==`) -- see the
-  // policy comment above `[project] dependencies` for why. "auto" already
-  // replaces an existing `==` pin with a new exact pin, so this is mostly
-  // a backstop: if a range ever creeps back in (a hand-added dependency, a
-  // reverted pin), "pin" converts it to an exact pin in the update PR
-  // instead of leaving it loose, so the policy stays self-enforcing rather
-  // than relying on review to catch it.
+  // Backstop: converts a range back to an exact pin if one ever creeps in.
   rangeStrategy: "pin",
 
   addLabels: [
