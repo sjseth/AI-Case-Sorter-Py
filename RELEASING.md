@@ -115,9 +115,9 @@ An in-app update is validated by the copy already installed. Accepting the
 way to patch an installed updater after the fact, so the one-time manual step
 is the whole remedy.
 
-Installs at 1.1.0 or later need nothing: the archive ships a root `main.py`
-so the launch that applies the update still finds an entry point (see
-CLAUDE.md §7).
+Installs at 1.1.0 or later need nothing: the archive carries a root `main.py`
+(force-included from `src/sorter/_legacy_entry.py`), so the launch that applies
+the update still finds an entry point where it expects one — see CLAUDE.md §2.
 
 ## Commit-type -> changelog section mapping
 

@@ -7,23 +7,28 @@ this tree's layout, which is the one combination that cannot happen on a real
 machine: it is always version N applying version N+1.
 
 So check out the previous release from git and run *its* updater against a
-staged copy of this tree. ``uv build``/``git-cliff`` get the same treatment in
-this directory -- assert the real artifact, not a description of it.
+real built sdist of this tree. ``uv build``/``git-cliff`` get the same
+treatment in this directory -- assert the real artifact, not a description
+of it.
+
+The sdist specifically, not a copy of the working tree: the root ``main.py``
+that makes this work exists *only* in the archive, mapped there from
+``src/sorter/_legacy_entry.py`` by ``pyproject.toml``'s ``force-include``.
+Staging a tree copy would test a layout no user ever receives.
 
 What this pins, concretely:
 
 * A tree updated by 1.1.0 still launches. 1.1.0 ends that launch with
   ``python main.py``, a path baked into a ``bootstrap.py`` already in memory
-  by the time the new tree lands, so the root ``main.py`` shim has to be in
-  the archive. Deleting it turns the first post-update launch into an
-  ``ImportError``.
+  by the time the new tree lands, so the archive has to carry one. Drop the
+  ``force-include`` and the first post-update launch is an ``ImportError``.
 * ``src/sorter`` wins over the stale root ``sorter/`` that 1.1.0's updater
   leaves behind (it prunes the flat package, then re-creates
   ``sorter/_version.py`` inside it).
 * This tree's updater cleans that residue up, and downgrades back to the flat
   layout without stranding the entry point.
 
-Skipped when git or the tag isn't available; CI checks out with tags for it.
+Skipped when git, uv, or the tag isn't available; CI has all three.
 """
 
 from __future__ import annotations
@@ -61,11 +66,39 @@ def _has_previous_release() -> bool:
 
 pytestmark = [
     pytest.mark.integration,
+    pytest.mark.skipif(shutil.which("uv") is None, reason="uv not installed"),
     pytest.mark.skipif(
         not _has_previous_release(),
         reason=f"git or the {PREVIOUS_RELEASE} tag is unavailable (shallow clone?)",
     ),
 ]
+
+
+@pytest.fixture(scope="module")
+def release_tree(tmp_path_factory) -> Path:
+    """This tree as a user receives it: a built sdist, unpacked.
+
+    Built once for the module -- it is the slow step here, and every test
+    wants the same bytes.
+    """
+    out = tmp_path_factory.mktemp("dist")
+    proc = subprocess.run(
+        ["uv", "build", "--sdist", "--out-dir", str(out)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        pytest.fail(f"uv build --sdist failed:\n{proc.stdout}\n{proc.stderr}")
+
+    tarballs = list(out.glob("*.tar.gz"))
+    assert len(tarballs) == 1, f"expected exactly one sdist, got {tarballs}"
+
+    unpacked = out / "unpacked"
+    shutil.unpack_archive(str(tarballs[0]), str(unpacked))
+    wrappers = list(unpacked.iterdir())
+    assert len(wrappers) == 1, f"expected a single wrapper directory, got {wrappers}"
+    return wrappers[0]
 
 
 def _install_previous_release(dest: Path) -> Path:
@@ -117,7 +150,7 @@ def data_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def upgraded(tmp_path: Path, data_dir: Path) -> Path:
+def upgraded(tmp_path: Path, data_dir: Path, release_tree: Path) -> Path:
     """An install of the previous release, updated to this tree by *its own* updater.
 
     ``main.py --apply-update`` is the previous release's own pre-launch entry
@@ -125,7 +158,7 @@ def upgraded(tmp_path: Path, data_dir: Path) -> Path:
     ``PRUNE_ROOTS``. Nothing from this tree takes part in applying it.
     """
     app = _install_previous_release(tmp_path / "app")
-    _stage(ROOT, data_dir, version="9.9.9", from_version=PREVIOUS_RELEASE)
+    _stage(release_tree, data_dir, version="9.9.9", from_version=PREVIOUS_RELEASE)
 
     result = _run(["main.py", "--apply-update"], cwd=app, data_dir=data_dir)
     assert result.returncode == 0, result.stderr
@@ -137,7 +170,7 @@ def test_the_previous_release_can_apply_this_layout(upgraded: Path) -> None:
     assert (upgraded / "src" / "sorter" / "__main__.py").is_file()
 
 
-def test_the_updated_tree_still_has_the_entry_point_the_old_launcher_runs(upgraded: Path) -> None:
+def test_the_updated_tree_still_has_the_entry_point_the_old_launcher_runs(upgraded: Path, release_tree: Path) -> None:
     """1.1.0's in-memory ``run_app`` execs ``python main.py`` on this very launch.
 
     It resolved that path before the update replaced the tree underneath it,
@@ -147,14 +180,14 @@ def test_the_updated_tree_still_has_the_entry_point_the_old_launcher_runs(upgrad
     """
     shipped = upgraded / "main.py"
     assert shipped.is_file(), (
-        "the root main.py shim is gone -- the launch that applies this update runs "
-        "`python main.py` from a bootstrap.py that predates the move"
+        "the archive carries no root main.py -- the launch that applies this update "
+        "runs `python main.py` from a bootstrap.py that predates the move"
     )
     # Content, not presence: the previous release ships its own main.py, and
     # the old pruner never touches the repo root, so a *stale* one is left
     # sitting there either way. Presence alone would assert nothing.
-    assert shipped.read_text(encoding="utf-8") == (ROOT / "main.py").read_text(encoding="utf-8"), (
-        "main.py in the updated tree is the previous release's, not the shipped shim"
+    assert shipped.read_text(encoding="utf-8") == (release_tree / "main.py").read_text(encoding="utf-8"), (
+        "main.py in the updated tree is the previous release's, not the one this archive shipped"
     )
 
 
@@ -179,7 +212,9 @@ def test_the_first_post_update_launch_imports_the_new_package(upgraded: Path) ->
     )
 
 
-def test_this_tree_cleans_up_the_residue_the_old_updater_leaves(upgraded: Path, data_dir: Path) -> None:
+def test_this_tree_cleans_up_the_residue_the_old_updater_leaves(
+    upgraded: Path, data_dir: Path, release_tree: Path
+) -> None:
     """PRUNE_ROOTS covers ``sorter/`` as well, or the leftovers are permanent.
 
     1.1.0 empties the flat package and then re-creates ``sorter/_version.py``
@@ -189,7 +224,7 @@ def test_this_tree_cleans_up_the_residue_the_old_updater_leaves(upgraded: Path, 
     """
     assert (upgraded / "sorter").is_dir(), "expected the residue this test is about"
 
-    _stage(ROOT, data_dir, version="9.9.10", from_version="9.9.9")
+    _stage(release_tree, data_dir, version="9.9.10", from_version="9.9.9")
     result = _run(["main.py", "--apply-update"], cwd=upgraded, data_dir=data_dir)
     assert result.returncode == 0, result.stderr
 
@@ -197,7 +232,9 @@ def test_this_tree_cleans_up_the_residue_the_old_updater_leaves(upgraded: Path, 
     assert (upgraded / "src" / "sorter" / "__init__.py").is_file()
 
 
-def test_downgrading_to_the_previous_release_restores_its_entry_point(tmp_path: Path, data_dir: Path) -> None:
+def test_downgrading_to_the_previous_release_restores_its_entry_point(
+    tmp_path: Path, data_dir: Path, release_tree: Path
+) -> None:
     """The version picker makes this a supported move, so it has to land intact.
 
     Applied by *this* tree's updater, which prunes all of ``src/sorter`` --
@@ -206,7 +243,7 @@ def test_downgrading_to_the_previous_release_restores_its_entry_point(tmp_path: 
     the concern is only that the flat entry point is on disk to relaunch into.
     """
     app = tmp_path / "app"
-    shutil.copytree(ROOT, app, ignore=_SKIP)
+    shutil.copytree(release_tree, app, ignore=_SKIP)
     old = _install_previous_release(tmp_path / "previous")
     _stage(old, data_dir, version=PREVIOUS_RELEASE, from_version="9.9.9")
 

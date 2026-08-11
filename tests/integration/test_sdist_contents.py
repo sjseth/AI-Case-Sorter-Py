@@ -39,8 +39,12 @@ pytestmark = [
 # itself: the entry point, the dependency bootstrap, both launchers, and the
 # metadata bootstrap.py reads to build the venv.
 RUNTIME_FILES = (
-    "main.py",
     "src/sorter/__main__.py",
+    # Force-included from src/sorter/_legacy_entry.py (see pyproject.toml).
+    # Absent from this tree on purpose; present in every archive, because the
+    # launch that *applies* an update runs `python main.py` from a
+    # bootstrap.py that predates the src/ layout.
+    "main.py",
     "bootstrap.py",
     "start.sh",
     "start.bat",

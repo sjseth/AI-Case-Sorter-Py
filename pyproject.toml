@@ -69,6 +69,16 @@ local_scheme = "no-local-version"
 [tool.hatch.build.hooks.vcs]
 version-file = "src/sorter/_version.py"
 
+# The one piece of the release archive that is not a copy of the source tree.
+# See src/sorter/_legacy_entry.py: an install predating the src/ layout ends
+# the launch that applies this update with `python main.py`, so the archive
+# has to carry one even though this tree does not. Additive only -- verified
+# against a real `uv build` that it does not narrow the sdist's default
+# every-tracked-file selection, which tests/integration/test_sdist_contents.py
+# depends on.
+[tool.hatch.build.targets.sdist.force-include]
+"src/sorter/_legacy_entry.py" = "main.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/sorter"]
 

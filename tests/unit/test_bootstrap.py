@@ -359,7 +359,7 @@ def test_run_app_unbuffers_the_child(bootstrap, monkeypatch) -> None:
 
 
 def test_run_app_launches_the_entry_point_that_exists(bootstrap, monkeypatch) -> None:
-    """Nothing else pins this path, and getting it wrong kills every launch.
+    """Nothing else pins this, and getting it wrong kills every launch.
 
     CI can't cover for it: launcher-smoke declares success on the
     "Starting the app" log line, which is emitted *before* this Popen, and
@@ -373,8 +373,10 @@ def test_run_app_launches_the_entry_point_that_exists(bootstrap, monkeypatch) ->
     bootstrap.run_app("/fake/uv", ["--flag"])
 
     argv = bootstrap.subprocess.Popen.call_args.args[0]
-    assert argv == ["/fake/uv", "run", "--no-sync", "python", "main.py", "--flag"]
-    assert (ROOT / "main.py").is_file()
+    assert argv == ["/fake/uv", "run", "--no-sync", "python", "-m", "sorter", "--flag"]
+    # `-m` resolves through PYTHONPATH, not an install, so the two are one fact.
+    assert bootstrap.subprocess.Popen.call_args.kwargs["env"]["PYTHONPATH"] == str(ROOT / "src")
+    assert (ROOT / "src" / "sorter" / "__main__.py").is_file()
 
 
 def test_main_relaunches_itself_after_applying_an_update(bootstrap, monkeypatch) -> None:

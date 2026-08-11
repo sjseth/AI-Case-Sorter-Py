@@ -36,19 +36,23 @@ What it does, in order:
      stay deterministic and offline-safe (CI uses `--locked` instead, which
      fails if the lock has drifted from pyproject.toml -- see
      .github/workflows/build.yml). --no-install-project skips building the
-     sorter package itself: main.py imports it straight from the source
-     tree, so it was never needed for that, and building it is actively
-     harmful when there's no .git to derive a version from (see
-     pyproject.toml's [tool.hatch.version] and src/sorter/__init__.py).
+     sorter package itself: step 5 puts src/ on PYTHONPATH instead, so it
+     was never needed for that, and building it is actively harmful when
+     there's no .git to derive a version from (see pyproject.toml's
+     [tool.hatch.version] and src/sorter/__init__.py).
      --no-dev keeps the `dev` group (pytest, ruff) out of a user's venv --
      uv installs it by default, and it is pure CI tooling.
-  5. Launch the app: `uv run --no-sync python main.py <forwarded args>`.
-     --no-sync, not --frozen: `uv run` syncs implicitly by default even with
-     --frozen, which would redo the very build step 4 skipped. `main.py`
-     (not `python -m sorter`) because the sorter package is deliberately
-     never installed into the venv -- see step 4 -- so there is nothing for
-     `-m` to resolve; main.py puts `src/` on sys.path and imports it from
-     the source tree instead.
+  5. Launch the app: `uv run --no-sync python -m sorter <forwarded args>`,
+     with PYTHONPATH=src in the child's environment. --no-sync, not
+     --frozen: `uv run` syncs implicitly by default even with --frozen,
+     which would redo the very build step 4 skipped.
+
+     PYTHONPATH is what makes `-m` work at all here -- the package is never
+     installed into the venv (step 4), so there is otherwise nothing for it
+     to resolve. Doing it this way keeps sys.path surgery out of the
+     application entirely: `-m` also leaves `src/sorter` itself off the
+     path, where subpackages like `ui` and `data` would shadow same-named
+     third-party ones.
 """
 
 from __future__ import annotations
@@ -390,13 +394,19 @@ def run_app(uv: str, forward_args: list[str]) -> int:
     """
     env = dict(os.environ)
     env["PYTHONUNBUFFERED"] = "1"
+    # What makes `-m sorter` resolve without installing the package. Setting it
+    # here means no file in the tree has to rewrite sys.path to launch itself:
+    # the launcher owns the environment, which is what a launcher is for.
+    # Replaces rather than prepends, deliberately -- an inherited PYTHONPATH is
+    # a classic source of "why did it import the other sorter".
+    env["PYTHONPATH"] = str(SRC)
 
     # --no-sync, not --frozen: `uv run` syncs implicitly by default even with
     # --frozen (frozen only constrains *how* it syncs, not whether), which
     # would silently redo the project build main() went out of its way to
     # skip. --no-sync trusts that sync and skips its own.
     proc = subprocess.Popen(
-        [uv, "run", "--no-sync", "python", "main.py"] + forward_args,
+        [uv, "run", "--no-sync", "python", "-m", "sorter"] + forward_args,
         cwd=ROOT,
         env=env,
         stdout=subprocess.PIPE,

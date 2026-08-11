@@ -54,10 +54,6 @@ launcher:
   - changed-files:
       - any-glob-to-any-file:
           - 'bootstrap.py'
-          # The entry point stayed at the root through the src/ move: the
-          # launch that applies an update runs it from a bootstrap.py that
-          # predates the move (see main.py's docstring).
-          - 'main.py'
           - 'start.sh'
           - 'start.bat'
 

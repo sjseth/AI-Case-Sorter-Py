@@ -144,7 +144,7 @@ start.bat
 **Run it directly** (if you have `uv` yourself and want to manage it):
 ```bash
 uv sync --frozen --no-dev --no-install-project
-uv run --no-sync python main.py
+PYTHONPATH=src uv run --no-sync python -m sorter
 ```
 Same flags `bootstrap.py` uses. `--no-install-project` / `--no-sync` keep uv
 from building the project itself: on a copy with no `.git` folder — i.e. any
