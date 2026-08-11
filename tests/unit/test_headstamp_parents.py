@@ -37,12 +37,14 @@ def test_parent_crud(tmp_path: Path) -> None:
     repo = HeadstampParentRepo(db)
 
     p = repo.add(model_id, "WIN")
-    assert p.id is not None
-    assert repo.find_by_name(model_id, "win").id == p.id  # case-insensitive
+    assert p.id
+    found = repo.find_by_name(model_id, "win")
+    assert found is not None and found.id == p.id  # case-insensitive
     assert [x.name for x in repo.list_for_model(model_id)] == ["WIN"]
 
     repo.rename(p.id, "WINCHESTER")
-    assert repo.get(p.id).name == "WINCHESTER"
+    renamed = repo.get(p.id)
+    assert renamed is not None and renamed.name == "WINCHESTER"
 
     repo.delete(p.id)
     assert repo.list_for_model(model_id) == []

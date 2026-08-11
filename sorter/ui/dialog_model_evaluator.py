@@ -60,7 +60,10 @@ class ModelEvaluatorDialog(tk.Toplevel):
         self._cart_name = cart.name if cart else "—"
 
         self.title(f"Evaluate Model — {model.name}")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(True, True)
         self.minsize(900, 600)
         self.configure(bg=PALETTE["bg_window"])
@@ -70,6 +73,10 @@ class ModelEvaluatorDialog(tk.Toplevel):
         self._running = False
         self._stop_event = threading.Event()
         self._progress_topic = f"eval/progress/{id(self)}"
+        # Set by `_run` before the worker thread starts; `_do_eval` only ever
+        # runs after that, but the checker can't see across the
+        # run_worker(...) call, so it's declared optional here.
+        self._run_folder: str | None = None
 
         self._build_ui()
         self._refresh_history()
@@ -431,6 +438,12 @@ class ModelEvaluatorDialog(tk.Toplevel):
             raise RuntimeError(
                 "PyTorch is not installed — it's required to evaluate a local model (pip install .[ml])."
             )
+        # `_run` always sets this, and already verified the checkpoint
+        # exists, before starting the worker that calls here.
+        if self._run_folder is None:
+            raise RuntimeError("Evaluation worker started without a folder to evaluate.")
+        if not self.model.model_path:
+            raise RuntimeError("Evaluation worker started without a trained checkpoint.")
         image_size = int(self.model.training_config.image_size) if self.model.training_config else None
         out = evaluator.evaluate_folder(
             self._run_folder,
@@ -653,6 +666,12 @@ class ModelEvaluatorDialog(tk.Toplevel):
             return [r for r in results if r["filepath"] != old_path]
         if action == "reclassified":
             new_path = change.get("new_path")
+            # The preview dialog only ever emits "reclassified" with a
+            # `new_path` string (see dialog_image_preview._reclassify) — the
+            # dict is typed as `dict[str, Any]` because it also carries
+            # "deleted" changes, so the checker can't see that.
+            if not isinstance(new_path, str):
+                raise ValueError(f"'reclassified' change missing a new_path: {change!r}")
             raw = change.get("new_headstamp") or ""
             original, was_mapped = evaluator.map_classification(raw, mapping)
             out = []
@@ -698,7 +717,10 @@ class ClassMapperDialog(tk.Toplevel):
     ) -> None:
         super().__init__(parent)
         self.title("Map folder classes to model")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(True, True)
         self.minsize(520, 360)
         self.configure(bg=PALETTE["bg_window"])

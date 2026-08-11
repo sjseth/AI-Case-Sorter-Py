@@ -67,7 +67,10 @@ class ShareModelDialog(tk.Toplevel):
         self._in_flight = False
 
         self.title("Share a Model")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(False, False)
 
         frm = ttk.Frame(self, padding=12)

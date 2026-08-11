@@ -271,6 +271,12 @@ class RunController:
         debug_log(f"run-hook: model_id={model_id} label={label!r} confidence={confidence}")
         try:
             model = ModelRepo(self.db).get(model_id)
+            if model is None:
+                # The active-model id points at a row that no longer exists
+                # (e.g. deleted between the settings read and here) — nothing
+                # to capture feedback against.
+                debug_log(f"run-hook: active model {model_id} not found in DB — feedback not applicable")
+                return
             if not self._feedback.should_capture(
                 model,
                 confidence,

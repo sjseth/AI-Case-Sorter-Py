@@ -6,7 +6,9 @@ UI code never touches `sqlite3` directly.
 
 from __future__ import annotations
 
+import builtins
 import json
+import sqlite3
 from typing import Any
 
 from .db import Database
@@ -21,11 +23,27 @@ from .models import (
 )
 
 
+def _require_rowid(cursor: sqlite3.Cursor) -> int:
+    """`Cursor.lastrowid` is typed `int | None` in the stdlib stubs because it's
+    `None` before any statement runs, or after one that isn't an INSERT — but a
+    successful `INSERT` against one of this module's rowid tables always sets
+    it. `None` here would mean the statement above didn't actually insert a
+    row, which is a programming error in this module, not a condition callers
+    should have to handle.
+    """
+    if cursor.lastrowid is None:
+        raise RuntimeError("INSERT did not return a row id")
+    return cursor.lastrowid
+
+
 class CartridgeRepo:
     def __init__(self, db: Database) -> None:
         self.db = db
 
-    def list(self) -> list[Cartridge]:
+    # Return-annotated `builtins.list[...]` rather than bare `list[...]`: a
+    # method literally named `list` shadows the builtin within this class body
+    # for every annotation written after it, including its own.
+    def list(self) -> builtins.list[Cartridge]:
         rows = self.db.conn.execute("SELECT id, name FROM cartridges ORDER BY name COLLATE NOCASE").fetchall()
         return [Cartridge.from_row(r) for r in rows]
 
@@ -39,7 +57,7 @@ class CartridgeRepo:
 
     def create(self, name: str) -> Cartridge:
         cur = self.db.conn.execute("INSERT INTO cartridges(name) VALUES (?)", (name,))
-        return Cartridge(id=cur.lastrowid, name=name)
+        return Cartridge(id=_require_rowid(cur), name=name)
 
     def get_or_create(self, name: str) -> Cartridge:
         existing = self.find_by_name(name)
@@ -68,11 +86,14 @@ class ModelRepo:
 
     # ---- read ----------------------------------------------------------------
 
-    def list(self) -> list[Model]:
+    # Return-annotated `builtins.list[...]` rather than bare `list[...]`: a
+    # method literally named `list` shadows the builtin within this class body
+    # for every annotation written after it, including its own.
+    def list(self) -> builtins.list[Model]:
         rows = self.db.conn.execute("SELECT * FROM models ORDER BY name COLLATE NOCASE").fetchall()
         return [Model.from_row(r) for r in rows]
 
-    def list_by_cartridge(self, cartridge_id: int) -> list[Model]:
+    def list_by_cartridge(self, cartridge_id: int) -> builtins.list[Model]:
         rows = self.db.conn.execute(
             "SELECT * FROM models WHERE cartridge_id = ? ORDER BY name COLLATE NOCASE",
             (cartridge_id,),
@@ -152,11 +173,11 @@ class ModelRepo:
                 model.model_path,
             ),
         )
-        model.id = cur.lastrowid
+        model.id = _require_rowid(cur)
         return model
 
     def update(self, model: Model) -> None:
-        if model.id is None:
+        if not model.id:
             raise ValueError("Cannot update a model with no id")
         if model.model_mode not in SUPPORTED_MODEL_MODES:
             raise ValueError(f"Unsupported model_mode: {model.model_mode!r}")
@@ -241,7 +262,7 @@ class HeadstampRepo:
             "INSERT INTO headstamps(name, model_id, slot) VALUES (?, ?, ?)",
             (name, model_id, slot),
         )
-        return Headstamp(id=cur.lastrowid, name=name, model_id=model_id, slot=slot)
+        return Headstamp(id=_require_rowid(cur), name=name, model_id=model_id, slot=slot)
 
     def update_slot(self, headstamp_id: int, slot: int) -> None:
         self.db.conn.execute("UPDATE headstamps SET slot = ? WHERE id = ?", (slot, headstamp_id))
@@ -313,7 +334,7 @@ class HeadstampParentRepo:
             "INSERT INTO headstamp_parents(name, model_id) VALUES (?, ?)",
             (name, model_id),
         )
-        return HeadstampParent(id=cur.lastrowid, name=name, model_id=model_id)
+        return HeadstampParent(id=_require_rowid(cur), name=name, model_id=model_id)
 
     def rename(self, parent_id: int, new_name: str) -> None:
         self.db.conn.execute(
@@ -385,7 +406,7 @@ class SlotTemplateRepo:
             (model_id, mode, name, json.dumps(payload)),
         )
         return SlotTemplate(
-            id=cur.lastrowid,
+            id=_require_rowid(cur),
             model_id=model_id,
             mode=mode,
             name=name,

@@ -42,6 +42,15 @@ def _mgr(tmp_path: Path) -> AuthManager:
     return AuthManager(cache_path=tmp_path / "cache.bin", client_factory=_FakeClient)
 
 
+def _fake_client(mgr: AuthManager) -> _FakeClient:
+    """`AuthManager._client` is typed `Any | PublicClientApplication` since it
+    can hold a real MSAL client; every test here builds it via
+    `client_factory=_FakeClient`, so narrow back to the fake to poke its
+    test-only knobs."""
+    assert isinstance(mgr._client, _FakeClient)
+    return mgr._client
+
+
 def test_initially_not_authenticated(tmp_path: Path) -> None:
     mgr = _mgr(tmp_path)
     assert mgr.current_account() is None
@@ -51,7 +60,7 @@ def test_initially_not_authenticated(tmp_path: Path) -> None:
 
 def test_login_interactive_success(tmp_path: Path) -> None:
     mgr = _mgr(tmp_path)
-    mgr._client.next_interactive_result = {
+    _fake_client(mgr).next_interactive_result = {
         "access_token": "TOKEN_A",
         "expires_in": 3600,
         "id_token_claims": {"name": "Test User", "emails": ["test@example.com"]},
@@ -65,7 +74,7 @@ def test_login_interactive_success(tmp_path: Path) -> None:
 
 def test_login_failure_raises_auth_error(tmp_path: Path) -> None:
     mgr = _mgr(tmp_path)
-    mgr._client.next_interactive_result = {"error_description": "user cancelled"}
+    _fake_client(mgr).next_interactive_result = {"error_description": "user cancelled"}
     with pytest.raises(AuthError) as exc:
         mgr.login_interactive()
     assert "user cancelled" in str(exc.value)
@@ -73,19 +82,19 @@ def test_login_failure_raises_auth_error(tmp_path: Path) -> None:
 
 def test_port_in_use_surfaced(tmp_path: Path) -> None:
     mgr = _mgr(tmp_path)
-    mgr._client.next_interactive_exc = OSError(98, "address already in use")
+    _fake_client(mgr).next_interactive_exc = OSError(98, "address already in use")
     with pytest.raises(PortInUseError):
         mgr.login_interactive()
 
 
 def test_acquire_silent_after_login(tmp_path: Path) -> None:
     mgr = _mgr(tmp_path)
-    mgr._client.next_interactive_result = {
+    _fake_client(mgr).next_interactive_result = {
         "access_token": "T1",
         "id_token_claims": {"name": "X", "emails": ["x@x.com"]},
     }
     mgr.login_interactive()
-    mgr._client.next_silent_result = {
+    _fake_client(mgr).next_silent_result = {
         "access_token": "T2",
         "id_token_claims": {"name": "X", "emails": ["x@x.com"]},
     }
@@ -96,7 +105,7 @@ def test_acquire_silent_after_login(tmp_path: Path) -> None:
 
 def test_logout_clears_account(tmp_path: Path) -> None:
     mgr = _mgr(tmp_path)
-    mgr._client.next_interactive_result = {
+    _fake_client(mgr).next_interactive_result = {
         "access_token": "T",
         "id_token_claims": {"emails": ["x@x.com"]},
     }
@@ -115,7 +124,7 @@ def test_identity_prefers_account_claims(tmp_path: Path) -> None:
     """When the account dict carries id_token_claims, use them directly
     (no silent token call needed)."""
     mgr = _mgr(tmp_path)
-    mgr._client._accounts = [
+    _fake_client(mgr)._accounts = [
         {
             "home_account_id": "u1",
             # B2C username is the ugly policy-prefixed object id.
@@ -131,13 +140,13 @@ def test_identity_prefers_account_claims(tmp_path: Path) -> None:
 def test_identity_falls_back_to_silent_token(tmp_path: Path) -> None:
     """Account dict without claims → resolve via a silent token read."""
     mgr = _mgr(tmp_path)
-    mgr._client._accounts = [
+    _fake_client(mgr)._accounts = [
         {
             "home_account_id": "u1",
             "username": "abc123-b2c_1_signinup.def456",
         }
     ]
-    mgr._client.next_silent_result = {
+    _fake_client(mgr).next_silent_result = {
         "access_token": "T",
         "id_token_claims": {"name": "Bob", "emails": ["bob@example.com"]},
     }
@@ -183,21 +192,21 @@ def test_extract_name_falls_back_to_given_family() -> None:
     assert _extract_name({}) is None
 
 
-def test_identity_uses_stashed_claims_after_login(tmp_path: Path) -> None:
+def test_identity_uses_stashed_claims_after_login(tmp_path: Path, monkeypatch) -> None:
     """After login_interactive, identity() must immediately return the new
     user's name+email — even before the MSAL cache search would surface
     the freshly-written token. Regression: re-login within the same
     process used to leave the Community Info label blank until restart.
     """
     mgr = _mgr(tmp_path)
-    mgr._client.next_interactive_result = {
+    _fake_client(mgr).next_interactive_result = {
         "access_token": "T",
         "id_token_claims": {"name": "Fresh User", "emails": ["fresh@example.com"]},
     }
     mgr.login_interactive()
     # Even with no cache hit + no account claims, the stashed claims win.
-    mgr._cache.search = lambda *_a, **_k: []
-    mgr._client._accounts[0].pop("id_token_claims", None)
+    monkeypatch.setattr(mgr._cache, "search", lambda *_a, **_k: [])
+    _fake_client(mgr)._accounts[0].pop("id_token_claims", None)
     name, email = mgr.identity()
     assert name == "Fresh User"
     assert email == "fresh@example.com"
@@ -207,7 +216,7 @@ def test_identity_stash_cleared_on_logout(tmp_path: Path) -> None:
     """A subsequent identity() call after logout must not return the
     previous user's claims."""
     mgr = _mgr(tmp_path)
-    mgr._client.next_interactive_result = {
+    _fake_client(mgr).next_interactive_result = {
         "access_token": "T",
         "id_token_claims": {"name": "Old User", "emails": ["old@example.com"]},
     }
@@ -217,14 +226,14 @@ def test_identity_stash_cleared_on_logout(tmp_path: Path) -> None:
     assert mgr._last_claims is None
 
 
-def test_identity_decodes_cached_id_token(tmp_path: Path) -> None:
+def test_identity_decodes_cached_id_token(tmp_path: Path, monkeypatch) -> None:
     """The primary path: decode the ID token JWT held in the MSAL cache.
 
     This is what makes the label survive a cold restart — no account-dict
     claims, no silent token, just the cached id token.
     """
     mgr = _mgr(tmp_path)
-    mgr._client._accounts = [
+    _fake_client(mgr)._accounts = [
         {
             "home_account_id": "u1",
             "username": "abc123-b2c_1_signinup.def456",
@@ -232,12 +241,12 @@ def test_identity_decodes_cached_id_token(tmp_path: Path) -> None:
     ]
     jwt = _make_jwt({"name": "Cached User", "emails": ["cached@example.com"]})
     # Stub the cache search to return an ID-token entry carrying the JWT.
-    mgr._cache.search = lambda *_a, **_k: [{"secret": jwt}]
+    monkeypatch.setattr(mgr._cache, "search", lambda *_a, **_k: [{"secret": jwt}])
     name, email = mgr.identity()
     assert name == "Cached User"
     assert email == "cached@example.com"
     # No silent call should have been needed.
-    assert mgr._client.next_silent_result is None
+    assert _fake_client(mgr).next_silent_result is None
 
 
 def test_cache_file_persisted_and_chmod(tmp_path: Path) -> None:

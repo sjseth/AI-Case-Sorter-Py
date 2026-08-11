@@ -94,9 +94,12 @@ def _torch():
 
         importlib.invalidate_caches()
         try:
-            import torch
-            import torch.nn.functional as F
-            from torchvision import models
+            # torch/torchvision are the optional `[ml]` extra — genuinely
+            # absent from this dev/CI environment by design; the except below
+            # is exactly the runtime guard for that.
+            import torch  # ty: ignore[unresolved-import]
+            import torch.nn.functional as F  # ty: ignore[unresolved-import]
+            from torchvision import models  # ty: ignore[unresolved-import]
         except ImportError as exc:
             raise LocalInferenceError("PyTorch is not installed. Install with `pip install .[ml]`.") from exc
         _torch_mod = torch
@@ -216,7 +219,9 @@ def _dump_environment(torch_mod: Any) -> None:
             # the issue is something in our pipeline (.to(device) walks,
             # tensor strides, etc.).
             try:
-                from torchvision import models as tv_models
+                # torchvision is the optional `[ml]` extra — genuinely absent
+                # from this dev/CI environment by design.
+                from torchvision import models as tv_models  # ty: ignore[unresolved-import]
 
                 bench_net = tv_models.convnext_tiny(weights=None).cuda().eval()
                 bench_x = torch_mod.randn(1, 3, 224, 224, device="cuda")

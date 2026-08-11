@@ -1,16 +1,14 @@
-"""Characterization tests for the real SerialBroker line parser and handshake.
+"""Tests for the real SerialBroker line parser and handshake.
 
-`test_serial_emulator.py` exercises the *fake* broker; nothing covered the real
-`SerialBroker._process_buffer` / `try_open` until now.
+`test_serial_emulator.py` exercises the *fake* broker; this file covers the
+real `SerialBroker._process_buffer` / `try_open`.
 
-Several assertions here deliberately pin behavior that is arguably wrong — the
-dispatch chain is a sequence of unanchored `in` substring tests, so a line like
-``"error: broken sensor"`` is routed to `on_ok` (because "broken" contains
-"ok") and never reaches `on_error`. GitHub issue #34 proposes tightening that
-matching. These tests exist so the fix shows up as an explicit, reviewable flip
-of the assertions rather than as an invisible behavior change.
-
-This was found by reading the code, not observed on hardware.
+The dispatch chain matches each response as an *anchored token* (issue #34):
+the line, lowercased and stripped, equals ``ok``/``done``/``error``/``waiting``
+or begins with it followed by a non-alphanumeric delimiter. A token embedded in
+a larger word ("br-OK-en", "unDONE") does not match. This file originally
+pinned the old unanchored-substring behavior as characterization tests; the
+assertions below are the deliberate, reviewable flip of those pins.
 """
 
 from __future__ import annotations
@@ -123,7 +121,7 @@ def test_partial_line_is_held_until_the_terminator_arrives(broker: SerialBroker,
     assert sink.waiting == ["waiting"]
 
 
-def test_reader_loop_stamps_a_newline_onto_a_partial_read(broker: SerialBroker, sink: _Sink) -> None:
+def test_reader_loop_stamps_a_newline_onto_a_partial_read(broker: SerialBroker, sink: _Sink, monkeypatch) -> None:
     """Characterization: a timed-out mid-line read is dispatched, not buffered.
 
     `_reader_loop` appends `line + "\\n"` whenever pyserial's `readline()`
@@ -134,7 +132,7 @@ def test_reader_loop_stamps_a_newline_onto_a_partial_read(broker: SerialBroker, 
     a line split mid-word is how a fragment could be misrouted. See issue #34.
     """
     fake = _PartialReadSerial(["waiti"], broker._stop_event)
-    broker._sp = fake  # type: ignore[assignment]
+    monkeypatch.setattr(broker, "_sp", fake)
 
     broker._reader_loop()
 
@@ -181,57 +179,70 @@ def test_handler_exception_does_not_stop_the_remaining_handlers(broker: SerialBr
     assert seen == ["done"]
 
 
-# ----- characterization: unanchored substring matching -----------------------
+# ----- anchored token matching (the #34 fix) ---------------------------------
 
 
-def test_error_line_containing_ok_is_routed_to_on_ok(broker: SerialBroker, sink: _Sink) -> None:
-    # Characterization: matching is an unanchored substring test and the "ok"
-    # branch `continue`s before the "error" branch is ever reached, so
-    # "br-OK-en" wins and this fires on_ok. The error is silently reported as a
-    # success. See issue #34 — flipping this assertion is the point of that fix.
+def test_error_line_containing_ok_is_routed_to_on_error(broker: SerialBroker, sink: _Sink) -> None:
+    # Under the old unanchored matching, "br-OK-en" won and this fired on_ok —
+    # an error silently reported as a success. Anchored matching routes it by
+    # its actual `error` prefix. This is the flip issue #34 exists for.
     _feed(broker, "error: broken sensor\n")
-    assert sink.ok == ["error: broken sensor"]
-    assert sink.error == []
+    assert sink.error == ["error: broken sensor"]
+    assert sink.ok == []
 
 
 @pytest.mark.parametrize("line", ["token", "bookkeeping"])
-def test_word_merely_containing_ok_fires_on_ok(broker: SerialBroker, sink: _Sink, line: str) -> None:
-    # Characterization: any line containing the substring "ok" anywhere is
-    # treated as an acknowledgement. See issue #34.
+def test_word_merely_containing_ok_falls_through_to_on_response(broker: SerialBroker, sink: _Sink, line: str) -> None:
+    # A token embedded in a larger word is not an acknowledgement. See #34.
     _feed(broker, line + "\n")
-    assert sink.ok == [line]
-    assert sink.response == []
+    assert sink.response == [line]
+    assert sink.ok == []
 
 
 @pytest.mark.parametrize("line", ["abandoned", "sensor calibration done at 12:00", "undone"])
-def test_line_merely_containing_done_fires_on_done(broker: SerialBroker, sink: _Sink, line: str) -> None:
-    # Characterization: "done" is checked first and unanchored, so a diagnostic
-    # line that merely mentions it satisfies a pending feed/sort wait. See
-    # issue #34.
-    #
-    # "undone" is the case worth keeping of these: it is the semantic
-    # *inversion* — a board reporting that an operation was reversed reads as
-    # one that completed. The "ok" branch has a dedicated test for its
-    # equivalent ("error: broken sensor"); this is the "done" branch's, and
-    # "done" is the one a pending feed_one()/sort_and_move() waits on.
+def test_line_merely_containing_done_falls_through_to_on_response(broker: SerialBroker, sink: _Sink, line: str) -> None:
+    # A line that merely mentions "done" must not satisfy a pending feed/sort
+    # wait. "undone" is the semantic *inversion* — a board reporting an
+    # operation was reversed must not read as one that completed. See #34.
     _feed(broker, line + "\n")
-    assert sink.done == [line]
+    assert sink.response == [line]
+    assert sink.done == []
+
+
+@pytest.mark.parametrize(
+    ("line", "attr"),
+    [
+        ("error: sensor 3", "error"),
+        ("done.", "done"),
+        ("ok 123", "ok"),
+        ("waiting for case", "waiting"),
+        ("ERROR: Sensor 3", "error"),
+    ],
+)
+def test_token_followed_by_a_delimiter_still_matches(broker: SerialBroker, sink: _Sink, line: str, attr: str) -> None:
+    # Anchoring must not lose the legitimate "token plus detail" shape.
+    _feed(broker, line + "\n")
+    assert getattr(sink, attr) == [line]
     assert sink.response == []
 
 
-def test_a_diagnostic_line_satisfies_a_pending_feed_one(broker: SerialBroker) -> None:
-    """Characterization: the `done` substring completes a real feed/sort wait.
+def test_a_diagnostic_line_does_not_satisfy_a_pending_feed_one(
+    broker: SerialBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A line that only *mentions* "done" no longer completes a feed/sort wait.
 
-    This is the consequence that makes the unanchored matching matter rather
+    This is the consequence that made the old unanchored matching matter rather
     than merely being untidy. `feed_one()` / `sort_and_move()` /
-    `force_sort_and_move()` all return by waiting on `on_done`, so a board line
-    that only *mentions* "done" reports a physical operation as complete when
-    nothing completed. See issue #34.
+    `force_sort_and_move()` all return by waiting on `on_done`, so a mere
+    mention of "done" reported a physical operation as complete when nothing
+    completed. A real `done` line afterwards must still satisfy it. See #34.
     """
     fake = _WritableSerial()
-    broker._sp = fake  # type: ignore[assignment]
+    monkeypatch.setattr(broker, "_sp", fake)
+    # Keep the "wait must expire" half fast; the timeout's value is not under test.
+    monkeypatch.setattr(serial_broker, "FEED_TIMEOUT_S", 0.3)
 
-    def feed_when_awaited() -> None:
+    def feed_when_awaited(lines: list[str]) -> None:
         # _await_topic appends its handler after send_command returns; wait for
         # it to land rather than sleeping a fixed amount, so this stays fast
         # and deterministic.
@@ -239,33 +250,157 @@ def test_a_diagnostic_line_satisfies_a_pending_feed_one(broker: SerialBroker) ->
             if broker.on_done:
                 break
             time.sleep(0.001)
-        _feed(broker, "sensor calibration done at 12:00\n")
+        for line in lines:
+            _feed(broker, line)
 
-    waiter = threading.Thread(target=feed_when_awaited)
+    waiter = threading.Thread(target=feed_when_awaited, args=(["sensor calibration done at 12:00\n"],))
     waiter.start()
     try:
-        assert broker.feed_one() is True, "a mere mention of 'done' satisfied the wait"
+        assert broker.feed_one() is False, "a mere mention of 'done' satisfied the wait"
     finally:
         waiter.join()
 
-    assert fake.written == [b"xf:0\n"]
+    waiter = threading.Thread(target=feed_when_awaited, args=(["sensor calibration done at 12:00\n", "done\n"],))
+    waiter.start()
+    try:
+        assert broker.feed_one() is True, "a real 'done' line no longer satisfies the wait"
+    finally:
+        waiter.join()
+
+    assert fake.written == [b"xf:0\n", b"xf:0\n"]
 
 
-def test_done_beats_ok_beats_error_beats_waiting(broker: SerialBroker, sink: _Sink) -> None:
-    # Characterization: the branches are checked in a fixed order and each one
-    # `continue`s, so a line matching several only ever fires the first. See
-    # issue #34.
+def test_error_prefix_beats_everything(broker: SerialBroker, sink: _Sink) -> None:
+    # Anchored prefixes mean at most one branch can match a line, but `error`
+    # is deliberately checked first: a line carrying both readings must be
+    # treated as the failure it is, whatever the matcher becomes. See #34.
+    _feed(broker, "error: done\n")
+    assert sink.error == ["error: done"]
+    assert sink.done == sink.ok == sink.waiting == []
+
+
+def test_a_line_opening_with_done_still_fires_on_done(broker: SerialBroker, sink: _Sink) -> None:
     _feed(broker, "done ok error waiting\n")
     assert sink.done == ["done ok error waiting"]
     assert sink.ok == sink.error == sink.waiting == []
 
 
-def test_json_config_payload_containing_ok_never_reaches_on_response(broker: SerialBroker, sink: _Sink) -> None:
-    # Characterization: get_config() captures JSON from on_response, so a board
-    # config whose keys happen to contain "ok"/"done" would be swallowed by the
-    # ack branches and the getconfig call would time out. See issue #34.
+def test_json_config_payload_containing_ok_reaches_on_response(broker: SerialBroker, sink: _Sink) -> None:
+    # get_config() captures JSON from on_response. Under unanchored matching a
+    # board config whose keys contain "ok" ("lookahead") was swallowed by the
+    # ack branches and the getconfig call timed out. See #34.
     _feed(broker, '{"feedspeed": 60, "lookahead": 2}\n')
-    assert sink.ok == ['{"feedspeed": 60, "lookahead": 2}']
+    assert sink.response == ['{"feedspeed": 60, "lookahead": 2}']
+    assert sink.ok == []
+
+
+# ----- the real firmware's vocabulary ----------------------------------------
+#
+# Everything above tests the parser against lines chosen to stress it. This
+# section tests it against the lines a real board actually emits.
+#
+# The anchored matcher's blast radius is whatever the firmware prints, and the
+# emulator only ever emits the clean tokens the parser wants — so it can never
+# disprove a parser bug. This is the only place the fix is checked against the
+# real vocabulary rather than against itself.
+#
+# Derived by reading every uncommented `Serial.print*` in the board firmware,
+# which is upstream and stays there — this repo does not vendor a copy:
+#
+#   https://github.com/sjseth/AI-Case-Sorter-CS7.2/blob/
+#     cd2d01ae3c6ef78a0eebcac13619e11fd5c7ca53/MicroController/
+#     CS72_Firmware_V1.7/CS72_Firmware_V1.7.ino   (FIRMWARE_VERSION 7.2.260128.7.1)
+#
+# The commit is pinned so a future reader can diff forward and see whether the
+# vocabulary moved. If it did, fix these cases against the newer firmware.
+
+
+@pytest.mark.parametrize(
+    ("line", "attr"),
+    [
+        # Boot banner and acks.
+        ("Ready", "response"),
+        ("ok", "ok"),
+        (" ok", "ok"),  # the `ping` reply — note the leading space
+        ("7.2.260128.7.1", "response"),  # `version`; try_open matches this separately
+        # The two lines a run actually waits on.
+        ("done", "done"),
+        ("waiting for brass", "waiting"),
+        # Every failure the board can report. All `error:`-prefixed, no space
+        # after the colon — the exact shape anchored matching is written for.
+        ("error:feed overtravel detected", "error"),
+        ("error:feed stallguard", "error"),
+        ("error:feed stallguard (homing)", "error"),
+        ("error:sort stallguard", "error"),
+        ("error:sort stallguard (homing)", "error"),
+        ("error:sort offset stallguard (homing)", "error"),
+        # Stall diagnostics, printed just before the error line. A feed stall
+        # splits across two lines (println twice), a sort stall does not.
+        ("STALL FEED SG_RESULT=112", "response"),
+        (", DIAG=0", "response"),
+        ("STALL SORT SG_RESULT=97, DIAG=1", "response"),
+        # `status`.
+        ("SORT microsteps: 16", "response"),
+        ("SORT current: 900", "response"),
+        ("SORT Stealth: 1", "response"),
+        ("FEED microsteps: 16", "response"),
+        ("FEED current: 1200", "response"),
+        ("FEED Stealth: 0", "response"),
+        # Test cycles.
+        ("testing started", "response"),
+        ("3 - 5", "response"),
+        ("3 - Sorting to: 5", "response"),
+        ("Sort Test Completed", "response"),
+    ],
+)
+def test_real_firmware_line_routes_to_the_expected_callback(
+    broker: SerialBroker, sink: _Sink, line: str, attr: str
+) -> None:
+    _feed(broker, line + "\n")
+    assert getattr(sink, attr) == [line.strip()]
+
+
+def test_real_getconfig_payload_reaches_on_response(broker: SerialBroker, sink: _Sink) -> None:
+    """The board's real `getconfig` reply, verbatim in shape (one line, no ack).
+
+    `get_config()` captures it from `on_response`, so any ack branch that
+    swallowed it would hang the Serial tab's config load.
+    """
+    payload = (
+        '{"FeedMotorCurrent":1200,"FeedMotorSpeed":60,"FeedCycleSteps":200,'
+        '"SortMotorCurrent":900,"SortMotorSpeed":80,"SortSteps":400,'
+        '"NotificationDelay":50,"SlotDropDelay":100,"AirDropEnabled":1,'
+        '"AirDropPostDelay":10,"AirDropPreDelay":20,"AirDropSignalTime":30,'
+        '"FeedHomingOffset":0,"SortHomingOffset":0,"AutoMotorStandbyTimeout":600,'
+        '"CaseFanSpeedEnabled":1,"CaseFanLevel":128,"CameraLEDLevel":200,'
+        '"DebounceTimeout":250,"DebouncePauseTime":40}'
+    )
+    _feed(broker, payload + "\n")
+    assert sink.response == [payload]
+    assert sink.ok == sink.done == sink.error == sink.waiting == []
+
+
+def test_a_real_stall_reports_as_an_error_after_its_diagnostic(broker: SerialBroker, sink: _Sink) -> None:
+    """A feed stall arrives as three lines, and only the last one is the error.
+
+    `triggerFeedStall` prints `STALL FEED SG_RESULT=` + the value with
+    `println`, so the `, DIAG=` half lands on its own line, then the
+    `error:…` message. The two diagnostic lines must stay noise — routing
+    either of them as an ack would let a stalled board look like a working one.
+    """
+    _feed(broker, "STALL FEED SG_RESULT=112\n, DIAG=0\nerror:feed stallguard\n")
+    assert sink.response == ["STALL FEED SG_RESULT=112", ", DIAG=0"]
+    assert sink.error == ["error:feed stallguard"]
+    assert sink.done == sink.ok == []
+
+
+def test_the_real_ping_ack_is_an_ok_despite_its_leading_space(broker: SerialBroker, sink: _Sink) -> None:
+    # The firmware answers `ping` with `" ok\n"`. The parser's strip is what
+    # makes that an ack rather than an unrecognized line, so pin it: the ping
+    # thread runs on every idle connection, so this is the most frequently
+    # exercised line in the whole protocol.
+    _feed(broker, " ok\n")
+    assert sink.ok == ["ok"]
     assert sink.response == []
 
 
@@ -349,15 +484,13 @@ def _patch_serial(monkeypatch: pytest.MonkeyPatch, fake: _FakeSerial) -> dict[st
     return captured
 
 
-def test_try_open_accepts_a_version_line_containing_ok(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Characterization: the handshake accepts ANY version reply containing the
-    # substring "ok" — including one that is reporting a problem. See issue #34.
-    fake = _FakeSerial(lines=["\n", "not ok, firmware broken\n"])
+def test_try_open_accepts_an_ok_version_reply(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeSerial(lines=["\n", "OK\n"])
     kwargs = _patch_serial(monkeypatch, fake)
     try:
         assert broker.try_open() is True
         assert broker.is_connected is True
-        assert broker.firmware_version == "not ok, firmware broken"
+        assert broker.firmware_version == "OK"
         assert fake.written == [b"version\n"]
         # The port is opened at the (user-configurable) probe timeout and only
         # relaxed to the steady-state read timeout once the board answers.
@@ -369,16 +502,24 @@ def test_try_open_accepts_a_version_line_containing_ok(broker: SerialBroker, mon
         broker.close()
 
 
-def test_try_open_accepts_anything_containing_7_dot(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Characterization: "7." is the firmware-family check, unanchored, so a
-    # timestamp or a bare "17.5" passes the handshake. See issue #34.
+def test_try_open_rejects_a_version_line_merely_containing_ok(
+    broker: SerialBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Under unanchored matching the handshake accepted ANY version reply
+    # containing the substring "ok" — including one reporting a problem. See #34.
+    fake = _FakeSerial(lines=["\n", "not ok, firmware broken\n"])
+    _patch_serial(monkeypatch, fake)
+    assert broker.try_open() is False
+    assert broker.is_connected is False
+
+
+def test_try_open_rejects_a_line_merely_containing_7_dot(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    # "7." is the firmware-family check, now anchored to the start of the
+    # version reply, so a timestamp or a bare "17.5" no longer passes. See #34.
     fake = _FakeSerial(lines=["\n", "boot at 17.5s\n"])
     _patch_serial(monkeypatch, fake)
-    try:
-        assert broker.try_open() is True
-        assert broker.firmware_version == "boot at 17.5s"
-    finally:
-        broker.close()
+    assert broker.try_open() is False
+    assert broker.is_connected is False
 
 
 def test_try_open_accepts_a_real_version_string(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -387,6 +528,25 @@ def test_try_open_accepts_a_real_version_string(broker: SerialBroker, monkeypatc
     try:
         assert broker.try_open() is True
         assert broker.firmware_version == "7.4.1"
+    finally:
+        broker.close()
+
+
+def test_try_open_accepts_the_real_boards_boot_banner_and_version(
+    broker: SerialBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The handshake as a real CS7.2 board actually plays it.
+
+    `setup()` prints `Ready`, then `version` answers with the firmware's
+    `FIRMWARE_VERSION`. Pinning the literal version keeps the `7.`-prefix
+    check honest: it is a firmware *series* match, and a future 8.x board
+    would fall back to the banner.
+    """
+    fake = _FakeSerial(lines=["Ready\n", "7.2.260128.7.1\n"])
+    _patch_serial(monkeypatch, fake)
+    try:
+        assert broker.try_open() is True
+        assert broker.firmware_version == "7.2.260128.7.1"
     finally:
         broker.close()
 

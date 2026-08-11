@@ -55,9 +55,16 @@ def normalize_upload_mode(raw: Any, *, feedback_enabled: bool) -> str:
     return "Instant" if feedback_enabled else "Manual"
 
 
+# Row ids are ``int``, not ``int | None``: SQLite rowids start at 1, so **0 is
+# the "not persisted yet" sentinel** for every row dataclass below. The optional
+# spelling was only load-bearing at the handful of sites that build a row before
+# inserting it, while forcing the ~150 places that pass a *loaded* row's id to a
+# repo method to re-prove it wasn't None. Genuinely nullable columns
+# (``SlotTemplate.model_id`` = AI Config mode, ``Headstamp.parent_id`` =
+# unassigned) keep their ``| None``.
 @dataclass
 class Cartridge:
-    id: int | None = None
+    id: int = 0
     name: str = ""
 
     @classmethod
@@ -67,7 +74,7 @@ class Cartridge:
 
 @dataclass
 class Headstamp:
-    id: int | None = None
+    id: int = 0
     name: str = ""
     model_id: int = 0
     slot: int = 0
@@ -97,7 +104,7 @@ class HeadstampParent:
     classification mode (analogous to ``Headstamp.slot`` for child routing).
     """
 
-    id: int | None = None
+    id: int = 0
     name: str = ""
     model_id: int = 0
     slot: int = 0
@@ -133,7 +140,7 @@ class SlotTemplate:
     re-added (e.g. a re-import). Unknown names are ignored when applied.
     """
 
-    id: int | None = None
+    id: int = 0
     model_id: int | None = None
     mode: str = "standard"
     name: str = ""
@@ -323,7 +330,7 @@ class TrainingConfig:
 
 @dataclass
 class Model:
-    id: int | None = None
+    id: int = 0
     name: str = ""
     cartridge_id: int = 0
     model_mode: str = "convnext_tiny"

@@ -41,6 +41,31 @@ jobs:
       - name: ruff format --check
         run: uv run --no-sync ruff format --check .
 
+  # Blocking. The tree is at zero diagnostics, so any finding here is one this
+  # PR introduced -- there is no backlog left to hide in.
+  ty:
+    name: ty (type check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      # Full dependency sync (not --only-group dev): ty resolves third-party
+      # imports from the environment, so without the runtime deps installed the
+      # output drowns in unresolved-import noise. --no-install-project: building
+      # would fire hatch-vcs's hook, which needs tags this checkout lacks.
+      - name: Install dependencies from the lockfile
+        run: uv sync --locked --no-install-project
+
+      - name: ty check
+        run: uv run --no-sync ty check --output-format github
+
   workflows:
     name: lint the workflows themselves
     runs-on: ubuntu-latest

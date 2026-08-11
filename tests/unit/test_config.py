@@ -191,6 +191,7 @@ def test_headstamps_track_active_model(tmp_path: Path) -> None:
         "INSERT INTO models(name, cartridge_id, model_mode) VALUES ('Other', ?, 'convnext_tiny')",
         (cart_row,),
     ).lastrowid
+    assert new_model_id is not None
     SettingsRepo(db).set_active_model_id(new_model_id)
 
     assert cfg.headstamps == []

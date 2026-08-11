@@ -9,6 +9,7 @@ import numpy as np
 from sorter.config import Config
 from sorter.db import Database
 from sorter.events import EventBus
+from sorter.feedback import FeedbackService
 from sorter.run_controller import RunController
 from sorter.serial_emulator import EmulatorBroker
 
@@ -20,6 +21,13 @@ class _FakeCamera:
 
     def capture_frame(self) -> np.ndarray:
         return self.frame
+
+
+def _feedback(ctrl: RunController) -> FeedbackService:
+    """`RunController._feedback` is `FeedbackService | None` (None only when
+    built without a db); every controller here is built with one."""
+    assert ctrl._feedback is not None
+    return ctrl._feedback
 
 
 def _make_controller(tmp_path) -> tuple[RunController, Config, Database]:
@@ -162,6 +170,7 @@ def _link_win_to_brass(db) -> int:
     from sorter.repository import HeadstampParentRepo, HeadstampRepo, SettingsRepo
 
     mid = SettingsRepo(db).get_active_model_id()
+    assert mid is not None
     brass = HeadstampParentRepo(db).add(mid, "Brass")
     win = next(h for h in HeadstampRepo(db).list_for_model(mid) if h.name == "WIN")
     HeadstampRepo(db).set_parent(win.id, brass.id)
@@ -205,7 +214,9 @@ def _enable_feedback(db, *, floor=95, mode="Instant") -> int:
     from sorter.repository import ModelRepo, SettingsRepo
 
     mid = SettingsRepo(db).get_active_model_id()
+    assert mid is not None
     m = ModelRepo(db).get(mid)
+    assert m is not None
     m.community_model_uid = "uid-1"
     m.feedback_loop_enabled = True
     m.feedback_loop_confidence_floor = floor
@@ -249,6 +260,7 @@ def test_feedback_no_capture_for_non_community_model(tmp_path, monkeypatch) -> N
     from sorter.repository import SettingsRepo
 
     mid = SettingsRepo(db).get_active_model_id()
+    assert mid is not None
     with patch("sorter.classifier.classify_active", return_value=("WIN", 5)):
         ctrl.run_once()
     assert FeedbackService(db).count_pending(mid) == 0
@@ -279,7 +291,7 @@ def test_wish_list_capture_during_a_run(tmp_path, monkeypatch) -> None:
     mid = _enable_feedback(db, floor=95, mode="Instant")
     from sorter.feedback import FeedbackService
 
-    ctrl._feedback.set_wish_list(mid, ["WIN"])
+    _feedback(ctrl).set_wish_list(mid, ["WIN"])
     events: list[dict] = []
     ctrl.bus.subscribe("feedback/queued", events.append)
     # 99 is well above the 95 floor, but WIN is wanted → captured anyway.
@@ -296,7 +308,7 @@ def test_wish_list_not_applied_to_manual_feed(tmp_path, monkeypatch) -> None:
     mid = _enable_feedback(db, floor=95)
     from sorter.feedback import FeedbackService
 
-    ctrl._feedback.set_wish_list(mid, ["WIN"])
+    _feedback(ctrl).set_wish_list(mid, ["WIN"])
     with patch("sorter.classifier.classify_active", return_value=("WIN", 99)):
         ctrl.cycle_once()
     assert FeedbackService(db).count_pending(mid) == 0
@@ -333,6 +345,6 @@ def test_refresh_and_clear_wish_list(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setattr(ca, "CommunityApi", _Api)
     assert ctrl.refresh_wish_list(auth=_Auth()) == ["FC"]
-    assert ctrl._feedback.wish_list() == ["fc"]
+    assert _feedback(ctrl).wish_list() == ["fc"]
     ctrl.clear_wish_list()
-    assert ctrl._feedback.wish_list() == []
+    assert _feedback(ctrl).wish_list() == []

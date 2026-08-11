@@ -142,6 +142,7 @@ def test_editor_save_opts_out_and_changes_mode_but_not_floor(root, db) -> None:
 
     assert saved_ids == [m.id]
     reloaded = ModelRepo(db).get(m.id)
+    assert reloaded is not None
     assert reloaded.feedback_loop_enabled is False  # opted out
     assert reloaded.feedback_loop_upload_mode == "OnRunComplete"
     assert reloaded.feedback_loop_confidence_floor == 92  # floor untouched
@@ -204,7 +205,7 @@ def test_feedback_queued_instant_triggers_drain(root, db) -> None:
     tab, _app, _cfg = _make_run_tab(root, db)
     try:
         calls: list[int] = []
-        tab._trigger_feedback_drain = lambda mid: calls.append(mid)  # type: ignore
+        tab._trigger_feedback_drain = lambda mid: calls.append(mid)
         tab._on_feedback_queued({"model_id": m.id, "upload_mode": "Instant"})
         assert calls == [m.id]
         # Manual mode should NOT auto-drain on queue.
@@ -222,7 +223,7 @@ def test_feedback_queued_skips_declined_model(root, db) -> None:
     try:
         tab._feedback_declined_models.add(m.id)
         calls: list[int] = []
-        tab._trigger_feedback_drain = lambda mid: calls.append(mid)  # type: ignore
+        tab._trigger_feedback_drain = lambda mid: calls.append(mid)
         tab._on_feedback_queued({"model_id": m.id, "upload_mode": "Instant"})
         assert calls == []  # declined this session → no further attempts
     finally:

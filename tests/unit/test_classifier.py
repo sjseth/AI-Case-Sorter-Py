@@ -60,6 +60,7 @@ def test_uses_local_when_active_model_has_path(tmp_path: Path) -> None:
     fake_model_file = tmp_path / "fake.pth"
     fake_model_file.write_bytes(b"dummy")
     model = ModelRepo(db).get(active_id)
+    assert model is not None
     model.model_path = str(fake_model_file)
     ModelRepo(db).update(model)
 
@@ -87,6 +88,7 @@ def test_missing_model_file_raises_instead_of_using_http(tmp_path: Path) -> None
     db = _seed_db(tmp_path)
     active_id = _activate_seeded_model(db)
     model = ModelRepo(db).get(active_id)
+    assert model is not None
     model.model_path = str(tmp_path / "does_not_exist.pth")
     ModelRepo(db).update(model)
 
@@ -112,6 +114,7 @@ def test_checkpoint_problem_is_quiet_when_nothing_is_wrong(tmp_path: Path) -> No
     ckpt = tmp_path / "real.pth"
     ckpt.write_bytes(b"dummy")
     model = ModelRepo(db).get(active_id)
+    assert model is not None
     model.model_path = str(ckpt)
     ModelRepo(db).update(model)
     assert classifier.checkpoint_problem(db) is None

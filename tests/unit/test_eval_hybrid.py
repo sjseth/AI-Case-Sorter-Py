@@ -38,6 +38,7 @@ def test_delete_drops_matching_row() -> None:
         {"action": "deleted", "old_path": "/imgs/WIN__1.jpg"},
         {},
     )
+    assert out is not None  # "deleted" is a handled action, never a no-op
     assert [r["filepath"] for r in out] == ["/imgs/FC__2.jpg"]
 
 
@@ -54,6 +55,7 @@ def test_reclassify_rescores_against_prediction() -> None:
         },
         {},
     )
+    assert out is not None  # "reclassified" is a handled action, never a no-op
     r = out[0]
     assert r["filename"] == "FC__1.jpg"
     assert r["filepath"] == "/imgs/FC__1.jpg"
@@ -75,6 +77,7 @@ def test_reclassify_applies_mapping() -> None:
         },
         {"winchester": "WIN"},
     )
+    assert out is not None  # "reclassified" is a handled action, never a no-op
     r = out[0]
     assert r["raw_original"] == "winchester"
     assert r["original"] == "WIN"
@@ -94,6 +97,7 @@ def test_reclassify_leaves_other_rows_untouched() -> None:
         },
         {},
     )
+    assert out is not None  # "reclassified" is a handled action, never a no-op
     assert out[1] == rows[1]  # second row identical
 
 

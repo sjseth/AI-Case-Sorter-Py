@@ -133,17 +133,21 @@ class ModelRowCard(ttk.Frame):
             )
 
         if on_select is not None:
-            self._track_clicks(self)
+            # Pass the callback through explicitly rather than reading
+            # `self._on_select` from the closures below — that attribute is
+            # `Callable[[], None] | None`, but this whole call is already
+            # gated on `on_select is not None`.
+            self._track_clicks(self, on_select)
         self._apply_card_style()
 
-    def _track_clicks(self, widget: tk.Misc) -> None:
+    def _track_clicks(self, widget: tk.Misc, on_select: Callable[[], None]) -> None:
         """Bind click handlers on the card frame + non-Button children."""
         for w in widget.winfo_children():
             if isinstance(w, ttk.Button):
                 continue
-            w.bind("<Button-1>", lambda _e: self._on_select())
-            self._track_clicks(w)
-        widget.bind("<Button-1>", lambda _e: self._on_select(), add="+")
+            w.bind("<Button-1>", lambda _e: on_select())
+            self._track_clicks(w, on_select)
+        widget.bind("<Button-1>", lambda _e: on_select(), add="+")
 
     def _apply_card_style(self) -> None:
         frame_style = "CardSel.TFrame" if self._active else "Card.TFrame"
@@ -183,7 +187,8 @@ class ModelsTab(ttk.Frame):
         app: Any,
     ) -> None:
         super().__init__(parent)
-        self.config = config
+        # Not `self.config` — that collides with ttk.Widget.config().
+        self.cfg = config
         self.bus = bus
         self.app = app
         self.db: Database = app.db
@@ -391,13 +396,13 @@ class ModelsTab(ttk.Frame):
 
     def _activate(self, model_id: int) -> None:
         self.settings.set_active_model_id(model_id)
-        self.config.reload_headstamps_for_active_model()
+        self.cfg.reload_headstamps_for_active_model()
         self.bus.post("mode/changed", {"active_model_id": model_id})
         self.refresh()
 
     def _activate_ai_config(self) -> None:
         self.settings.clear_active_model()
-        self.config.reload_headstamps_for_active_model()
+        self.cfg.reload_headstamps_for_active_model()
         self.bus.post("mode/changed", {"active_model_id": None})
         self.refresh()
 
@@ -561,6 +566,17 @@ class ModelsTab(ttk.Frame):
         messagebox.showinfo("Export complete", f"Wrote {dest}", parent=self)
 
 
+class _ParentEditorCombobox(ttk.Combobox):
+    """A `ttk.Combobox` that remembers which tree row it's editing.
+
+    Plain `ttk.Combobox` doesn't declare `_iid`, so bolting it on with a bare
+    attribute assignment worked at runtime but had no type; this thin
+    subclass gives the attribute a real home.
+    """
+
+    _iid: str
+
+
 class HeadstampManagerDialog(tk.Toplevel):
     """Manage a model's headstamps and their parent classifications.
 
@@ -585,7 +601,10 @@ class HeadstampManagerDialog(tk.Toplevel):
     ) -> None:
         super().__init__(parent)
         self.title(f"Headstamp Manager — {model.name}")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.db = db
         self.model = model
         self.headstamps = HeadstampRepo(db)
@@ -600,7 +619,7 @@ class HeadstampManagerDialog(tk.Toplevel):
         # Headstamp ids whose current assignment came from auto-suggest (green).
         self._suggested: set[int] = set()
         self._dirty = False
-        self._editor: ttk.Combobox | None = None
+        self._editor: _ParentEditorCombobox | None = None
         self._status_after: str | None = None
         self._tree_cursor = ""
         self._hs_by_iid: dict[str, Headstamp] = {}
@@ -925,14 +944,14 @@ class HeadstampManagerDialog(tk.Toplevel):
         if not bbox:
             return
         x, y, w, h = bbox
-        combo = ttk.Combobox(
+        combo = _ParentEditorCombobox(
             self.tree,
             state="readonly",
             values=[self.NONE_LABEL] + [p.name for p in self._parents_cache],
         )
         combo.set(self._parent_name(self._assignments.get(hs.id)) or self.NONE_LABEL)
         combo.place(x=x, y=y, width=w, height=h)
-        combo._iid = iid  # type: ignore[attr-defined]
+        combo._iid = iid
         combo.bind("<<ComboboxSelected>>", lambda _e: self._commit_editor())
         combo.bind("<FocusOut>", lambda _e: self._commit_editor())
         combo.bind("<Escape>", lambda _e: self._destroy_editor())

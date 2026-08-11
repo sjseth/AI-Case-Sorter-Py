@@ -54,7 +54,10 @@ class ModelEditorDialog(tk.Toplevel):
         self.model_repo = ModelRepo(db)
 
         self.title("Edit Model" if existing else "New Model")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(False, False)
 
         frm = ttk.Frame(self, padding=12)
@@ -109,7 +112,10 @@ class ModelEditorDialog(tk.Toplevel):
         # confidence floor is shown read-only; the user may opt out or change
         # the upload mode but never the threshold.
         self._is_community = _is_community_model(existing)
-        if self._is_community:
+        # `_is_community` implies `existing is not None` (see
+        # `_is_community_model`), but re-checking here narrows the type for
+        # the checker too, instead of asserting it blindly.
+        if self._is_community and existing is not None:
             row += 1
             self._build_feedback_section(frm, existing).grid(
                 row=row,

@@ -151,7 +151,10 @@ class ThemeEditorDialog(tk.Toplevel):
         self.editing = is_custom_theme(self.base)
 
         self.title("Edit Theme" if self.editing else "New Theme")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(True, True)
         self.minsize(LIST_W + PREVIEW_W + 70, 420)
         self.configure(bg=PALETTE["bg_surface"])
@@ -742,7 +745,10 @@ class _NameDialog(tk.Toplevel):
         super().__init__(parent)
         self.result: str | None = None
         self.title("New Theme")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(False, False)
 
         body = ttk.Frame(self, padding=(14, 12, 14, 8))

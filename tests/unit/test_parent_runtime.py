@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sorter.config import Config
 from sorter.db import Database
+from sorter.models import Model
 from sorter.repository import (
     HeadstampParentRepo,
     HeadstampRepo,
@@ -64,12 +65,12 @@ def test_use_parent_flag_is_per_model(tmp_path: Path) -> None:
     assert Config(db).load().use_parent_classifications is True
 
     # A different active model has its own (default-off) flag.
+    seeded = ModelRepo(db).get(mid)
+    assert seeded is not None
     other = ModelRepo(db).create(
-        ModelRepo(db)
-        .get(mid)
-        .__class__(
+        Model(
             name="other",
-            cartridge_id=ModelRepo(db).get(mid).cartridge_id,
+            cartridge_id=seeded.cartridge_id,
             model_mode="convnext_tiny",
         )
     )
@@ -164,4 +165,6 @@ def test_parent_slot_column_migrates_on_v2_db(tmp_path: Path) -> None:
     db.ensure_initialized()
     assert "slot" in columns(db.conn, "headstamp_parents")
     HeadstampParentRepo(db).update_slot(1, 4)
-    assert HeadstampParentRepo(db).get(1).slot == 4
+    parent = HeadstampParentRepo(db).get(1)
+    assert parent is not None
+    assert parent.slot == 4

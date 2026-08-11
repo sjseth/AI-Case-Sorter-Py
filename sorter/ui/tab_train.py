@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
@@ -90,7 +90,8 @@ class TrainTab(ttk.Frame):
         app: Any,
     ) -> None:
         super().__init__(parent)
-        self.config = config
+        # Not `self.config` — that collides with ttk.Widget.config().
+        self.cfg = config
         self.bus = bus
         self.app = app
         self.db = app.db
@@ -172,7 +173,7 @@ class TrainTab(ttk.Frame):
         # checkBox1_trainAndSort.
         sort_row = ttk.Frame(controls)
         sort_row.pack(fill=tk.X, pady=(8, 0))
-        self._sort_while_training_var = tk.BooleanVar(value=self.config.sort_while_training)
+        self._sort_while_training_var = tk.BooleanVar(value=self.cfg.sort_while_training)
         ttk.Checkbutton(
             sort_row,
             text="Sort While Training",
@@ -263,7 +264,7 @@ class TrainTab(ttk.Frame):
         db_labels = {h.name for h in self.headstamps_repo.list_for_model(m.id)}
         for fs_label in fs_counts:
             if fs_label not in db_labels:
-                self.config.add_headstamp(fs_label)
+                self.cfg.add_headstamp(fs_label)
         labels = sorted(h.name for h in self.headstamps_repo.list_for_model(m.id))
         self.label_combo["values"] = labels
         if self.label_var.get() and self.label_var.get() not in labels:
@@ -350,7 +351,7 @@ class TrainTab(ttk.Frame):
             label_for_slot = sort_label if sort_label is not None else self.label_var.get()
             label_for_slot = (label_for_slot or "").strip()
             if label_for_slot:
-                feed_slot = self.config.slot_for_headstamp(label_for_slot) or 0
+                feed_slot = self.cfg.slot_for_headstamp(label_for_slot) or 0
 
         active = self._active_model()
         model_path = active.model_path if (active and active.model_path) else None
@@ -379,8 +380,8 @@ class TrainTab(ttk.Frame):
             frame = self.app.capture_frame() if hasattr(self.app, "capture_frame") else None
             if frame is None:
                 return {"error": "Camera capture failed"}
-            cropped = image_proc.crop_headstamp(frame, self.config.image_proc)
-            primer = self.config.image_proc
+            cropped = image_proc.crop_headstamp(frame, self.cfg.image_proc)
+            primer = self.cfg.image_proc
             cropped = image_proc.apply_primer_mask(
                 cropped,
                 primer.get("primer_mode", "none"),
@@ -496,7 +497,7 @@ class TrainTab(ttk.Frame):
         # Persist a brand-new label as a model headstamp so the combobox
         # dropdown and Headstamps editor stay in sync with what's on disk.
         # add_headstamp is a no-op if the name already exists.
-        self.config.add_headstamp(label)
+        self.cfg.add_headstamp(label)
         self.bus.post("status", f"Saved {dest.name}")
         self.status_var.set(f"Saved as {label}.")
         # Clear the cached cropped image so we don't accidentally double-save.
@@ -512,7 +513,7 @@ class TrainTab(ttk.Frame):
     # ----- training -----------------------------------------------------------
 
     def _on_toggle_sort_while_training(self) -> None:
-        self.config.set_sort_while_training(self._sort_while_training_var.get())
+        self.cfg.set_sort_while_training(self._sort_while_training_var.get())
 
     def _open_settings(self) -> None:
         m = self._active_model()
@@ -600,6 +601,9 @@ class TrainTab(ttk.Frame):
             m = self.models_repo.get(mid)
             if m is not None and Path(path).exists():
                 m.model_path = path
-                m.last_training_date = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+                # datetime.utcnow() is deprecated in favor of an explicit
+                # timezone-aware call; the stored string is unchanged (no
+                # offset in the format) since it's just a display timestamp.
+                m.last_training_date = datetime.now(UTC).strftime("%Y-%m-%d %H:%M")
                 self.models_repo.update(m)
                 self._refresh_active_model()

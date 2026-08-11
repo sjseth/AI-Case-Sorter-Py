@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -49,7 +50,10 @@ class _VisibilityHarness:
         self.notebook.add(self._train_tab_container, text="Train")
 
     def train_tab_visible(self) -> bool:
-        MainWindow._apply_train_tab_visibility(self)
+        # Borrowing the unbound method: it only touches .db, .notebook, and
+        # ._train_tab_container, all of which this harness provides, so the
+        # structural stand-in is safe even though it isn't a MainWindow.
+        MainWindow._apply_train_tab_visibility(cast(MainWindow, self))
         # `tabs()` still lists a hidden tab, so ask for its state — that's
         # what decides whether the user can actually reach it.
         for tid in self.notebook.tabs():

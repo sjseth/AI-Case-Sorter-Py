@@ -14,7 +14,10 @@ class LoginDialog(tk.Toplevel):
         super().__init__(parent)
         self.app = app
         self.title("Sign in")
-        self.transient(parent)
+        # wm_transient's stub wants a Wm (Tk/Toplevel), not the broader
+        # Misc `parent` type; winfo_toplevel() resolves to the actual
+        # top-level window, which is what Tk already does internally.
+        self.transient(parent.winfo_toplevel())
         self.resizable(False, False)
 
         frm = ttk.Frame(self, padding=16)

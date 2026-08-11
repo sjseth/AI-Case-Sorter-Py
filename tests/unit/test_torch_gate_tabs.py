@@ -262,6 +262,7 @@ def test_start_refuses_a_model_whose_checkpoint_is_missing(
     """
     db = _db(tmp_path, monkeypatch)
     m = _activate_local_model(db, tmp_path)
+    assert m.model_path is not None  # _activate_local_model always sets one
     Path(m.model_path).unlink()  # data folder renamed / model deleted
     app = _FakeApp(db)
     tab = RunTab(root, config=Config(db).load(), bus=EventBus(), app=app)
@@ -288,6 +289,7 @@ def test_manual_feed_refuses_a_model_whose_checkpoint_is_missing(
 ) -> None:
     db = _db(tmp_path, monkeypatch)
     m = _activate_local_model(db, tmp_path)
+    assert m.model_path is not None  # _activate_local_model always sets one
     Path(m.model_path).unlink()
     app = _FakeApp(db)
     tab = RunTab(root, config=Config(db).load(), bus=EventBus(), app=app)
@@ -337,10 +339,11 @@ def test_stop_still_works_with_a_missing_checkpoint(
     """Never trap a running machine behind a dialog it can't clear."""
     db = _db(tmp_path, monkeypatch)
     m = _activate_local_model(db, tmp_path)
+    assert m.model_path is not None  # _activate_local_model always sets one
     Path(m.model_path).unlink()
     app = _FakeApp(db)
     stopped = []
-    app.run_controller.stop = lambda: stopped.append(1)
+    monkeypatch.setattr(app.run_controller, "stop", lambda: stopped.append(1))
     tab = RunTab(root, config=Config(db).load(), bus=EventBus(), app=app)
     try:
         monkeypatch.setattr(

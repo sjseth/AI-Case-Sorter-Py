@@ -47,6 +47,9 @@ HEADER_PAD = 12
 PAGE_MARGIN = 12
 PAGE_MARGIN_TOP = 8
 PAGE_MARGIN_SCREENED = 20
+# Resting label of the status-bar update button, i.e. what it says when there
+# is nothing waiting. Clicking it in that state runs an explicit check.
+CHECK_FOR_UPDATES_LABEL = "Check for updates"
 
 
 class MainWindow:
@@ -138,19 +141,27 @@ class MainWindow:
             command=self._on_signin_click,
         )
         self.signin_button.pack(side=tk.RIGHT, padx=12, pady=4)
-        # Update affordance — created here but not packed: it appears only once
-        # a check finds a newer release, or an update is staged and waiting for
-        # a restart. Blue "update" hue per theme.py's colour rules.
+        # Update affordance. Blue "update" hue per theme.py's colour rules.
+        #
+        # This button is always present, and that is the point: it used to be
+        # packed only once a check had found something, which left a user who
+        # was up to date with no route into the update dialog at all — so no
+        # way to read release notes, and (since the version picker landed) no
+        # way to reach the picker either. The label carries the state instead:
+        # "Check for updates" when there is nothing to do, and the button
+        # runs an explicit, non-silent check that opens the dialog whatever
+        # the answer turns out to be.
         self._update_status_bar = status_bar
         self._update_info: Any | None = None
         self._pending_update: Any | None = None
-        self.update_button_var = tk.StringVar(value="Update available")
+        self.update_button_var = tk.StringVar(value=CHECK_FOR_UPDATES_LABEL)
         self.update_button = ttk.Button(
             status_bar,
             textvariable=self.update_button_var,
             style="Update.TButton",
-            command=self.open_update_dialog,
+            command=self._on_update_button_click,
         )
+        self.update_button.pack(side=tk.RIGHT, padx=(0, 4), pady=4)
         # Pack serial first so it ends up rightmost; camera sits to its left.
         # Each indicator is a [dot][text] pair grouped in a sub-frame so the
         # dot stays glued to its label when the bar resizes.
@@ -294,7 +305,13 @@ class MainWindow:
             self._update_info = info
             if info is not None:
                 self._show_update_button(f"Update to {info.version}")
-            elif not silent:
+                return
+            # Nothing newer. Leave the button at its resting label rather than
+            # a stale "Update to ..." from an earlier check, and only open the
+            # dialog if the user asked — a startup check must stay silent.
+            self._show_update_button(CHECK_FOR_UPDATES_LABEL)
+            if not silent:
+                self.set_status("You're up to date.")
                 self.open_update_dialog()
 
         def _error(exc: Exception) -> None:
@@ -304,6 +321,21 @@ class MainWindow:
         if not silent:
             self.set_status("Checking for updates…")
         self.run_worker(_work, on_done=_done, on_error=_error)
+
+    def _on_update_button_click(self) -> None:
+        """Open the dialog if we already know about something, else go look.
+
+        Once a check has found a release (or an update is staged), the button
+        is a shortcut straight into the dialog. Before that it is the manual
+        "check now" the app previously had no way to ask for, so it runs a
+        non-silent check — which opens the dialog even when the answer is "you
+        are up to date", because that is still an answer, and it is the way to
+        reach the version picker.
+        """
+        if self._update_info is not None or self._pending_update is not None:
+            self.open_update_dialog()
+            return
+        self.check_for_updates(silent=False)
 
     def note_pending_update(self, pending: Any) -> None:
         """Record a staged update and switch the button to the restart prompt."""

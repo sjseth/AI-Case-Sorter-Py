@@ -27,6 +27,14 @@ def _seed_db(tmp_path: Path) -> Database:
     return db
 
 
+def _get_model(db: Database, model_id: int) -> Model:
+    """`ModelRepo.get` is `Model | None`; every call site here follows an
+    import/create that is known to have produced the row."""
+    m = ModelRepo(db).get(model_id)
+    assert m is not None
+    return m
+
+
 def test_export_and_import_round_trip(tmp_path: Path) -> None:
     db = _seed_db(tmp_path)
     cart = CartridgeRepo(db).create("45ACP")
@@ -209,7 +217,7 @@ def test_unknown_model_mode_in_manifest_falls_back_to_tiny(tmp_path: Path) -> No
         images_target_dir=tmp_path / "i",
         models_target_dir=tmp_path / "m",
     )
-    assert ModelRepo(db).get(mid).model_mode == "convnext_tiny"
+    assert _get_model(db, mid).model_mode == "convnext_tiny"
 
 
 def test_winforms_pascal_manifest_picks_up_training_config(tmp_path: Path) -> None:
@@ -320,7 +328,7 @@ def test_model_from_row_normalizes_legacy_int_upload_mode(tmp_path: Path) -> Non
     )
     # Simulate a legacy row that persisted the enum int.
     db.conn.execute("UPDATE models SET feedback_loop_upload_mode = '0' WHERE id = ?", (m.id,))
-    reloaded = ModelRepo(db).get(m.id)
+    reloaded = _get_model(db, m.id)
     assert reloaded.feedback_loop_upload_mode == "Instant"
 
 
@@ -436,7 +444,7 @@ def test_import_accepts_legacy_trainedmodel_zip(tmp_path: Path) -> None:
 
     imported = mod_target / f"{model_id}.pth"
     assert imported.read_bytes() == checkpoint
-    assert ModelRepo(db).get(model_id).model_path == str(imported)
+    assert _get_model(db, model_id).model_path == str(imported)
 
 
 def test_import_rejects_arbitrary_model_zip(tmp_path: Path) -> None:
@@ -518,7 +526,7 @@ def test_community_update_replaces_model_in_place(tmp_path: Path) -> None:
     assert second_id == first_id
     assert len(ModelRepo(db).list()) == before + 1
 
-    updated = ModelRepo(db).get(first_id)
+    updated = _get_model(db, first_id)
     assert updated.model_version == 2
     assert updated.trained_image_count == 200
     # The checkpoint on disk is the new one, at the same path.
@@ -578,6 +586,7 @@ def test_community_update_keeps_local_name_and_feedback_optout(tmp_path: Path) -
     )
     repo = ModelRepo(db)
     local = repo.get(model_id)
+    assert local is not None
     assert local.feedback_loop_enabled is True  # the publisher offers the loop
     local.name = "My Range Model"  # …and the user renames it…
     local.feedback_loop_enabled = False  # …and opts out
@@ -592,6 +601,7 @@ def test_community_update_keeps_local_name_and_feedback_optout(tmp_path: Path) -
 
     # An update re-offers the loop; it must not silently opt the user back in.
     after = repo.get(model_id)
+    assert after is not None
     assert after.name == "My Range Model"
     assert after.feedback_loop_enabled is False
 
@@ -613,7 +623,7 @@ def test_import_can_force_a_separate_copy(tmp_path: Path) -> None:
         models_target_dir=tmp_path / "m",
     )
     assert second_id != first_id
-    assert ModelRepo(db).get(second_id).name == "Community 9mm (2)"
+    assert _get_model(db, second_id).name == "Community 9mm (2)"
 
 
 def test_find_update_target(tmp_path: Path) -> None:

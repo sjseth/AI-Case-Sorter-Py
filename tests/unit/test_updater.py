@@ -236,6 +236,155 @@ def test_check_wraps_network_failure(monkeypatch) -> None:
         updater.check_for_update(current="0.1.0")
 
 
+# ----- listing releases for the picker -----------------------------------------
+
+
+def test_list_releases_returns_newest_first_excluding_drafts_and_prereleases(monkeypatch) -> None:
+    releases = [
+        {
+            "tag_name": "v0.3.0",
+            "body": "three",
+            "assets": [],
+            "published_at": "2026-03-01T00:00:00Z",
+            "draft": False,
+            "prerelease": False,
+        },
+        {
+            "tag_name": "v0.3.0-rc1",
+            "body": "rc",
+            "assets": [],
+            "published_at": "2026-02-15T00:00:00Z",
+            "draft": False,
+            "prerelease": True,
+        },
+        {
+            "tag_name": "v0.2.0",
+            "body": "draft, must never appear",
+            "assets": [],
+            "published_at": "2026-02-01T00:00:00Z",
+            "draft": True,
+            "prerelease": False,
+        },
+        {
+            "tag_name": "v0.1.0",
+            "body": "one",
+            "assets": [],
+            "published_at": "2026-01-01T00:00:00Z",
+            "draft": False,
+            "prerelease": False,
+        },
+    ]
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(200, releases))
+    result = updater.list_releases()
+    # Drafts are excluded unconditionally; prereleases are excluded by
+    # default -- same rule /releases/latest applies for check_for_update.
+    assert [r.tag for r in result] == ["v0.3.0", "v0.1.0"]
+
+
+def test_list_releases_can_opt_into_prereleases(monkeypatch) -> None:
+    releases = [
+        {
+            "tag_name": "v0.3.0",
+            "body": "three",
+            "assets": [],
+            "published_at": "2026-03-01T00:00:00Z",
+            "draft": False,
+            "prerelease": False,
+        },
+        {
+            "tag_name": "v0.3.0-rc1",
+            "body": "rc",
+            "assets": [],
+            "published_at": "2026-02-15T00:00:00Z",
+            "draft": False,
+            "prerelease": True,
+        },
+    ]
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(200, releases))
+    result = updater.list_releases(include_prereleases=True)
+    assert [r.tag for r in result] == ["v0.3.0", "v0.3.0-rc1"]
+
+
+def test_list_releases_skips_an_implausible_tag_rather_than_failing_the_whole_list(monkeypatch) -> None:
+    """Unlike check_for_update (a single release, so a bad tag has to raise),
+    a malformed entry here should be dropped rather than hide every
+    legitimate release behind it. The tag still has to pass _TAG_RE for the
+    same reason as check_for_update: it's interpolated into the fallback
+    archive URL."""
+    releases = [
+        {
+            "tag_name": "1.0.0/../../someone-else/repo/archive/refs/tags/v1.tar.gz",
+            "body": "x",
+            "assets": [],
+            "published_at": "",
+            "draft": False,
+            "prerelease": False,
+        },
+        {
+            "tag_name": "v0.1.0",
+            "body": "one",
+            "assets": [],
+            "published_at": "2026-01-01T00:00:00Z",
+            "draft": False,
+            "prerelease": False,
+        },
+    ]
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(200, releases))
+    result = updater.list_releases()
+    assert [r.tag for r in result] == ["v0.1.0"]
+
+
+def test_list_releases_goes_through_pick_asset(monkeypatch) -> None:
+    assets = [
+        {"name": "checksums.txt", "browser_download_url": "https://x/c.txt"},
+        {"name": "ai_case_sorter-0.1.0.tar.gz", "browser_download_url": "https://x/app.tar.gz", "size": 111},
+    ]
+    releases = [
+        {
+            "tag_name": "v0.1.0",
+            "body": "one",
+            "assets": assets,
+            "published_at": "2026-01-01T00:00:00Z",
+            "draft": False,
+            "prerelease": False,
+        },
+    ]
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(200, releases))
+    result = updater.list_releases()
+    assert result[0].url == "https://x/app.tar.gz"
+    assert result[0].size == 111
+
+
+def test_list_releases_empty_when_none_published(monkeypatch) -> None:
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(404))
+    assert updater.list_releases() == []
+
+
+def test_list_releases_disabled_by_env(monkeypatch) -> None:
+    monkeypatch.setenv("CASESORTER_UPDATE_DISABLED", "1")
+
+    def _boom(*a, **k):
+        raise AssertionError("network must not be touched when disabled")
+
+    monkeypatch.setattr(requests, "get", _boom)
+    assert updater.list_releases() == []
+
+
+def test_list_releases_wraps_network_failure(monkeypatch) -> None:
+    def _boom(*a, **k):
+        raise requests.ConnectionError("no route to host")
+
+    monkeypatch.setattr(requests, "get", _boom)
+    with pytest.raises(UpdateError, match="Could not reach"):
+        updater.list_releases()
+
+
+def test_list_releases_raises_on_server_error(monkeypatch) -> None:
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(500))
+    with pytest.raises(UpdateError):
+        updater.list_releases()
+
+
 # ----- staging ----------------------------------------------------------------
 
 
@@ -500,6 +649,48 @@ def test_stage_rejects_a_plain_tar(monkeypatch) -> None:
 
 def test_stage_rejects_an_archive_that_is_not_the_app(monkeypatch) -> None:
     _serve(monkeypatch, _tar_bytes({"wrong/readme.txt": "hello"}))
+    with pytest.raises(UpdateError, match="does not look like the app"):
+        updater.stage_update(_info())
+    assert updater.pending_update() is None
+
+
+def test_required_entry_sets_cover_both_layouts() -> None:
+    """Pins the two shapes stage_update has to accept -- see #58: the src/
+    layout has to be accepted by every already-installed updater *before*
+    main.py actually moves, or the move permanently breaks in-app updates
+    for every install that predates it."""
+    assert updater.REQUIRED_ENTRIES in updater.REQUIRED_ENTRY_SETS
+    assert ("src/sorter/__init__.py",) in updater.REQUIRED_ENTRY_SETS
+
+
+def test_stage_accepts_the_flat_layout(monkeypatch) -> None:
+    _serve(monkeypatch, _good_archive())
+    pending = updater.stage_update(_info())
+    assert (pending.path / "main.py").is_file()
+    assert (pending.path / "sorter" / "__init__.py").is_file()
+
+
+def test_stage_accepts_the_src_layout(monkeypatch) -> None:
+    """A future release built from the src/ layout (#58) has no root main.py
+    or sorter/__init__.py at all -- REQUIRED_ENTRY_SETS has to accept this
+    shape too, not just the current one."""
+    _serve(
+        monkeypatch,
+        _tar_bytes(
+            {
+                "ai_case_sorter-0.9.0/src/sorter/__init__.py": '__version__ = "0.9.0"\n',
+                "ai_case_sorter-0.9.0/src/sorter/__main__.py": "# entry point\n",
+                "ai_case_sorter-0.9.0/pyproject.toml": "[project]\n",
+            }
+        ),
+    )
+    pending = updater.stage_update(_info())
+    assert (pending.path / "src" / "sorter" / "__init__.py").is_file()
+    assert not (pending.path / "main.py").exists()
+
+
+def test_stage_still_rejects_an_archive_matching_neither_layout(monkeypatch) -> None:
+    _serve(monkeypatch, _tar_bytes({"pkg/readme.txt": "hello", "pkg/lib/thing.py": "x"}))
     with pytest.raises(UpdateError, match="does not look like the app"):
         updater.stage_update(_info())
     assert updater.pending_update() is None

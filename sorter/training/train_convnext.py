@@ -34,13 +34,17 @@ from typing import Any
 # defined at module scope. The Train tab gates spawning this script on
 # `local_inference.is_available()`, so by the time we run, torch is present.
 try:
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
+    # torch/torchvision are the optional `[ml]` extra — genuinely absent from
+    # this dev/CI environment by design; the except below is exactly the
+    # runtime guard for that (this script only ever runs once the Train tab
+    # has confirmed torch is installed).
+    import torch  # ty: ignore[unresolved-import]
+    import torch.nn as nn  # ty: ignore[unresolved-import]
+    import torch.nn.functional as F  # ty: ignore[unresolved-import]
     from PIL import Image
-    from torch.optim.swa_utils import SWALR, AveragedModel, update_bn
-    from torch.utils.data import DataLoader, Dataset, random_split
-    from torchvision import models, transforms
+    from torch.optim.swa_utils import SWALR, AveragedModel, update_bn  # ty: ignore[unresolved-import]
+    from torch.utils.data import DataLoader, Dataset, random_split  # ty: ignore[unresolved-import]
+    from torchvision import models, transforms  # ty: ignore[unresolved-import]
 except ImportError as exc:  # pragma: no cover - guarded by Train UI
     sys.stderr.write(f"[train_convnext] PyTorch is required. Install with the Train tab. ({exc})\n")
     raise
@@ -367,6 +371,11 @@ def main() -> int:
                 swa_active = True
 
         if args.use_swa and swa_active:
+            # `swa_active` only ever flips True inside `if args.use_swa`
+            # above, which is exactly where `swa_model`/`swa_scheduler` were
+            # constructed — so both are always set here.
+            if swa_model is None or swa_scheduler is None:
+                raise RuntimeError("SWA active but swa_model/swa_scheduler were never initialized")
             swa_model.update_parameters(model)
             swa_scheduler.step()
             current_lr = swa_scheduler.get_last_lr()[0]
@@ -382,7 +391,11 @@ def main() -> int:
             # the model was trained at (default 232; user can override).
             "image_size": int(args.imgsize),
         }
-        if val_acc is None:
+        # val_acc and val_loss are always assigned together from the same
+        # `_run_epoch(...)` call above (both stay None when there's no
+        # val_loader) — folding both into the guard lets the checker narrow
+        # `val_loss` to `float` alongside `val_acc` below.
+        if val_acc is None or val_loss is None:
             torch.save(save_payload, args.output_model)
             saved_reason = "no-validation"
         else:
@@ -410,6 +423,10 @@ def main() -> int:
         )
 
     if args.use_swa and swa_active:
+        # Same invariant as above: `swa_active` can only be True here because
+        # `swa_model` was constructed under `if args.use_swa`.
+        if swa_model is None:
+            raise RuntimeError("SWA active but swa_model was never initialized")
         update_bn(train_loader, swa_model, device=device)
         swa_path = args.output_model.replace(".pth", "_swa.pth")
         torch.save(

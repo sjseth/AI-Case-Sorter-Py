@@ -68,7 +68,9 @@ class CommunityModelCard(ttk.Frame):
         on_action: Callable[[ModelInfo], None],
     ) -> None:
         super().__init__(parent, style="Card.TFrame", padding=14)
-        self.info = info
+        # Not `self.info` — that collides with ttk.Widget.info() (place_info
+        # bound-method lookup), a real latent bug the type checker caught.
+        self.model_info = info
         self.installed_state = installed_state
         self.on_action = on_action
 
@@ -118,11 +120,14 @@ class CommunityModelCard(ttk.Frame):
             # Blue, not the download green: this replaces a model already in
             # the library rather than adding one.
             btn = ttk.Button(
-                action_row, text="Update Model", style="Update.TButton", command=lambda: self.on_action(self.info)
+                action_row, text="Update Model", style="Update.TButton", command=lambda: self.on_action(self.model_info)
             )
         else:
             btn = ttk.Button(
-                action_row, text="Download Model", style="Accent.TButton", command=lambda: self.on_action(self.info)
+                action_row,
+                text="Download Model",
+                style="Accent.TButton",
+                command=lambda: self.on_action(self.model_info),
             )
         btn.pack(side=tk.RIGHT)
 
@@ -137,7 +142,8 @@ class CommunityTab(ttk.Frame):
         app: Any,
     ) -> None:
         super().__init__(parent)
-        self.config = config
+        # Not `self.config` — that collides with ttk.Widget.config().
+        self.cfg = config
         self.bus = bus
         self.app = app
         self.db = app.db
