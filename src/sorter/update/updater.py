@@ -47,6 +47,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import requests
+from packaging.version import InvalidVersion, Version
 
 from .. import __version__, paths
 
@@ -131,102 +132,51 @@ class PendingUpdate:
 # ----- version comparison -----------------------------------------------------
 
 
-# PEP 440's release segment, in the spellings a tag can actually carry. The
-# separators are optional because PEP 440 accepts `1.2.0rc1`, `1.2.0-rc1` and
-# `1.2.0.rc.1` as the same version -- releases here use the first (canonical)
-# form, since hatchling names the sdist from the normalized version.
-_RELEASE_SEGMENTS_RE = re.compile(
-    r"^(?P<core>[0-9]+(?:\.[0-9]+)*)"
-    r"(?:[-_.]?(?P<pre>a|b|c|rc|alpha|beta|pre|preview)[-_.]?(?P<pre_n>[0-9]*))?"
-    r"(?:[-_.]?(?:post|rev|r)[-_.]?(?P<post_n>[0-9]*))?"
-    r"(?:[-_.]?dev[-_.]?(?P<dev_n>[0-9]*))?"
-    r"(?P<local>\+.*)?$",
-    re.IGNORECASE,
-)
+def _parse_version(text: str) -> Version | None:
+    """Parse ``v1.2.3`` / ``1.2.3rc1`` for comparison, or ``None`` if it isn't
+    a version at all.
 
-# Ordered worst-to-best. `c` is PEP 440's alias for `rc`; `pre`/`preview` alias
-# `rc` too. Only the ordering matters, not the values.
-_RANK_DEV = 0
-_RANK_PRE = {"a": 1, "alpha": 1, "b": 2, "beta": 2, "c": 3, "rc": 3, "pre": 3, "preview": 3}
-_RANK_FINAL = 4
-_RANK_POST = 5
+    PEP 440 is a specification with a reference implementation, so this defers
+    to it rather than reimplementing the grammar: ``packaging`` normalizes
+    every accepted spelling (``1.2.0rc1``, ``1.2.0-rc1``, ``1.2.0.rc.1``,
+    ``1.2.0c1``) to the same version and orders ``dev < a < b < rc < final <
+    post`` on its own.
 
+    Two adjustments on top of it:
 
-def _parse_version(text: str) -> tuple[tuple[int, ...], int, int]:
-    """Parse ``v1.2.3`` / ``1.2.3rc1`` into a sortable key.
+    * A leading ``v`` is stripped. Tags carry one in plenty of projects, and
+      ``Version`` rejects it.
+    * A **local version** is demoted to a dev release of the same version.
+      PEP 440 sorts ``1.0+local`` *above* ``1.0``, but an updater wants the
+      opposite reading: ``0.0.0+unknown`` is what an install with no
+      ``sorter/_version.py`` reports, and it has to look older than any real
+      release or the app stops offering updates.
 
-    Returns ``(numbers, rank, segment)``:
-
-    * ``rank`` orders the PEP 440 release segments — ``dev < a < b < rc <
-      final < post`` — so ``1.2.0rc1 < 1.2.0``.
-    * ``segment`` is that segment's own number, so ``rc2 > rc1`` and
-      ``rc10 > rc9`` (numeric, not lexicographic).
-
-    Sniffing for a ``-`` was not enough: releases are tagged in PEP 440's
-    canonical form (``1.2.0rc1``, no separator, because hatchling names the
-    sdist from the normalized version), which that read as a plain ``1.2.0``.
-    An rc install was then told it was up to date forever.
-
-    A local version (``0.0.0+unknown``, what an install with no
-    ``sorter/_version.py`` reports) ranks as ``dev``. PEP 440 sorts a local
-    version *above* its release, but for an updater "this is a build, not a
-    release" is the useful reading: it keeps offering the real release rather
-    than going quiet.
-
-    Non-numeric junk is ignored rather than raising — a malformed upstream
-    tag should read as "not newer", never as a crash on startup.
+    Returning ``None`` rather than raising is the point of the wrapper — an
+    upstream tag that isn't a version should read as "not newer", never as a
+    crash on startup.
     """
-    s = (text or "").strip().lstrip("vV")
-    match = _RELEASE_SEGMENTS_RE.match(s)
-
-    if match is None:
-        # Not PEP 440 at all. Salvage a leading dotted number if there is one,
-        # so `1.2.3-nightly` still compares by its numbers, and rank the
-        # unrecognized tail lowest: "I can't read this" should never present
-        # as newer than the release it names.
-        core, rank, segment = s.split("-", 1)[0].split("+", 1)[0], _RANK_DEV, 0
-    else:
-        core = match.group("core")
-        # Ordered as PEP 440 applies them: dev beats everything to its left,
-        # and a local version means "a build of", not "a release of".
-        if match.group("dev_n") is not None or match.group("local"):
-            rank, segment = _RANK_DEV, _segment_number(match.group("dev_n"))
-        elif match.group("pre"):
-            rank, segment = _RANK_PRE[match.group("pre").lower()], _segment_number(match.group("pre_n"))
-        elif match.group("post_n") is not None:
-            rank, segment = _RANK_POST, _segment_number(match.group("post_n"))
-        else:
-            rank, segment = _RANK_FINAL, 0
-
-    nums: list[int] = []
-    for part in core.split("."):
-        digits = ""
-        for ch in part:
-            if not ch.isdigit():
-                break
-            digits += ch
-        if not digits:
-            break
-        nums.append(int(digits))
-    return tuple(nums), rank, segment
-
-
-def _segment_number(digits: str | None) -> int:
-    """PEP 440 lets the number be omitted (``1.2.0rc`` == ``1.2.0rc0``)."""
-    return int(digits) if digits else 0
+    try:
+        version = Version((text or "").strip().lstrip("vV"))
+    except InvalidVersion:
+        return None
+    if version.local is not None and not version.is_devrelease:
+        return Version(f"{version.public}.dev0")
+    return version
 
 
 def is_newer(candidate: str, current: str) -> bool:
-    """True when ``candidate`` is a strictly newer version than ``current``."""
-    cand_nums, cand_rank, cand_seg = _parse_version(candidate)
-    cur_nums, cur_rank, cur_seg = _parse_version(current)
-    if not cand_nums:
+    """True when ``candidate`` is a strictly newer version than ``current``.
+
+    An unreadable ``candidate`` is never newer: whatever it is, it is not
+    something to offer the user. An unreadable ``current`` is the opposite —
+    anything parseable beats it.
+    """
+    cand = _parse_version(candidate)
+    if cand is None:
         return False
-    # Zero-pad so 1.2 and 1.2.0 compare equal.
-    width = max(len(cand_nums), len(cur_nums))
-    cand_padded = cand_nums + (0,) * (width - len(cand_nums))
-    cur_padded = cur_nums + (0,) * (width - len(cur_nums))
-    return (cand_padded, cand_rank, cand_seg) > (cur_padded, cur_rank, cur_seg)
+    cur = _parse_version(current)
+    return cur is None or cand > cur
 
 
 def current_version() -> str:

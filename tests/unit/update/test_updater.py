@@ -41,11 +41,8 @@ def _isolated_data_root(monkeypatch, tmp_path: Path):
         ("0.2.0-rc1", "0.2.0", False),  # ...but older than its own release
         ("0.2.0", "0.2.0-rc1", True),
         # --- PEP 440 canonical form: what releases are actually tagged ---
-        # The separator-free spelling is the one that ships (hatchling names
-        # the sdist from the normalized version, and release.yml asserts the
-        # two match), so these are the rows that matter in practice. They all
-        # used to be wrong: without a "-" the whole prerelease segment was
-        # invisible and 0.5.0rc1 compared equal to 0.5.0.
+        # All of these used to be wrong: without a "-" the prerelease segment
+        # was invisible and 0.5.0rc1 compared equal to 0.5.0.
         ("0.5.0", "0.5.0rc1", True),  # an rc install must be offered the release
         ("0.5.0rc1", "0.5.0", False),
         ("0.5.0rc2", "0.5.0rc1", True),
@@ -70,10 +67,14 @@ def _isolated_data_root(monkeypatch, tmp_path: Path):
         ("1.2.0.post1", "1.2.0", True),  # a post-release is newer
         ("garbage", "0.1.0", False),  # malformed tag reads as "not newer"
         ("", "0.1.0", False),
-        # Unreadable trailer: compare on the numbers, but never claim it's
-        # newer than the release it names.
+        # Not PEP 440 at all, despite the numbers. Never offered, whatever it
+        # sits next to -- an unreadable tag is a misconfigured release, and
+        # the safe reading of one is "don't push this at the user".
         ("1.2.3-nightly", "1.2.3", False),
-        ("1.2.3-nightly", "1.2.2", True),
+        ("1.2.3-nightly", "1.2.2", False),
+        # ...but an unreadable *current* is the opposite: anything real beats
+        # an install whose version we can't make sense of.
+        ("1.2.3", "garbage", True),
     ],
 )
 def test_is_newer(candidate: str, current: str, expected: bool) -> None:
