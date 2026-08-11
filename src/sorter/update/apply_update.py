@@ -44,9 +44,13 @@ from .. import __version__, paths
 PROTECTED_TOP_LEVEL = frozenset({".git", ".venv", "venv", ".uv", "data", ".env", "portable.txt"})
 
 # Pruning stale files is confined to these directories. This mirrors the
-# layout a *release archive* ships (the sdist's `src/sorter/`), not this
-# module's own path within the source tree.
-PRUNE_ROOTS = ("src/sorter",)
+# layout a *release archive* ships, not this module's own path within the
+# source tree -- and an archive can ship either layout, because the version
+# picker makes downgrading to a pre-#58 release a supported move. `sorter/`
+# also covers the residue an old install leaves behind on the way up: its
+# pruner emptied the flat package, then its `_stamp_version` re-created
+# `sorter/_version.py` inside it.
+PRUNE_ROOTS = ("src/sorter", "sorter")
 
 
 def _log(msg: str) -> None:
@@ -97,6 +101,27 @@ def _stale_files(app_dir: Path, keep: set[Path]) -> list[Path]:
                 continue
             out.append(rel)
     return out
+
+
+def _prune_empty_dirs(app_dir: Path) -> None:
+    """Drop directories left empty by pruning.
+
+    Deepest first, so a directory whose only contents were other empty
+    directories goes too. Best-effort and after the fact: an update that
+    applied cleanly must not be reported as failed because a leftover folder
+    would not delete.
+    """
+    for root_name in PRUNE_ROOTS:
+        root = app_dir / root_name
+        if not root.is_dir():
+            continue
+        candidates = [p for p in root.rglob("*") if p.is_dir()]
+        candidates.append(root)
+        for path in sorted(candidates, key=lambda p: len(p.parts), reverse=True):
+            try:
+                path.rmdir()  # raises if it isn't empty, which is the check
+            except OSError:
+                pass
 
 
 def _backup(app_dir: Path, backup: Path, rel: Path) -> None:
@@ -237,6 +262,7 @@ def apply_pending(app_dir: Path | None = None) -> bool:
         return False
 
     _stamp_version(root, version, shipped=keep)
+    _prune_empty_dirs(root)
 
     _discard()
     try:
@@ -267,6 +293,27 @@ def _discard() -> None:
         pass
 
 
+def apply_pre_launch(app_dir: Path | None = None) -> bool:
+    """Do the whole pre-launch step. True if an update was actually applied.
+
+    ``bootstrap.py`` calls this rather than ``main()`` because it has to act
+    on the answer: applying an update replaces ``bootstrap.py`` and the entry
+    point it launches, both of which the running process has already resolved,
+    so it re-launches itself when this returns True.
+
+    Never raises, for the same reason ``main()`` always exits 0.
+    """
+    try:
+        # A pre-0.2 install still has its data inside the app folder; move it
+        # before looking for staged updates, so both halves agree on where
+        # the updates/ tree lives.
+        paths.migrate_legacy_data_dir()
+        return apply_pending(app_dir)
+    except Exception as exc:
+        _log(f"unexpected error: {exc}")
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point. Always returns 0 — never block the app from launching."""
     args = list(sys.argv[1:] if argv is None else argv)
@@ -276,14 +323,7 @@ def main(argv: list[str] | None = None) -> int:
         if idx + 1 < len(args):
             app_dir = Path(args[idx + 1])
 
-    try:
-        # A pre-0.2 install still has its data inside the app folder; move it
-        # before looking for staged updates, so both halves agree on where
-        # the updates/ tree lives.
-        paths.migrate_legacy_data_dir()
-        apply_pending(app_dir)
-    except Exception as exc:
-        _log(f"unexpected error: {exc}")
+    apply_pre_launch(app_dir)
     return 0
 
 

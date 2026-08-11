@@ -143,8 +143,13 @@ start.bat
 
 **Run it directly** (if you have `uv` yourself and want to manage it):
 ```bash
-uv run python src/sorter/__main__.py
+uv sync --frozen --no-dev --no-install-project
+uv run --no-sync python main.py
 ```
+Same flags `bootstrap.py` uses. `--no-install-project` / `--no-sync` keep uv
+from building the project itself: on a copy with no `.git` folder — i.e. any
+downloaded release — that overwrites the version the app reports with
+`0.0.0`, and it then offers you the same update on every launch.
 
 ### Running without hardware
 

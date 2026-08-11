@@ -98,6 +98,44 @@ Assert-Accepted 'pkg/a..b.py'           # dots, but no '..' component
 Assert-Accepted 'pkg/sub.dir/x.py'
 Assert-Accepted 'pkg/file with spaces.py'
 
+Write-Host "== layout gate: which extracted trees count as the app ==" -ForegroundColor Cyan
+# A different question from path safety, and previously untested: the entries
+# above prove a src/ archive can be *unpacked*, not that the installer then
+# recognises it as this app. The gate has to agree with updater.py's
+# REQUIRED_ENTRY_SETS set for set, or an archive installs and can never
+# update -- or updates and could never have been installed.
+function New-FakeTree {
+    param([string[]]$Files)
+    $root = Join-Path ([System.IO.Path]::GetTempPath()) ("casesorter-gate-" + [guid]::NewGuid().ToString('N'))
+    foreach ($file in $Files) {
+        $full = Join-Path $root $file
+        New-Item -ItemType Directory -Path (Split-Path $full -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $full -Value '' -NoNewline
+    }
+    return $root
+}
+
+function Assert-Layout {
+    param([string[]]$Files, [bool]$Expected, [string]$Because)
+    $root = New-FakeTree -Files $Files
+    try {
+        $actual = [bool](Test-LooksLikeTheApp -Root $root)
+        if ($actual -eq $Expected) {
+            $script:Passes++
+        } else {
+            $script:Failures++
+            Write-Host "FAIL: expected $Expected, got $actual for [$($Files -join ', ')] ($Because)" -ForegroundColor Red
+        }
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Assert-Layout @('main.py', 'sorter\__init__.py') $true  'flat layout, complete -- 1.1.0 and earlier'
+Assert-Layout @('main.py', 'src\sorter\__init__.py') $true 'src layout -- what ships now'
+Assert-Layout @('main.py')                       $false 'bare main.py: updater.py rejects it, so this must too'
+Assert-Layout @('README.md', 'setup.py')         $false 'some other project entirely'
+
 Write-Host ""
 if ($script:Failures -gt 0) {
     Write-Host "$($script:Failures) failed, $($script:Passes) passed" -ForegroundColor Red

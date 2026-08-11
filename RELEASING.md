@@ -101,6 +101,24 @@ So 1.0.0 is cut deliberately: run the Release workflow with `version: 1.0.0` and
 that guard is what makes this an explicit decision rather than a typo). From the first 1.x tag
 onward the mapping is ordinary semver again, with no config change needed.
 
+### One-off: the first `src/`-layout release
+
+Call this out in that release's notes, because it cannot be fixed in code:
+
+> Running 1.0.0 or 1.0.1? Update to **1.1.0 first** (use "Choose a version" in
+> the update dialog), then update again. Updating straight to this release
+> reports "The downloaded archive does not look like the app".
+
+An in-app update is validated by the copy already installed. Accepting the
+`src/` layout shipped in 1.1.0 (#62); 1.0.x only knows the flat
+`main.py` + `sorter/__init__.py` set and rejects anything else. There is no
+way to patch an installed updater after the fact, so the one-time manual step
+is the whole remedy.
+
+Installs at 1.1.0 or later need nothing: the archive ships a root `main.py`
+so the launch that applies the update still finds an entry point (see
+CLAUDE.md §7).
+
 ## Commit-type -> changelog section mapping
 
 Set by `cliff.toml`, matching the types `check-semantic-pr.yml` enforces:

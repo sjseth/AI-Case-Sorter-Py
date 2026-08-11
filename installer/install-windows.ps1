@@ -289,6 +289,38 @@ function Assert-SafeArchiveEntries {
     }
 }
 
+function Test-LooksLikeTheApp {
+    <# Whether an extracted archive is this app, in either supported layout.
+
+       Kept in lock-step with sorter/update/updater.py's REQUIRED_ENTRY_SETS,
+       down to the semantics: a set matches only when *every* entry in it is
+       present, and any one set matching is enough. Checking `main.py` alone
+       is what made these two disagree -- a bare main.py with no package was
+       accepted here and rejected by the updater, so an archive could install
+       and then never update.
+
+       Both arms stay indefinitely. A release published before the src/ move
+       is still a legitimate thing to install from a pinned -Version. #>
+    param([Parameter(Mandatory)][string]$Root)
+
+    $requiredEntrySets = @(
+        @('main.py', 'sorter\__init__.py'),   # flat, up to and including 1.1.0
+        @('src\sorter\__init__.py')           # src/ layout
+    )
+
+    foreach ($entrySet in $requiredEntrySets) {
+        $complete = $true
+        foreach ($entry in $entrySet) {
+            if (-not (Test-Path (Join-Path $Root $entry))) {
+                $complete = $false
+                break
+            }
+        }
+        if ($complete) { return $true }
+    }
+    return $false
+}
+
 function Select-ReleaseAsset {
     <# Given a release API response, matches the sdist by its exact name --
        mirroring updater._expected_asset_name -- not "the first .tar.gz",
@@ -469,14 +501,8 @@ extract the release archive by hand:
             $entries[0].FullName
         } else { $unpack }
 
-        # Accepts either layout, same as sorter/update/updater.py's
-        # REQUIRED_ENTRY_SETS: the pre-#58 flat layout (root main.py) or the
-        # src/ layout it moved to (src/sorter/__init__.py). Both checks stay
-        # here indefinitely -- an old release published before the move is
-        # still a legitimate archive to install from a pinned -Version.
-        $looksLikeTheApp = (Test-Path (Join-Path $src 'main.py')) -or (Test-Path (Join-Path $src 'src\sorter\__init__.py'))
-        if (-not $looksLikeTheApp) {
-            throw "The downloaded archive does not look like the app (no main.py or src/sorter/__init__.py)."
+        if (-not (Test-LooksLikeTheApp -Root $src)) {
+            throw "The downloaded archive does not look like the app (no src/sorter/__init__.py, and no main.py + sorter/__init__.py)."
         }
 
         New-Item -ItemType Directory -Path $Dest -Force | Out-Null

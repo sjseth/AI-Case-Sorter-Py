@@ -66,8 +66,22 @@ def test_bootstrap_py_is_stdlib_only_at_module_level() -> None:
     never happen is a *module-level* import of anything third-party, since
     that would break before this script gets a chance to provision uv."""
     tree = ast.parse(BOOTSTRAP_PATH.read_text(encoding="utf-8"))
+    scoped = {
+        n
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        for n in ast.walk(node)
+    }
+
     top_level_modules: set[str] = set()
-    for node in tree.body:  # module-level statements only, not nested in defs
+    # Walk rather than iterate tree.body: an import inside a module-level
+    # `if`/`try` still runs at import time, and `try: import requests /
+    # except ImportError:` is exactly the shape an optional-dependency probe
+    # takes. Only imports nested in a def/class are deferred, so those are
+    # what gets excluded -- not everything below the top statement level.
+    for node in ast.walk(tree):
+        if node in scoped:
+            continue
         if isinstance(node, ast.Import):
             top_level_modules.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
@@ -78,17 +92,36 @@ def test_bootstrap_py_is_stdlib_only_at_module_level() -> None:
     assert not offenders, f"bootstrap.py imports non-stdlib module(s) at module level: {offenders}"
 
 
+# Every subpackage under src/sorter/. Listed rather than discovered so that
+# adding one is a deliberate decision about whether it may import anything.
+SORTER_SUBPACKAGES = (
+    "sorter.community",
+    "sorter.control",
+    "sorter.data",
+    "sorter.hardware",
+    "sorter.ml",
+    "sorter.training",
+    "sorter.ui",
+    "sorter.update",
+)
+
+
 def test_prelaunch_sorter_modules_import_without_third_party_packages() -> None:
     """``sorter.paths`` and ``sorter.update.apply_update`` are imported by
     ``bootstrap.py`` *before* ``uv sync`` runs (see its module docstring),
     against a venv that may hold zero third-party packages. Neither must ever
     pull one in -- not even transitively through a subpackage's
     ``__init__.py``, which is exactly why every subpackage ``__init__.py``
-    under ``src/sorter/`` (``hardware/``, ``data/``, ``ml/``, ``community/``,
-    ``update/``) is deliberately empty: a re-export added to one of them
-    would silently break every end user's first launch, and nothing in the
-    normal test suite would catch it, because the suite always runs in a
+    under ``src/sorter/`` is deliberately empty: a re-export added to one of
+    them would silently break every end user's first launch, and nothing in
+    the normal test suite would catch it, because the suite always runs in a
     fully-synced venv where the extra import just succeeds.
+
+    Every subpackage is imported here, not just the two on the pre-launch
+    path. ``sorter.update`` alone is what ``apply_update`` drags in, so a
+    ``requests`` re-export in ``community/__init__.py`` would sail past a
+    narrower check -- and then break the launch as soon as anything imported
+    it before the sync.
 
     ``-S`` drops site-packages from ``sys.path`` (stdlib itself is found via
     the interpreter's own path configuration, not `site`), which is the same
@@ -96,18 +129,39 @@ def test_prelaunch_sorter_modules_import_without_third_party_packages() -> None:
     imports it.
     """
     src = ROOT / "src"
+    imports = ", ".join(("sorter.paths", "sorter.update.apply_update") + SORTER_SUBPACKAGES)
     result = subprocess.run(
         [
             sys.executable,
             "-S",
             "-c",
-            "import sys; sys.path.insert(0, sys.argv[1]); import sorter.paths, sorter.update.apply_update",
+            f"import sys; sys.path.insert(0, sys.argv[1]); import {imports}",
             str(src),
         ],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_no_sorter_subpackage_init_imports_anything() -> None:
+    """The reason the import test above can pass: nothing to re-export.
+
+    Asserted structurally as well, because the ``-S`` run only proves the
+    imports resolve in a stripped environment. A re-export of a *stdlib-only*
+    sibling passes that while still making ``import sorter.data`` drag in the
+    whole persistence layer -- and the next re-export added beside it is the
+    one that reaches ``sqlite_utils``. A module docstring is fine; an import
+    of any kind is not.
+    """
+    offenders = {}
+    for dotted in SORTER_SUBPACKAGES:
+        init = ROOT / "src" / Path(*dotted.split(".")) / "__init__.py"
+        tree = ast.parse(init.read_text(encoding="utf-8"))
+        found = [ast.unparse(n) for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))]
+        if found:
+            offenders[dotted] = found
+    assert not offenders, f"subpackage __init__.py files must not import anything: {offenders}"
 
 
 def test_bootstrap_py_compiles() -> None:
@@ -121,7 +175,7 @@ def test_bootstrap_py_compiles() -> None:
 
 def test_main_consumes_auto_flags_and_forwards_the_rest(bootstrap, monkeypatch) -> None:
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
-    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock())
+    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=False))
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
 
     bootstrap.main(["--auto", "--some-app-flag", "value"])
@@ -135,7 +189,7 @@ def test_main_consumes_auto_flags_and_forwards_the_rest(bootstrap, monkeypatch) 
 
 def test_main_dash_y_is_equivalent_to_auto(bootstrap, monkeypatch) -> None:
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
-    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock())
+    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=False))
     seen = {}
 
     def fake_ensure(_uv, auto_install):
@@ -178,7 +232,7 @@ def test_sync_is_inexact_so_the_ml_extra_survives(bootstrap, monkeypatch) -> Non
     dialog_install_torch.py into this same venv, outside the lock -- so
     without --inexact every launch silently uninstalls PyTorch."""
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
-    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock())
+    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=False))
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
 
     sync_cmd = []
@@ -199,7 +253,7 @@ def test_sync_skips_the_dev_group(bootstrap, monkeypatch) -> None:
     tooling (pytest, ruff) and has no business in an end user's venv -- the
     launcher must ask for it to be left out."""
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
-    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock())
+    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=False))
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
 
     sync_cmd = []
@@ -219,7 +273,7 @@ def test_sync_failure_exits_with_a_readable_message(bootstrap, monkeypatch) -> N
     """The audience for this script is a non-developer who downloaded a ZIP;
     a raw CalledProcessError traceback is not an actionable failure."""
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
-    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock())
+    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=False))
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
 
     def failing_run(cmd, *a, **kw):
@@ -282,7 +336,7 @@ def test_main_makes_its_streams_tolerate_non_ascii(bootstrap, monkeypatch) -> No
         stream.reconfigure = lambda **kw: seen.append(kw)
         monkeypatch.setattr(bootstrap.sys, name, stream)
     monkeypatch.setattr(bootstrap, "find_uv", lambda: "/fake/uv")
-    monkeypatch.setattr(bootstrap, "apply_pending_update", lambda: None)
+    monkeypatch.setattr(bootstrap, "apply_pending_update", lambda: False)
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", lambda *a, **kw: None)
     monkeypatch.setattr(bootstrap, "run_app", lambda *a, **kw: 0)
 
@@ -302,6 +356,69 @@ def test_run_app_unbuffers_the_child(bootstrap, monkeypatch) -> None:
     kwargs = bootstrap.subprocess.Popen.call_args.kwargs
     assert kwargs["env"]["PYTHONUNBUFFERED"] == "1"
     assert kwargs["stderr"] == bootstrap.subprocess.STDOUT
+
+
+def test_run_app_launches_the_entry_point_that_exists(bootstrap, monkeypatch) -> None:
+    """Nothing else pins this path, and getting it wrong kills every launch.
+
+    CI can't cover for it: launcher-smoke declares success on the
+    "Starting the app" log line, which is emitted *before* this Popen, and
+    then only checks the venv it built. So a typo or a later relocation of
+    ``__main__.py`` would ship a release that dies instantly with the whole
+    matrix green -- which is not hypothetical, since this PR is itself the
+    relocation. Assert the argv, and assert the file is really there.
+    """
+    monkeypatch.setattr(bootstrap.subprocess, "Popen", MagicMock(return_value=_fake_popen()))
+
+    bootstrap.run_app("/fake/uv", ["--flag"])
+
+    argv = bootstrap.subprocess.Popen.call_args.args[0]
+    assert argv == ["/fake/uv", "run", "--no-sync", "python", "main.py", "--flag"]
+    assert (ROOT / "main.py").is_file()
+
+
+def test_main_relaunches_itself_after_applying_an_update(bootstrap, monkeypatch) -> None:
+    """An update replaces bootstrap.py and can move the entry point.
+
+    Both were resolved by this process before that happened, so carrying on
+    would sync and then launch with the *previous* release's path. That is
+    what breaks a layout change in either direction -- most visibly a
+    downgrade, where the update replaces the whole tree under a
+    ``bootstrap.py`` this process already loaded.
+    """
+    monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
+    monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
+    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=True))
+    monkeypatch.setattr(bootstrap.subprocess, "call", MagicMock(return_value=7))
+    monkeypatch.setattr(bootstrap, "run_app", MagicMock(return_value=0))
+
+    assert bootstrap.main(["--some-app-flag"]) == 7
+
+    relaunch_argv = bootstrap.subprocess.call.call_args.args[0]
+    assert relaunch_argv == [sys.executable, str(BOOTSTRAP_PATH), "--some-app-flag"]
+    assert bootstrap.subprocess.call.call_args.kwargs["env"][bootstrap.RELAUNCH_ENV] == "1"
+    bootstrap.run_app.assert_not_called()
+    bootstrap.subprocess.run.assert_not_called()  # the child does the sync
+
+
+def test_relaunch_happens_at_most_once(bootstrap, monkeypatch) -> None:
+    """The guard the re-launch needs, or a permanently-pending update loops.
+
+    ``apply_pending`` discards the staged tree whether or not it applied
+    cleanly, so this shouldn't trigger -- but "shouldn't" is not a reason to
+    let the failure mode be an unbounded chain of processes.
+    """
+    monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
+    monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
+    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=True))
+    monkeypatch.setattr(bootstrap.subprocess, "call", MagicMock(return_value=0))
+    monkeypatch.setattr(bootstrap, "run_app", MagicMock(return_value=0))
+    monkeypatch.setenv(bootstrap.RELAUNCH_ENV, "1")
+
+    assert bootstrap.main([]) == 0
+
+    bootstrap.subprocess.call.assert_not_called()
+    bootstrap.run_app.assert_called_once()
 
 
 def test_open_log_keeps_the_previous_launch(monkeypatch, tmp_path) -> None:

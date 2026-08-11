@@ -39,6 +39,7 @@ pytestmark = [
 # itself: the entry point, the dependency bootstrap, both launchers, and the
 # metadata bootstrap.py reads to build the venv.
 RUNTIME_FILES = (
+    "main.py",
     "src/sorter/__main__.py",
     "bootstrap.py",
     "start.sh",

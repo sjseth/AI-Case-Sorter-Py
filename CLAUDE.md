@@ -38,14 +38,22 @@ Two ways to classify:
 
 ## 2. Running, testing, layout
 
-**Entry point:** `src/sorter/__main__.py` → initializes paths, opens the
-SQLite DB (migrating from a legacy `data/config.json` if present), loads
-`Config`, and launches `sorter.ui.app.MainWindow`. It carries a `sys.path`
-shim above every `sorter` import (see its module docstring, and the reqstool
-precedent it follows) because the package is deliberately **never installed**
-into the venv (`bootstrap.py`'s `uv sync --no-install-project`) — running it
-as a plain script is the only way this app is ever launched, so the shim has
-to put `src/` on `sys.path` itself.
+**Entry point:** `main.py` → puts `src/` on `sys.path`, then hands off to
+`src/sorter/__main__.py`, which initializes paths, opens the SQLite DB
+(migrating from a legacy `data/config.json` if present), loads `Config`, and
+launches `sorter.ui.app.MainWindow`.
+
+`main.py` stays at the repo root rather than moving into the package with
+everything else, and that is load-bearing: an in-app update is applied by the
+copy **already installed**, and every release up to 1.1.0 ends that launch
+with `python main.py` from a `bootstrap.py` already in memory when the new
+tree lands. Ship no `main.py` and the first launch after upgrading is an
+`ImportError` (`tests/integration/test_cross_version_update.py` runs 1.1.0's
+real updater against this tree to keep that honest). The path setup lives
+there and **only** there — `sorter/__main__.py` must not acquire a second
+copy — because the package is deliberately **never installed** into the venv
+(`bootstrap.py`'s `uv sync --no-install-project`), so something has to put
+`src/` on `sys.path` before the first `sorter` import.
 
 **Launch (handles the Python runtime, system deps, and dependency sync
 automatically):**
@@ -61,10 +69,15 @@ automatically):**
   `bootstrap.py` itself, not to run the app), syncs dependencies from the
   committed `uv.lock`, then launches. See `bootstrap.py`'s module docstring
   for the full ordering and why it has to stay stdlib-only.
-- Directly (once synced): `uv run python src/sorter/__main__.py`, or
-  `python src/sorter/__main__.py` inside an activated `.venv`. **Not**
-  `python -m sorter` — the package is never installed, so there is nothing
-  for `-m` to resolve; the script path imports it straight from `src/`.
+- Directly (once synced): `uv run --no-sync python main.py`, or `python
+  main.py` inside an activated `.venv`. **Keep `--no-sync`** — a bare `uv
+  run` syncs *and installs the project*, firing hatch-vcs's build hook, which
+  is what `bootstrap.py` goes out of its way to avoid: with no `.git` present
+  the hook overwrites a correct `src/sorter/_version.py` with the
+  `fallback-version = "0.0.0"`, and `0.0.0+unknown` parses as a pre-release,
+  so every launch then sees the current release as newer and re-prompts.
+  **Not** `python -m sorter` — the package is never installed, so there is
+  nothing for `-m` to resolve.
 
 **Tests:** `pytest` from the repo root (`tests/conftest.py` puts `src/` on
 `sys.path`; it lives at `tests/` top-level so it applies to both
@@ -90,13 +103,14 @@ torchvision.
 ```
 AI-Case-Sorter-Py/
 ├── bootstrap.py              # cross-platform launcher logic (Python+uv+deps+update)
+├── main.py                   # entry point: puts src/ on sys.path, then sorter.__main__
 ├── start.sh / start.bat     # thin per-OS shims that just call bootstrap.py
 ├── pyproject.toml           # package metadata; [ml] extra = torch/torchvision
 ├── uv.lock                  # committed, exact dependency resolution
 ├── .python-version           # Python version uv provisions for the app
 ├── src/
 │   └── sorter/               # all application code (never installed — see above)
-│       ├── __main__.py         # entry point (+ `--apply-update` pre-launch hook)
+│       ├── __main__.py         # app startup (+ `--apply-update` pre-launch hook)
 │       ├── paths.py            # on-disk layout; stdlib-only, imported before uv sync
 │       ├── control/            # event bus + the sort loop
 │       ├── hardware/           # serial, camera, image processing
@@ -211,8 +225,8 @@ sanctioned way for worker threads to update the UI.
   imports it before the venv has any third-party packages. Also tracks
   `is_installed_package()` — whether this process's `sorter` is a real
   install (pip/uv wheel) vs. a source checkout run as a script, which is how
-  this app is actually always launched (see §2); `__main__.py`'s `sys.path`
-  shim records the authoritative answer, falling back to a
+  this app is actually always launched (see §2); the root `main.py` records
+  the authoritative answer, falling back to a
   `site-packages`/`dist-packages` path heuristic for anything that imports
   `sorter` another way (e.g. a test). `bootstrap.py`'s launch log records it.
 
@@ -653,7 +667,7 @@ flowchart TD
     A["updater.check_for_update()<br/>GET /releases/latest, compare tags — needs requests"]
     B["updater.stage_update()<br/>download → verify → &lt;data&gt;/updates/pending/<br/>(the app folder is NOT touched)"]
     C(["restart"])
-    D["__main__.py --apply-update<br/>run by bootstrap.py BEFORE uv sync — stdlib ONLY"]
+    D["main.py --apply-update<br/>run by bootstrap.py BEFORE uv sync — stdlib ONLY"]
     E["sorter.update.apply_update<br/>backup → copy over app dir → prune → clear pending"]
 
     A --> B --> C --> D --> E
@@ -703,8 +717,30 @@ flowchart TD
   may hold nothing at all yet; importing `requests` here would break the very
   launch it exists to fix. Backs up everything it will overwrite, rolls back on
   failure, and **always exits 0** so a broken updater can never stop the app
-  starting. Pruning stale files is confined to `src/sorter/`; `PROTECTED_TOP_LEVEL`
+  starting. Pruning stale files is confined to `PRUNE_ROOTS`; `PROTECTED_TOP_LEVEL`
   (`.git`, `.venv`, `.uv`, `data`, `.env`, `portable.txt`) is never touched.
+  - **`PRUNE_ROOTS` covers both layouts** (`src/sorter`, `sorter`) because an
+    archive can be either: the version picker makes downgrading to a pre-#58
+    release a supported move, and an install upgraded *from* one leaves a
+    stale root `sorter/` behind (the old updater empties the flat package,
+    then re-creates `sorter/_version.py` inside it). Empty directories left
+    by a prune are swept afterwards, best-effort.
+- **The launch that applies an update re-launches itself.** `bootstrap.py`
+  resolved its own module and the entry-point path before the update replaced
+  the tree underneath it, so continuing would sync and then launch the
+  *previous* release's paths — which is precisely how a layout change breaks.
+  `apply_pending_update()` returns whether it applied anything;
+  `relaunch_after_update()` then re-runs `bootstrap.py` from disk, once
+  (`CASESORTER_BOOTSTRAP_RELAUNCHED` guards the loop). subprocess, not
+  `os.execv`: exec on Windows returns cmd.exe to its prompt, defeating
+  `start.bat`'s pause-on-failure.
+- **1.0.0 and 1.0.1 cannot update directly to a `src/`-layout release.**
+  `REQUIRED_ENTRY_SETS` arrived in 1.1.0 (#62); before it the only accepted
+  set was the flat `("main.py", "sorter/__init__.py")`, so those installs
+  reject the archive outright as "not the app". Nothing can patch an already
+  installed updater, so this is permanent: those users step to 1.1.0 via the
+  version picker first. Say so in the release notes of the first `src/`
+  release.
 - **Why a pre-launch step at all:** on Windows the venv's `.pyd`/`.dll` files
   (opencv, numpy) are locked while the app runs, so in-place replacement is
   unreliable. Applying before Python loads anything sidesteps locking — and puts
@@ -740,7 +776,7 @@ flowchart TD
 - **Logging, and why it spans three files.** The chain is
   `install-windows.ps1` → `start.bat` → `bootstrap.py` → the app, and every
   step after the first runs in a **detached console that closes with the
-  process** — so a traceback from `__main__.py` was visible for a fraction of a
+  process** — so a traceback from `main.py` was visible for a fraction of a
   second and then gone, reaching the user as "nothing happened". Both halves
   now write to `<data root>/logs/` (§6): the installer via `Start-Transcript`,
   and `bootstrap.py` via `open_log()` + `run_app()`, which **pipes the app's

@@ -7,6 +7,10 @@
 # subpackage, one directory glob per label is enough -- no more enumerated
 # per-file lists to keep in sync as files move within a subsystem.
 #
+# Two things stay deliberately unlabelled, because `sync-labels: true` means a
+# glob here also *removes* a hand-applied label: `src/sorter/paths.py` and the
+# package's `__init__.py`/`__main__.py`, which belong to no one subsystem.
+#
 # NOTE: actions/labeler does not create labels -- every label named here must
 # already exist in the repo or the action errors. They are declared in
 # .github/settings.yml, which repository-settings/app applies for you; without
@@ -28,6 +32,14 @@ hardware:
   - changed-files:
       - any-glob-to-any-file: 'src/sorter/hardware/**'
 
+control:
+  - changed-files:
+      - any-glob-to-any-file: 'src/sorter/control/**'
+
+data:
+  - changed-files:
+      - any-glob-to-any-file: 'src/sorter/data/**'
+
 community:
   - changed-files:
       - any-glob-to-any-file: 'src/sorter/community/**'
@@ -42,6 +54,10 @@ launcher:
   - changed-files:
       - any-glob-to-any-file:
           - 'bootstrap.py'
+          # The entry point stayed at the root through the src/ move: the
+          # launch that applies an update runs it from a bootstrap.py that
+          # predates the move (see main.py's docstring).
+          - 'main.py'
           - 'start.sh'
           - 'start.bat'
 

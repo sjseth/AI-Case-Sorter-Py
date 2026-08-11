@@ -36,20 +36,19 @@ What it does, in order:
      stay deterministic and offline-safe (CI uses `--locked` instead, which
      fails if the lock has drifted from pyproject.toml -- see
      .github/workflows/build.yml). --no-install-project skips building the
-     sorter package itself: __main__.py imports it straight from the source
+     sorter package itself: main.py imports it straight from the source
      tree, so it was never needed for that, and building it is actively
      harmful when there's no .git to derive a version from (see
-     pyproject.toml's [tool.hatch.version] and sorter/__init__.py).
+     pyproject.toml's [tool.hatch.version] and src/sorter/__init__.py).
      --no-dev keeps the `dev` group (pytest, ruff) out of a user's venv --
      uv installs it by default, and it is pure CI tooling.
-  5. Launch the app: `uv run --no-sync python src/sorter/__main__.py
-     <forwarded args>`. --no-sync, not --frozen: `uv run` syncs implicitly by
-     default even with --frozen, which would redo the very build step 4
-     skipped. `src/sorter/__main__.py` (not `python -m sorter`) because the
-     sorter package is deliberately never installed into the venv -- see
-     step 4 -- so there is nothing for `-m` to resolve; the script path
-     imports it straight from the source tree instead, same as the old root
-     `main.py` did.
+  5. Launch the app: `uv run --no-sync python main.py <forwarded args>`.
+     --no-sync, not --frozen: `uv run` syncs implicitly by default even with
+     --frozen, which would redo the very build step 4 skipped. `main.py`
+     (not `python -m sorter`) because the sorter package is deliberately
+     never installed into the venv -- see step 4 -- so there is nothing for
+     `-m` to resolve; main.py puts `src/` on sys.path and imports it from
+     the source tree instead.
 """
 
 from __future__ import annotations
@@ -105,6 +104,24 @@ def open_log():
     return _log_path
 
 
+def close_log():
+    """Release the launch log so another process can rotate it.
+
+    Only the re-launch after an update needs this: the child calls open_log()
+    too, and on Windows os.replace() on a file this process still holds open
+    fails -- silently, since open_log swallows everything -- leaving that
+    launch unlogged.
+    """
+    global _log_file
+    if _log_file is None:
+        return
+    try:
+        _log_file.close()
+    except Exception:
+        pass
+    _log_file = None
+
+
 def _record(line: str) -> None:
     if _log_file is None:
         return
@@ -116,7 +133,7 @@ def _record(line: str) -> None:
 
 
 # flush=True because stdout is block-buffered whenever it isn't a terminal,
-# and this process ends by being killed while still inside __main__.py's Tk loop
+# and this process ends by being killed while still inside main.py's Tk loop
 # -- so an unflushed buffer is never written at all. That is not theoretical:
 # build.yml's launcher-smoke redirects to a file and dumped it afterwards,
 # and the file came back empty every run, which is why its comment used to
@@ -320,11 +337,44 @@ def ensure_linux_runtime_libs(uv: str, auto_install: bool) -> None:
 # ---------------------------------------------------------------------------
 
 
-def apply_pending_update() -> None:
-    sys.path.insert(0, str(SRC))
-    from sorter.update.apply_update import main as apply_main
+# Set on the process a re-launch starts, so an update that somehow stays
+# pending can cost one extra launch and not an infinite chain of them.
+RELAUNCH_ENV = "CASESORTER_BOOTSTRAP_RELAUNCHED"
 
-    apply_main()  # always exits 0 internally; a broken updater must never block launch
+
+def apply_pending_update() -> bool:
+    """Apply a staged update. True if one was applied, i.e. this file changed."""
+    sys.path.insert(0, str(SRC))
+    from sorter.update.apply_update import apply_pre_launch
+
+    # Never raises internally; a broken updater must never block launch.
+    return apply_pre_launch()
+
+
+def relaunch_after_update(forwarded: list[str]):
+    """Re-run this file from disk after an update replaced it. None to carry on.
+
+    An update rewrites bootstrap.py and moves the entry point it launches,
+    but this process resolved both before that happened -- the module in
+    memory and the path in run_app() are the previous release's. That is what
+    breaks a layout change in either direction: an update that moves the
+    entry point makes the in-memory path stale by definition, and the process
+    holding it is the one that just installed the move.
+
+    subprocess rather than os.execv: on Windows exec replaces the process
+    image and cmd.exe treats the original as finished, returning to the
+    prompt while the app is still starting -- which would defeat start.bat's
+    pause-on-failure, the thing that keeps a launch error on screen.
+    """
+    if os.environ.get(RELAUNCH_ENV) == "1":
+        warn("an update was applied again after a re-launch; continuing rather than looping.")
+        return None
+
+    env = dict(os.environ)
+    env[RELAUNCH_ENV] = "1"
+    log("update applied; re-launching with the new bootstrap ...")
+    close_log()  # the child rotates the log this process is holding open
+    return subprocess.call([sys.executable, str(Path(__file__).resolve())] + forwarded, cwd=str(ROOT), env=env)
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +396,7 @@ def run_app(uv: str, forward_args: list[str]) -> int:
     # would silently redo the project build main() went out of its way to
     # skip. --no-sync trusts that sync and skips its own.
     proc = subprocess.Popen(
-        [uv, "run", "--no-sync", "python", "src/sorter/__main__.py"] + forward_args,
+        [uv, "run", "--no-sync", "python", "main.py"] + forward_args,
         cwd=ROOT,
         env=env,
         stdout=subprocess.PIPE,
@@ -410,11 +460,14 @@ def main(argv: list[str] | None = None) -> int:
 
     log(f"installed package: {is_installed_package()}")
 
-    apply_pending_update()
+    if apply_pending_update():
+        code = relaunch_after_update(args)
+        if code is not None:
+            return code
 
     log("Syncing dependencies with uv ...")
     # --no-install-project: don't build/install the sorter package itself as
-    # part of the sync. __main__.py imports it straight from the source tree
+    # part of the sync. main.py imports it straight from the source tree
     # (sys.path.insert), so it was never needed for that -- and building it
     # is actively harmful in exactly the context this matters most: a
     # downloaded release has no .git, and hatch-vcs's build hook (see

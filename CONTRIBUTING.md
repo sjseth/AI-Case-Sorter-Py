@@ -39,11 +39,19 @@ cd AI-Case-Sorter-Py
 
 **Prefer to drive `uv` yourself?**
 ```bash
-uv sync              # dependencies + dev tools (pytest, ruff) from uv.lock
-uv run python src/sorter/__main__.py
+uv sync --no-install-project     # deps + dev tools (pytest, ruff) from uv.lock
+uv run --no-sync python main.py
 ```
 `uv sync`/`uv run` resolve against the committed `uv.lock`, so this is
 deterministic — no separate "install deps" step to remember or forget.
+
+`--no-install-project` and `--no-sync` are not optional decoration: without
+them uv builds the project, and hatch-vcs's build hook rewrites
+`src/sorter/_version.py`. In a git checkout that mostly works out; on a copy
+with no `.git` it stamps in `fallback-version = "0.0.0"` instead, which the
+updater reads as a pre-release and offers to "update" on every launch,
+forever. `bootstrap.py` passes the same flags for the same reason — see its
+module docstring.
 
 Local training/inference additionally needs PyTorch (optional):
 ```bash
