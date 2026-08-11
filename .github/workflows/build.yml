@@ -107,7 +107,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb
 
-      # main.py has no headless flag, so a full run blocks on the Tk main
+      # The app has no headless flag, so a full run blocks on the Tk main
       # loop and the launcher never exits on its own. So wait for the line
       # bootstrap.py prints when it hands off to the app rather than for the
       # process: everything under test (uv install, dependency sync, the

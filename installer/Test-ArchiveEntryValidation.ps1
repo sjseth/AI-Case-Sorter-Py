@@ -10,7 +10,7 @@
     be exercised by the Python suite -- so it gets its own tests.
 
     These are the same shapes sorter/update/updater.py's _safe_members rejects, in
-    tests/unit/test_updater.py. The two extraction paths consume the *same*
+    tests/unit/update/test_updater.py. The two extraction paths consume the *same*
     archives; a shape rejected by one and accepted by the other is a bug in
     whichever one accepts it.
 

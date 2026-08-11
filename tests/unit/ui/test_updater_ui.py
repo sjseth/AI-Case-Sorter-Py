@@ -66,11 +66,22 @@ def _info() -> UpdateInfo:
 
 
 def _archive() -> bytes:
+    """The shape a real sdist has: src/ layout, plus the root main.py shim.
+
+    Was the pre-#58 flat layout, which passed only because
+    ``REQUIRED_ENTRY_SETS`` still carries the legacy tuple for archives
+    "somehow received" -- so the one end-to-end download-and-stage test in the
+    suite exercised an archive the project no longer produces, and would have
+    broken on the day that tuple is finally dropped, for a reason having
+    nothing to do with the UI.
+    """
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
         for name, content in {
             "ai_case_sorter-9.9.9/main.py": "new\n",
-            "ai_case_sorter-9.9.9/sorter/__init__.py": '__version__ = "9.9.9"\n',
+            "ai_case_sorter-9.9.9/bootstrap.py": "new\n",
+            "ai_case_sorter-9.9.9/src/sorter/__init__.py": '__version__ = "9.9.9"\n',
+            "ai_case_sorter-9.9.9/src/sorter/__main__.py": "new\n",
         }.items():
             data = content.encode("utf-8")
             info = tarfile.TarInfo(name=name)
@@ -172,7 +183,9 @@ def test_download_stages_and_switches_to_restart(root, monkeypatch) -> None:
     assert dlg._primary.cget("text") == "Restart Now"
     # The app is told, so the status-bar button can flip to "Restart to update".
     assert app.noted is not None and app.noted.version == "9.9.9"
-    # Staged, not applied.
+    # Staged, not applied. Both entry points, since both ship and a launcher
+    # in the field may run either (see main.py's docstring).
+    assert (updater.pending_dir() / "src" / "sorter" / "__main__.py").is_file()
     assert (updater.pending_dir() / "main.py").is_file()
     dlg.destroy()
 

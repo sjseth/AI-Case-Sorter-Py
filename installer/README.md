@@ -75,7 +75,7 @@ powershell -ExecutionPolicy Bypass -File install-windows.ps1 -Repo yourname/AI-C
 
 ## Portable installs
 
-Drop an empty file named `portable.txt` next to `main.py` and the app keeps
+Drop an empty file named `portable.txt` next to `bootstrap.py` and the app keeps
 its data in `<app>\data` instead of `%LOCALAPPDATA%`, for USB-stick or
 self-contained use. The updater still works — it just won't be able to rely
 on your data being outside the app folder, so it leaves `data\` alone
@@ -156,7 +156,7 @@ Python that works but cannot be uninstalled from Settings.
 - The updater reads `/releases/latest`, which excludes drafts and
   pre-releases, so tagging a pre-release won't push it to stable users.
 - There is no version string to bump. The version is derived from the git tag
-  at build time by hatch-vcs and baked into the sdist (as `sorter/_version.py`),
+  at build time by hatch-vcs and baked into the sdist (as `src/sorter/_version.py`),
   so tagging *is* the bump — see [`../RELEASING.md`](../RELEASING.md). This is
   why the installer prefers the sdist: a source archive carries neither that
   file nor `.git`, so an install made from one reports `0.0.0+unknown` and

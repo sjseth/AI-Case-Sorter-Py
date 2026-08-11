@@ -39,11 +39,16 @@ cd AI-Case-Sorter-Py
 
 **Prefer to drive `uv` yourself?**
 ```bash
-uv sync              # dependencies + dev tools (pytest, ruff) from uv.lock
-uv run python src/sorter/__main__.py
+uv sync --no-install-project   # deps + dev tools (pytest, ruff) from uv.lock
+uv run --no-sync python src/sorter/__main__.py
 ```
 `uv sync`/`uv run` resolve against the committed `uv.lock`, so this is
 deterministic — no separate "install deps" step to remember or forget.
+
+Keep both flags. They stop `uv` installing the app package into the venv,
+which fires hatch-vcs's build hook and rewrites `src/sorter/_version.py`.
+Harmless-looking in a git checkout, destructive in a release tree with no
+`.git` — see CLAUDE.md §7. `bootstrap.py` passes the same two.
 
 Local training/inference additionally needs PyTorch (optional):
 ```bash

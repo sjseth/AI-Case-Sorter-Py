@@ -61,10 +61,17 @@ automatically):**
   `bootstrap.py` itself, not to run the app), syncs dependencies from the
   committed `uv.lock`, then launches. See `bootstrap.py`'s module docstring
   for the full ordering and why it has to stay stdlib-only.
-- Directly (once synced): `uv run python src/sorter/__main__.py`, or
+- Directly (once synced): `uv run --no-sync python src/sorter/__main__.py`, or
   `python src/sorter/__main__.py` inside an activated `.venv`. **Not**
   `python -m sorter` — the package is never installed, so there is nothing
   for `-m` to resolve; the script path imports it straight from `src/`.
+  **`--no-sync` is not optional here.** A bare `uv run` syncs implicitly, and
+  that sync builds and installs the project, which fires hatch-vcs's build
+  hook — the one thing this app must never do to itself (§7). In a git
+  checkout that just regenerates `_version.py`; in a downloaded release, with
+  no `.git` to read, it *overwrites* the correct version with the `0.0.0`
+  fallback and the update prompt then returns forever. `bootstrap.py` passes
+  `--no-install-project` / `--no-sync` for exactly this reason.
 
 **Tests:** `pytest` from the repo root (`tests/conftest.py` puts `src/` on
 `sys.path`; it lives at `tests/` top-level so it applies to both
@@ -89,6 +96,7 @@ torchvision.
 
 ```
 AI-Case-Sorter-Py/
+├── main.py                  # compatibility entry point — updates only, see §7
 ├── bootstrap.py              # cross-platform launcher logic (Python+uv+deps+update)
 ├── start.sh / start.bat     # thin per-OS shims that just call bootstrap.py
 ├── pyproject.toml           # package metadata; [ml] extra = torch/torchvision
@@ -273,6 +281,12 @@ between them from the Run tab's template dropdown.
   keeping the latest frame; platform backends (CAP_DSHOW on Windows w/ optional
   pygrabber for friendly names + resolution probing, CAP_V4L2 on Linux, MJPG for
   ≥1080p). `enumerate_devices` / `list_cameras_with_metadata` for the Camera tab.
+- **`image_proc.py`** — crops the headstamp to a fixed **480×480 BGR** canvas.
+  Default strategy: **Hough circles** (`HoughParams`); a dormant **line-scan**
+  strategy is ported but UI-hidden. `apply_primer_mask` (none/use/hide),
+  `overlay_detection` for preview. Lives here rather than under `ml/` because
+  it is camera-frame geometry, not classification — it runs identically
+  whichever backend classifies the crop.
 
 ### The sort loop (`sorter/control/run_controller.py`)
 - **`run_controller.py`** — `RunController`: the production loop on a daemon
@@ -314,10 +328,6 @@ between them from the Run tab's template dropdown.
   against an OpenAI-compatible server. JPEG-encodes the frame to a base64 data
   URL, renders the `{{headstamps}}` prompt placeholder, parses `choices[0]...`
   and a top-level `confidence` float.
-- **`image_proc.py`** — crops the headstamp to a fixed **480×480 BGR** canvas.
-  Default strategy: **Hough circles** (`HoughParams`); a dormant **line-scan**
-  strategy is ported but UI-hidden. `apply_primer_mask` (none/use/hide),
-  `overlay_detection` for preview.
 
 ### Training & evaluation (`sorter/training/`, plus evaluation in `sorter/ml/` and ZIP import/export in `sorter/data/model_io.py`)
 - **`training/manager.py`** — `TrainingManager`: spawns `train_convnext.py` as a
@@ -371,12 +381,13 @@ between them from the Run tab's template dropdown.
 - **`apply_update.py`** — the pre-launch half: copies a staged tree over the app
   folder, with backup/rollback. **Stdlib-only** — it runs before `uv sync`.
   Grouped with `updater.py` under `sorter/update/` for subsystem organization
-  only; `sorter/update/__init__.py` is (like every subpackage `__init__.py`)
-  deliberately empty, so importing this module alone never drags in
-  `updater.py`'s `requests` import. Also stamps `src/sorter/_version.py` with
-  the applied version when the archive didn't carry one, so an install
-  updated from the source-archive fallback doesn't keep reporting
-  `0.0.0+unknown` and re-prompting forever.
+  only; `sorter/update/__init__.py` carries **no imports** (see §8), so
+  importing this module alone never drags in `updater.py`'s `requests`
+  import. Also stamps `_version.py` with the applied version when the archive
+  didn't carry one, so an install updated from the source-archive fallback
+  doesn't keep reporting `0.0.0+unknown` and re-prompting forever — at the
+  path matching the layout the archive laid down, since the version picker
+  can install a release from either side of the #58 move.
 
 ### Community / cloud (`sorter/community/`)
 - **`auth.py`** — `AuthManager`: MSAL `PublicClientApplication` against Azure AD
@@ -526,7 +537,7 @@ a separate one, so a built-in is never the thing being written to),
     classic Tk widgets (`tk.Label`, `tk.Canvas`, `tk.Text`) at construction.
     That translation is by color value, which is why no two roles inside one
     theme may share a color — except `success`/`error`, which must equal
-    `action`/`danger` (`tests/unit/test_theme.py` enforces both rules).
+    `action`/`danger` (`tests/unit/ui/test_theme.py` enforces both rules).
   - **`PALETTE` is mutated in place** on a switch. Read it at call time
     (`PALETTE["bg_card"]`); never copy a color into a module-level constant.
   - **User-made themes.** `BUILTIN_THEMES` is what ships; `THEMES` is the live
@@ -703,8 +714,31 @@ flowchart TD
   may hold nothing at all yet; importing `requests` here would break the very
   launch it exists to fix. Backs up everything it will overwrite, rolls back on
   failure, and **always exits 0** so a broken updater can never stop the app
-  starting. Pruning stale files is confined to `src/sorter/`; `PROTECTED_TOP_LEVEL`
-  (`.git`, `.venv`, `.uv`, `data`, `.env`, `portable.txt`) is never touched.
+  starting. Pruning stale files is confined to `PRUNE_ROOTS` (`src/sorter/`,
+  plus the pre-#58 flat `sorter/` so a migrated install doesn't keep an
+  importable-looking shell of it forever); `PROTECTED_TOP_LEVEL` (`.git`,
+  `.venv`, `.uv`, `data`, `.env`, `portable.txt`) is never touched.
+- **⚠️ The version applying an update is the version being *replaced*.**
+  `bootstrap.py` imports `apply_update`, applies the staged tree, and launches
+  the app in one process, holding the old code the whole time. So the launch
+  that installs a new layout is the one launch that cannot know about it, and
+  **any change to how the app is launched has to be backward-compatible with
+  every launcher still in the field** — you cannot patch an already-installed
+  `bootstrap.py` retroactively, any more than an already-installed
+  `updater.py` (the `REQUIRED_ENTRY_SETS` problem, same shape). Two mechanisms
+  hold that line, and both must stay:
+  - **`main.py`** at the repo root delegates to `src/sorter/__main__.py`.
+    Every release up to 1.0.x runs `python main.py`, so an archive without one
+    makes that launch die with `ImportError: … 'sorter'`. It is not a
+    developer entry point and is not the documented way to run the app; it
+    exists so an old launcher still has something to start. **Deleting it
+    re-breaks the upgrade for anyone yet to pass through a release containing
+    it**, which is unknowable, so it stays indefinitely.
+  - **`bootstrap.py` resolves the entry point against the disk**
+    (`APP_ENTRY_POINTS`) rather than hardcoding it, because the tree can
+    change shape underneath it — the version picker installs releases from
+    either side of the move, and a downgrade past #58 removes
+    `src/sorter/__main__.py` outright.
 - **Why a pre-launch step at all:** on Windows the venv's `.pyd`/`.dll` files
   (opencv, numpy) are locked while the app runs, so in-place replacement is
   unreliable. Applying before Python loads anything sidesteps locking — and puts
@@ -773,6 +807,16 @@ flowchart TD
   - Each changelog line also carries `by @user` and, for a **squash-merged**
     PR only, `in #N` — see `RELEASING.md` for why the two resolve
     independently.
+- **No subpackage `__init__.py` may import anything.** `bootstrap.py` imports
+  `sorter.paths` and `sorter.update.apply_update` *before* `uv sync`, against a
+  venv that may hold zero third-party packages, so a convenience re-export in
+  any `src/sorter/*/__init__.py` breaks every end user's first launch — and
+  nothing in a normally-run suite would notice, because the suite is always
+  fully synced. The rule is "no imports", not "empty": `training/__init__.py`
+  has a module docstring and always has.
+  `tests/unit/test_bootstrap.py::test_prelaunch_sorter_modules_import_without_third_party_packages`
+  enforces it by importing every subpackage under `python -S`, discovering
+  them from the tree so a new one is covered the day it is added.
 - **Threading rule:** never touch Tk widgets off the main thread. Do blocking
   work in `run_worker`/daemon threads and `bus.post(...)`; the drain loop
   delivers handlers on the main thread. **`widget.after()` is not an escape

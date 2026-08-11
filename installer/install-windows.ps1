@@ -316,7 +316,7 @@ function Get-ReleaseInfo {
        are no releases at all yet.
 
        The sdist matters because it is the only archive that carries
-       sorter/_version.py (hatch-vcs stamps it at build time). A source archive
+       src/sorter/_version.py (hatch-vcs stamps it at build time). A source archive
        has neither that file nor .git, so an install made from one reports
        0.0.0+unknown -- which parses as a pre-release, so every launch would
        see the current release as "newer" and re-prompt. sorter/update/apply_update.py

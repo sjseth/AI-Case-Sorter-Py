@@ -143,8 +143,13 @@ start.bat
 
 **Run it directly** (if you have `uv` yourself and want to manage it):
 ```bash
-uv run python src/sorter/__main__.py
+uv sync --no-install-project
+uv run --no-sync python src/sorter/__main__.py
 ```
+Both flags matter: they keep `uv` from building and installing the app into
+its own venv. It is meant to run from the source tree, and installing it
+overwrites the version stamped into a downloaded release — after which the
+updater offers you the same release on every launch.
 
 ### Running without hardware
 
