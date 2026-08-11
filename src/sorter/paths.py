@@ -65,11 +65,14 @@ def app_root() -> Path:
 # bootstrap.py always launches this app — see its module docstring). ``None``
 # until something has actually recorded it.
 #
-# Set once, by ``__main__.py``'s ``sys.path`` shim: whether that shim's branch
-# ran is a direct fact about how the process started (``__package__`` empty
-# means "run as a bare script"), not a guess. Anything asking earlier than
-# that — or a process that imports ``sorter`` some other way entirely, e.g. a
-# test — falls back to ``is_installed_package()``'s heuristic below.
+# Set once, by whichever shim started the process — ``__main__.py``'s
+# ``sys.path`` shim, or the root ``main.py`` compatibility entry point.
+# Whether one of those branches ran is a direct fact about how the process
+# started (``__package__`` empty means "run as a bare script"), not a guess.
+# Anything asking earlier than that — or a process that imports ``sorter``
+# some other way entirely, e.g. a test, or ``bootstrap.py``, which is a
+# *different process* and so never sees what the app recorded — falls back to
+# ``is_installed_package()``'s heuristic below.
 _installed_package: bool | None = None
 
 

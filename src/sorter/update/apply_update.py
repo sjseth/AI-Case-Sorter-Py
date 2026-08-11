@@ -24,8 +24,8 @@ Safety model:
 
 * Everything about to be overwritten or pruned is copied to
   ``<data>/updates/backup/`` first, and restored if any step raises.
-* Pruning is confined to ``src/sorter/`` — a package directory that never
-  holds user data — so removed-upstream modules don't linger as importable
+* Pruning is confined to ``PRUNE_ROOTS`` — package directories that never
+  hold user data — so removed-upstream modules don't linger as importable
   stale code. Every other path is overwrite-only.
 * The exit code is **always 0**. A broken updater must never stop the app
   from starting; it reports on stderr and leaves the previous version running.
@@ -46,7 +46,16 @@ PROTECTED_TOP_LEVEL = frozenset({".git", ".venv", "venv", ".uv", "data", ".env",
 # Pruning stale files is confined to these directories. This mirrors the
 # layout a *release archive* ships (the sdist's `src/sorter/`), not this
 # module's own path within the source tree.
-PRUNE_ROOTS = ("src/sorter",)
+#
+# The flat `sorter/` entry is for installs predating #58: the update that
+# moves them to the src layout is applied by *their* copy of this module,
+# whose PRUNE_ROOTS was `("sorter",)`, so it empties the flat package on the
+# way in and this version never sees it. What it leaves behind is whatever
+# the old `_stamp_version` rebuilt afterwards (`sorter/_version.py`) plus any
+# now-empty directories. Listing it here means the *next* update sweeps that
+# residue instead of leaving an importable-looking `sorter/` shell next to
+# the real one forever. A no-op on installs that never had one.
+PRUNE_ROOTS = ("src/sorter", "sorter")
 
 
 def _log(msg: str) -> None:
@@ -134,7 +143,29 @@ def _rollback(app_dir: Path, backup: Path, created: list[Path]) -> int:
     return failures
 
 
-_VERSION_STAMP = "src/sorter/_version.py"
+# Where `_version.py` goes, per layout. Order matters only as a tie-break for
+# an archive carrying neither package marker, which `updater` rejects anyway.
+_VERSION_STAMPS = (
+    ("src/sorter/__init__.py", "src/sorter/_version.py"),
+    ("sorter/__init__.py", "sorter/_version.py"),
+)
+
+
+def _version_stamp_for(shipped: set[Path]) -> str:
+    """Pick the stamp path matching the layout the archive actually laid down.
+
+    Not a constant, because this module applies archives of *either* layout:
+    the version picker (CLAUDE.md §7) can install a release older than the
+    #58 move, which lays down a flat `sorter/` and no `src/`. Stamping
+    `src/sorter/_version.py` in that case writes a file the tree it just
+    installed does not read, so the install reports `0.0.0+unknown` — the
+    exact re-prompt loop `_stamp_version` exists to break, with the added
+    twist of leaving a stray `src/` behind.
+    """
+    for marker, stamp in _VERSION_STAMPS:
+        if Path(marker) in shipped:
+            return stamp
+    return _VERSION_STAMPS[0][1]
 
 
 def _stamp_version(app_dir: Path, version: str, shipped: set[Path]) -> None:
@@ -154,9 +185,10 @@ def _stamp_version(app_dir: Path, version: str, shipped: set[Path]) -> None:
     Skipped when the archive shipped its own ``_version.py`` — that one came
     from a real build and is authoritative.
     """
-    if Path(_VERSION_STAMP) in shipped:
+    stamp = _version_stamp_for(shipped)
+    if Path(stamp) in shipped:
         return
-    dest = app_dir / _VERSION_STAMP
+    dest = app_dir / stamp
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(

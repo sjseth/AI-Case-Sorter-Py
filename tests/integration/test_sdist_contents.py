@@ -40,6 +40,10 @@ pytestmark = [
 # metadata bootstrap.py reads to build the venv.
 RUNTIME_FILES = (
     "src/sorter/__main__.py",
+    # The compatibility entry point. A pre-#58 install applies its update with
+    # its *own* launcher, which runs `python main.py`; an archive without one
+    # makes that launch fail. See main.py's module docstring.
+    "main.py",
     "bootstrap.py",
     "start.sh",
     "start.bat",

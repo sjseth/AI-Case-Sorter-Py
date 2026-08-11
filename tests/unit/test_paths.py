@@ -26,6 +26,26 @@ def test_env_override_wins(monkeypatch, tmp_path: Path) -> None:
     assert paths.updates_dir() == tmp_path / "updates"
 
 
+def test_app_root_is_the_folder_holding_the_launcher() -> None:
+    """Anchored on real files, because every other test monkeypatches this.
+
+    ``app_root()`` walks a fixed number of parents up from ``paths.py``, and
+    that count changes whenever the module moves -- it did in #58. A relative
+    re-derivation (``Path(paths.__file__).parent.parent.parent``) restates the
+    implementation and passes for any count, which is how the previous version
+    of this check missed the move; mutating the count was silent across the
+    whole suite. Naming files that only exist at the real root is what makes
+    it a check.
+
+    Not cosmetic: ``app_root()`` is where ``apply_update`` backs up,
+    overwrites and prunes, and where ``find_uv``/``is_portable`` look.
+    """
+    root = paths.app_root()
+    assert (root / "bootstrap.py").is_file()
+    assert (root / "pyproject.toml").is_file()
+    assert (root / "src" / "sorter" / "paths.py").is_file()
+
+
 def test_default_root_is_outside_the_app_folder(monkeypatch, tmp_path: Path) -> None:
     """The updater overwrites the app folder — user data must not live in it."""
     monkeypatch.setattr(paths, "app_root", lambda: tmp_path / "app")

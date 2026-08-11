@@ -64,6 +64,14 @@ def main(argv: list[str] | None = None) -> int:
     from sorter.data.db import Database
     from sorter.ui.app import MainWindow
 
+    # Logged here rather than from bootstrap.py: the flag is recorded by
+    # whichever shim started this *process* (above, or the root main.py
+    # compatibility entry point), so the launcher — a different process, which
+    # imports sorter.paths straight from src/ — could only ever report the
+    # fallback heuristic, and would print a constant. bootstrap.py pipes this
+    # through to the launch log, so it still reaches a bug report.
+    print(f"[casesorter] installed package: {paths.is_installed_package()}")
+
     # One-time move of a pre-0.2 `<app>/data` folder to the per-user location.
     # No-op for portable installs, an explicit CASESORTER_DATA_DIR, or once
     # it has already run.

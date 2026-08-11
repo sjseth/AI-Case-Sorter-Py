@@ -109,6 +109,65 @@ def test_prunes_modules_removed_upstream(install) -> None:
     assert not (app / "src" / "sorter" / "gone.py").exists()
 
 
+def test_prunes_the_legacy_flat_package_left_by_a_pre_src_install(install) -> None:
+    """The only upgrade that actually happens in the field.
+
+    An install predating #58 has a flat ``<app>/sorter/``. Its *own* copy of
+    this module applies the src-layout archive and empties that package, but
+    then rebuilds ``sorter/_version.py`` on the way out, leaving a shell that
+    still looks importable next to the real one. This version has to sweep it;
+    the fixture's app folder is already src-layout, which is why the original
+    prune test could not see the difference.
+    """
+    app, data = install
+    legacy = app / "sorter"
+    legacy.mkdir(parents=True)
+    (legacy / "_version.py").write_text('__version__ = "1.0.1"\n', encoding="utf-8")
+    (legacy / "config.py").write_text("stale flat module\n", encoding="utf-8")
+    _stage(data, {"bootstrap.py": "new\n", "src/sorter/__init__.py": "new\n"})
+
+    assert apply_update.apply_pending() is True
+    assert not (legacy / "_version.py").exists()
+    assert not (legacy / "config.py").exists()
+
+
+def test_a_shipped_root_main_py_is_not_treated_as_stale(install) -> None:
+    """The compatibility shim must survive its own update.
+
+    It is what a pre-#58 install's launcher runs on the update-applying
+    launch, so pruning it would re-break exactly the upgrade it exists for.
+    """
+    app, data = install
+    (app / "main.py").write_text("old shim\n", encoding="utf-8")
+    _stage(data, {"main.py": "new shim\n", "src/sorter/__init__.py": "new\n"})
+
+    assert apply_update.apply_pending() is True
+    assert (app / "main.py").read_text(encoding="utf-8") == "new shim\n"
+
+
+@pytest.mark.parametrize(
+    ("marker", "expected"),
+    [
+        ("src/sorter/__init__.py", "src/sorter/_version.py"),
+        ("sorter/__init__.py", "sorter/_version.py"),
+    ],
+)
+def test_version_is_stamped_where_the_applied_layout_reads_it(install, marker: str, expected: str) -> None:
+    """Downgrading past #58 lays down a flat tree; the stamp has to follow it.
+
+    Stamping the wrong path leaves the install reporting ``0.0.0+unknown``,
+    which parses as a pre-release -- so every later check offers the same
+    release again. Only reachable on the source-archive fallback, where the
+    archive carries no ``_version.py`` of its own.
+    """
+    app, data = install
+    _stage(data, {marker: "new\n"}, version="0.9.0")
+
+    assert apply_update.apply_pending() is True
+    assert (app / expected).is_file()
+    assert '__version__ = "0.9.0"' in (app / expected).read_text(encoding="utf-8")
+
+
 def test_stale_bytecode_is_pruned(install) -> None:
     """A .pyc left behind can shadow the source that replaced it.
 

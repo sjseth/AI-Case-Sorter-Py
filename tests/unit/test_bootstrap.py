@@ -66,8 +66,21 @@ def test_bootstrap_py_is_stdlib_only_at_module_level() -> None:
     never happen is a *module-level* import of anything third-party, since
     that would break before this script gets a chance to provision uv."""
     tree = ast.parse(BOOTSTRAP_PATH.read_text(encoding="utf-8"))
+
+    # Walk into `if`/`try` rather than scanning tree.body directly: a
+    # module-level `try: import requests / except ImportError:` executes just
+    # as early as a bare one, and an optional-dependency probe is exactly the
+    # shape that gets written. Function bodies are still excluded -- those are
+    # the deferred imports this test exists to allow.
+    def _module_level(node: ast.AST):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                continue
+            yield child
+            yield from _module_level(child)
+
     top_level_modules: set[str] = set()
-    for node in tree.body:  # module-level statements only, not nested in defs
+    for node in _module_level(tree):
         if isinstance(node, ast.Import):
             top_level_modules.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
@@ -84,11 +97,15 @@ def test_prelaunch_sorter_modules_import_without_third_party_packages() -> None:
     against a venv that may hold zero third-party packages. Neither must ever
     pull one in -- not even transitively through a subpackage's
     ``__init__.py``, which is exactly why every subpackage ``__init__.py``
-    under ``src/sorter/`` (``hardware/``, ``data/``, ``ml/``, ``community/``,
-    ``update/``) is deliberately empty: a re-export added to one of them
+    under ``src/sorter/`` is import-free: a re-export added to one of them
     would silently break every end user's first launch, and nothing in the
     normal test suite would catch it, because the suite always runs in a
     fully-synced venv where the extra import just succeeds.
+
+    Every subpackage is imported here, discovered from the tree rather than
+    listed, so a new one is covered the day it is added. ``bootstrap.py``
+    itself only reaches two of them today -- but which modules it imports is
+    free to change, and the invariant is about the package, not the caller.
 
     ``-S`` drops site-packages from ``sys.path`` (stdlib itself is found via
     the interpreter's own path configuration, not `site`), which is the same
@@ -96,12 +113,21 @@ def test_prelaunch_sorter_modules_import_without_third_party_packages() -> None:
     imports it.
     """
     src = ROOT / "src"
+
+    # Import every subpackage the docstring names, not just the two modules
+    # bootstrap.py happens to reach today. Importing `sorter.data` alone runs
+    # `data/__init__.py`, which is the file whose emptiness is the invariant --
+    # so a re-export added there fails here rather than in a user's launch.
+    subpackages = sorted(p.name for p in (src / "sorter").iterdir() if (p / "__init__.py").is_file())
+    assert {"community", "data", "hardware", "ml", "update"} <= set(subpackages)
+    targets = ["sorter.paths", "sorter.update.apply_update"] + [f"sorter.{name}" for name in subpackages]
+
     result = subprocess.run(
         [
             sys.executable,
             "-S",
             "-c",
-            "import sys; sys.path.insert(0, sys.argv[1]); import sorter.paths, sorter.update.apply_update",
+            f"import sys; sys.path.insert(0, sys.argv[1]); import {', '.join(targets)}",
             str(src),
         ],
         capture_output=True,
@@ -302,6 +328,50 @@ def test_run_app_unbuffers_the_child(bootstrap, monkeypatch) -> None:
     kwargs = bootstrap.subprocess.Popen.call_args.kwargs
     assert kwargs["env"]["PYTHONUNBUFFERED"] == "1"
     assert kwargs["stderr"] == bootstrap.subprocess.STDOUT
+
+
+def test_run_app_launches_a_real_entry_point(bootstrap, monkeypatch) -> None:
+    """The launched path is the one thing a broken launcher gets wrong silently.
+
+    Nothing else pins it: the sibling test above reads ``call_args.kwargs``
+    only, and CI's launcher-smoke waits on the ``Starting the app`` log line,
+    which is emitted *before* this Popen. A typo here ships a release where
+    every launch dies instantly with CI green.
+    """
+    monkeypatch.setattr(bootstrap.subprocess, "Popen", MagicMock(return_value=_fake_popen()))
+
+    bootstrap.run_app("/fake/uv", [])
+
+    argv = bootstrap.subprocess.Popen.call_args.args[0]
+    entry = Path(argv[argv.index("python") + 1])
+    assert (ROOT / entry).is_file(), f"launcher points at {entry}, which does not exist"
+
+    # Every candidate, not just the one chosen: the fallback exists so a tree
+    # of a *different shape* still launches, and it would otherwise happily
+    # absorb a typo in the preferred path -- the app would keep starting, via
+    # the shim, and nothing would say the main entry point had stopped
+    # resolving. Verified by mutation: without this, misspelling the first
+    # entry leaves the suite green.
+    for candidate in bootstrap.APP_ENTRY_POINTS:
+        assert (ROOT / candidate).is_file(), f"{candidate} is missing from the tree"
+
+
+def test_app_entry_point_follows_a_tree_that_changed_shape(bootstrap, monkeypatch, tmp_path) -> None:
+    """apply_pending_update() can replace the tree under this running process.
+
+    The version picker installs any published release, including ones from
+    before the src/ move, whose tree has no ``src/sorter/__main__.py``. A
+    hardcoded path turns that launch into a bare "can't open file".
+    """
+    monkeypatch.setattr(bootstrap, "ROOT", tmp_path)
+    (tmp_path / "src" / "sorter").mkdir(parents=True)
+    (tmp_path / "src" / "sorter" / "__main__.py").touch()
+    (tmp_path / "main.py").touch()
+    assert bootstrap.app_entry_point() == str(Path("src/sorter/__main__.py"))
+
+    # ...as a downgrade to a pre-#58 release leaves it:
+    (tmp_path / "src" / "sorter" / "__main__.py").unlink()
+    assert bootstrap.app_entry_point() == "main.py"
 
 
 def test_open_log_keeps_the_previous_launch(monkeypatch, tmp_path) -> None:

@@ -330,6 +330,33 @@ def apply_pending_update() -> None:
 # ---------------------------------------------------------------------------
 
 
+# Entry points this launcher knows how to start, most current first. Resolved
+# against the disk rather than hardcoded, because apply_pending_update() can
+# change the tree's shape underneath this still-running process: the version
+# picker (CLAUDE.md §7) installs any published release, including ones from
+# before the #58 src/ move, whose tree has no src/sorter/__main__.py at all.
+# Without the fallback that launch dies with a bare "can't open file" and only
+# recovers on the next one.
+#
+# Both entries are expected to exist in a current tree -- main.py is the
+# permanent compatibility shim, not a historical leftover -- and a test pins
+# that, since the fallback would otherwise quietly absorb a typo in the first.
+APP_ENTRY_POINTS = (
+    os.path.join("src", "sorter", "__main__.py"),
+    "main.py",
+)
+
+
+def app_entry_point() -> str:
+    """The entry-point script to launch, per what the app folder holds now."""
+    for candidate in APP_ENTRY_POINTS:
+        if (ROOT / candidate).is_file():
+            return candidate
+    # Nothing recognizable: name the preferred path so the error says what was
+    # expected rather than reporting the last thing tried.
+    return APP_ENTRY_POINTS[0]
+
+
 def run_app(uv: str, forward_args: list[str]) -> int:
     """Launch the app, mirroring its output into the launch log.
 
@@ -346,7 +373,7 @@ def run_app(uv: str, forward_args: list[str]) -> int:
     # would silently redo the project build main() went out of its way to
     # skip. --no-sync trusts that sync and skips its own.
     proc = subprocess.Popen(
-        [uv, "run", "--no-sync", "python", "src/sorter/__main__.py"] + forward_args,
+        [uv, "run", "--no-sync", "python", app_entry_point()] + forward_args,
         cwd=ROOT,
         env=env,
         stdout=subprocess.PIPE,
@@ -405,10 +432,6 @@ def main(argv: list[str] | None = None) -> int:
 
     uv = find_uv() or install_uv()
     log(f"uv: {uv}")
-
-    from sorter.paths import is_installed_package
-
-    log(f"installed package: {is_installed_package()}")
 
     apply_pending_update()
 
@@ -469,6 +492,11 @@ def main(argv: list[str] | None = None) -> int:
     # takes a few more seconds to appear -- and build.yml's launcher-smoke
     # waits for exactly this line rather than a fixed timeout, since the
     # app never exits on its own.
+    # After apply_pending_update(), so it names what will actually be run
+    # rather than what this file shipped expecting. On the launch that
+    # installs a different layout those differ, and that is the launch a bug
+    # report is most likely to be about.
+    log(f"entry point: {app_entry_point()}")
     log("Starting the app ...")
 
     code = run_app(uv, forward_args)
