@@ -90,7 +90,7 @@ jobs:
       # .python-version. That decoupling is the whole point being tested.
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.14.7"
 
       # Lives here rather than in installer-smoke.yml: it tests this commit's
       # start.bat, so it must run whenever start.bat changes, and that workflow
