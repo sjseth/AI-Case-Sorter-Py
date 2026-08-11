@@ -33,6 +33,21 @@ SORT_TIMEOUT_S = 20.0
 Callback = Callable[[str], None]
 
 
+def _matches_token(line: str, token: str) -> bool:
+    """True when `line` *is* the response `token`, not merely contains it.
+
+    Anchored at the start: the line equals the token, or begins with it
+    followed by a non-alphanumeric delimiter ("error: sensor 3", "done.").
+    A token embedded in a larger word ("broken", "undone") never matches —
+    see issue #34 for how the old unanchored `in` test misrouted those.
+    Caller passes `line` already lowercased/stripped.
+    """
+    if not line.startswith(token):
+        return False
+    rest = line[len(token) :]
+    return not rest or not rest[0].isalnum()
+
+
 def list_serial_ports() -> list[str]:
     return [p.device for p in list_ports.comports()]
 
@@ -123,7 +138,7 @@ class SerialBroker:
         normalized = version_line.lower()
 
         connected = False
-        if "ok" in normalized or "7." in normalized:
+        if _matches_token(normalized, "ok") or normalized.startswith("7."):
             connected = True
         elif "Ready" in banner or not self.require_serial_ready:
             connected = True
@@ -245,16 +260,19 @@ class SerialBroker:
             self._fire(self.on_received, line)
 
             normalized = line.lower()
-            if "done" in normalized:
-                self._fire(self.on_done, line)
-                continue
-            if "ok" in normalized:
-                self._fire(self.on_ok, line)
-                continue
-            if "error" in normalized:
+            # Anchored prefixes can only ever match one branch, but keep
+            # `error` first anyway: a line carrying both readings must be
+            # treated as the failure it is, whatever the matcher becomes.
+            if _matches_token(normalized, "error"):
                 self._fire(self.on_error, line)
                 continue
-            if "waiting" in normalized:
+            if _matches_token(normalized, "done"):
+                self._fire(self.on_done, line)
+                continue
+            if _matches_token(normalized, "ok"):
+                self._fire(self.on_ok, line)
+                continue
+            if _matches_token(normalized, "waiting"):
                 self._fire(self.on_waiting, line)
                 continue
             self._fire(self.on_response, line)
