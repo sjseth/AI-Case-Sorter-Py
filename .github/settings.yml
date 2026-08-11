@@ -109,6 +109,9 @@ labels:
   - name: bot-renovate-stop
     color: "5d0811"
     description: "Renovate: stop updating this PR (add it yourself to pin a PR)"
+  - name: bot-renovate-rebase
+    color: "7057ff"
+    description: "Renovate: recreate this PR's branch on the next run (consumed and removed by Renovate)"
   - name: security
     color: "b60205"
     description: "Vulnerability alert / security update"

@@ -26,6 +26,9 @@
   // Renovate rebasing/updating that PR any further.
   stopUpdatingLabel: "bot-renovate-stop",
 
+  // The inverse. Renamed only to match the label above; the default is "rebase".
+  rebaseLabel: "bot-renovate-rebase",
+
   dependencyDashboard: false,
 
   prConcurrentLimit: 10,
