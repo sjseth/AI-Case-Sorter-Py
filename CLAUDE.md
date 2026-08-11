@@ -38,9 +38,28 @@ Two ways to classify:
 
 ## 2. Running, testing, layout
 
-**Entry point:** `main.py` → initializes paths, opens the SQLite DB (migrating
-from a legacy `data/config.json` if present), loads `Config`, and launches
-`sorter.ui.app.MainWindow`.
+**Entry point:** `src/sorter/__main__.py` → initializes paths, opens the
+SQLite DB (migrating from a legacy `data/config.json` if present), loads
+`Config`, and launches `sorter.ui.app.MainWindow`. Launched as
+`python -m sorter` with `PYTHONPATH=src`, which `bootstrap.py` sets on the
+child process — the package is deliberately **never installed** into the venv
+(`uv sync --no-install-project`), so the environment is what makes `-m`
+resolve. **No module in `src/sorter/` may rewrite `sys.path`**
+(`tests/unit/test_entry_point.py` enforces it): the launcher owns the path,
+and a hand-rolled shim that inserts `src/sorter` instead of `src/` puts every
+subpackage on the path as a top-level name, where `ui`, `data` and `update`
+shadow same-named third-party packages.
+
+**One exception, and it is never run from this tree:**
+`src/sorter/_legacy_entry.py` is copied into the sdist as a root `main.py` by
+`pyproject.toml`'s `[tool.hatch.build.targets.sdist.force-include]`. An in-app
+update is applied by the copy **already installed**, and every release up to
+1.1.0 ends that launch with `python main.py` from a `bootstrap.py` already in
+memory when the new tree lands — so the *archive* needs one even though the
+source tree doesn't. Keeping it out of the repo root is what lets the source
+layout be final: retiring the shim is one deleted line in `pyproject.toml`.
+`tests/integration/test_cross_version_update.py` runs 1.1.0's real updater
+against a real built sdist to keep all of this honest.
 
 **Launch (handles the Python runtime, system deps, and dependency sync
 automatically):**
@@ -56,20 +75,35 @@ automatically):**
   `bootstrap.py` itself, not to run the app), syncs dependencies from the
   committed `uv.lock`, then launches. See `bootstrap.py`'s module docstring
   for the full ordering and why it has to stay stdlib-only.
-- Directly (once synced): `uv run python main.py`, or `python main.py` inside
-  an activated `.venv`.
+- Directly (once synced), same as `bootstrap.py` does it — this is the form to
+  use under a debugger (insert `-m debugpy --listen 5678 --wait-for-client`
+  before `-m sorter`; see CONTRIBUTING.md) or for a tight edit-run loop, since
+  `start.sh` re-does uv discovery, the Linux library probe and a sync every
+  time:
+  ```bash
+  PYTHONPATH=src uv run --no-sync python -m sorter     # PowerShell: $env:PYTHONPATH="src"
+  ```
+  Both halves matter. **`PYTHONPATH=src`** is what `-m` resolves through,
+  since the package is never installed. **`--no-sync`** because a bare `uv
+  run` syncs *and installs the project*, firing hatch-vcs's build hook: with
+  no `.git` present that overwrites a correct `src/sorter/_version.py` with
+  `fallback-version = "0.0.0"`, and `0.0.0+unknown` parses as a pre-release,
+  so every launch then sees the current release as newer and re-prompts.
 
-**Tests:** `pytest` from the repo root (`tests/conftest.py` puts the repo on
+**Tests:** `pytest` from the repo root (`tests/conftest.py` puts `src/` on
 `sys.path`; it lives at `tests/` top-level so it applies to both
-subdirectories below it). ~48 test modules split into `tests/unit/`
-(everything, synthetic fixtures only) and `tests/integration/` (the two
-files that shell out to a real external tool — `uv build`, `git-cliff` —
-instead, each self-skipping if that tool is missing; `pytest -m "not
-integration"` skips them outright). CI (`.github/workflows/build.yml`) runs
-the full matrix on every push/PR — run `pytest` locally before pushing
-regardless, since CI turnaround is slower than your own machine. The suite
-is threading-fragile by design (see `tests/conftest.py`); don't parallelize
-it.
+subdirectories below it). `tests/unit/` mirrors `src/sorter/`'s subpackages
+one-for-one (`tests/unit/hardware/`, `tests/unit/data/`, …), plus a handful of
+modules that test something at the package's own top level (`test_paths.py`,
+`test_bootstrap.py`, `test_version.py`, `test_installer_scripts.py`) and stay
+directly under `tests/unit/`. Everything in `tests/unit/` uses synthetic
+fixtures only; `tests/integration/` stays flat — the two files that shell out
+to a real external tool (`uv build`, `git-cliff`) instead, each self-skipping
+if that tool is missing; `pytest -m "not integration"` skips them outright.
+CI (`.github/workflows/build.yml`) runs the full matrix on every push/PR —
+run `pytest` locally before pushing regardless, since CI turnaround is slower
+than your own machine. The suite is threading-fragile by design (see
+`tests/conftest.py`); don't parallelize it.
 
 **Python:** 3.12+ floor (`pyproject.toml`); `.python-version` pins the actual
 version uv provisions for the app itself, independent of that floor. **Core
@@ -79,17 +113,26 @@ torchvision.
 
 ```
 AI-Case-Sorter-Py/
-├── main.py                  # entry point (+ `--apply-update` pre-launch hook)
 ├── bootstrap.py              # cross-platform launcher logic (Python+uv+deps+update)
 ├── start.sh / start.bat     # thin per-OS shims that just call bootstrap.py
 ├── pyproject.toml           # package metadata; [ml] extra = torch/torchvision
 ├── uv.lock                  # committed, exact dependency resolution
 ├── .python-version           # Python version uv provisions for the app
-├── sorter/                  # all application code
-│   ├── ui/                  # Tkinter UI (tabs + dialogs + theme)
-│   └── training/            # out-of-process ConvNeXt trainer
+├── src/
+│   └── sorter/               # all application code (never installed — see above)
+│       ├── __main__.py         # entry point (+ `--apply-update` pre-launch hook)
+│       ├── _legacy_entry.py    # shipped as the archive's root main.py; see §2
+│       ├── paths.py            # on-disk layout; stdlib-only, imported before uv sync
+│       ├── control/            # event bus + the sort loop
+│       ├── hardware/           # serial, camera, image processing
+│       ├── data/                # SQLite persistence + model ZIP import/export
+│       ├── ml/                  # classification, local inference, evaluation
+│       ├── community/           # auth, community backend client, feedback loop
+│       ├── update/              # self-update: check/stage + pre-launch apply
+│       ├── training/            # out-of-process ConvNeXt trainer
+│       └── ui/                  # Tkinter UI (tabs + dialogs + theme)
 ├── installer/               # Windows bootstrapper (see §7)
-└── tests/                   # pytest suite
+└── tests/                   # pytest suite, mirrors src/sorter/'s subpackages
 ```
 
 The data root lives **outside** the repo by default — see §6.
@@ -100,35 +143,44 @@ The data root lives **outside** the repo by default — see §6.
 
 The app separates **hardware I/O**, **control logic**, **persistence**, and
 **UI** into independent, testable layers, glued by a thread-safe event bus.
+Since #58's `src/` layout, that sentence is literally the top level of
+`src/sorter/`: `hardware/` ↔ hardware I/O, `control/` ↔ control logic
+(the event bus and the sort loop), `data/` ↔ persistence, `ui/` ↔ UI — plus
+`ml/` (classification/inference/evaluation), `community/` (auth + the
+community backend client + the feedback loop), `update/` (self-update), and
+`training/` (the out-of-process trainer), each its own subpackage.
 
 ```mermaid
 flowchart TB
     UI["UI — Tkinter, main thread<br/>app.MainWindow · ttk.Notebook tabs · modal dialogs · theme"]
-    Bus["events.EventBus<br/>Queue-backed pub/sub"]
+    Bus["control.events.EventBus<br/>Queue-backed pub/sub"]
 
     UI -- "subscribes (drained on main thread)" --> Bus
     Bus -- "run_worker(fn) spawns" --> UI
 
-    Bus --> RC["run_controller<br/>sort loop, daemon thread"]
-    Bus --> SB["serial_broker<br/>UART protocol, reader+ping threads"]
-    Bus --> CAM["camera<br/>cv2 grab thread"]
+    Bus --> RC["control.run_controller<br/>sort loop, daemon thread"]
+    Bus --> SB["hardware.serial_broker<br/>UART protocol, reader+ping threads"]
+    Bus --> CAM["hardware.camera<br/>cv2 grab thread"]
     Bus --> TM["training.manager<br/>subprocess + stdout JSON markers"]
 
-    RC --> CLF["classifier"]
-    CLF --> LI["local_inference (torch)"]
-    CLF --> API["api_client (HTTP)"]
+    RC --> CLF["ml.classifier"]
+    CLF --> LI["ml.local_inference (torch)"]
+    CLF --> API["ml.api_client (HTTP)"]
 
-    CAM --> IP["image_proc<br/>Hough crop"]
+    CAM --> IP["hardware.image_proc<br/>Hough crop"]
 
     TM --> TC["train_convnext.py<br/>ConvNeXt, separate process"]
 ```
 
-- **Persistence:** `config.Config` → `repository.*Repo` → `db.Database` (SQLite, WAL)
-- **Filesystem:** `paths.*` defines the `data/` layout; `model_io` handles ZIP import/export
-- **Community:** `auth.AuthManager` (MSAL) → `community_api.CommunityApi` (HTTPS);
-  `feedback.FeedbackService` owns the below-threshold image queue
+- **Persistence:** `data.config.Config` → `data.repository.*Repo` →
+  `data.db.Database` (SQLite, WAL)
+- **Filesystem:** `paths.*` (top-level — stdlib-only, imported before `uv
+  sync`) defines the `data/` layout; `data.model_io` handles ZIP import/export
+- **Community:** `community.auth.AuthManager` (MSAL) →
+  `community.community_api.CommunityApi` (HTTPS);
+  `community.feedback.FeedbackService` owns the below-threshold image queue
 
-### The event bus (`sorter/events.py`)
+### The event bus (`sorter/control/events.py`)
 A single `EventBus` with a thread-safe `Queue`. Workers call `bus.post(topic,
 payload)` from any thread; the Tk main loop calls `bus.drain()` on a 50 ms
 `root.after` timer to dispatch queued events to subscribers **on the main
@@ -141,7 +193,7 @@ sanctioned way for worker threads to update the UI.
 
 ## 4. Module reference (`sorter/`)
 
-### Persistence & configuration
+### Persistence & configuration (`sorter/data/`)
 - **`db.py`** — `Database`: owns one `sqlite3.Connection` (WAL, foreign keys on,
   `check_same_thread=False` with an `RLock` serializing multi-statement
   transactions / SAVEPOINTs). Schema: idempotent DDL plus ordered migration
@@ -171,17 +223,32 @@ sanctioned way for worker threads to update the UI.
 - **`models.py`** — dataclasses: `Model`, `Headstamp`, `Cartridge`, `SlotTemplate`,
   `TrainingConfig`, `AIModelConfig`, `ImageProcessingConfig`, plus normalizers
   (`normalize_upload_mode`, `SUPPORTED_MODEL_MODES`, `SLOT_TEMPLATE_MODES`).
+- **`model_io.py`** (`sorter/data/model_io.py` — grouped with the rest of
+  persistence, not a separate layer: it's a model persisted to a ZIP instead
+  of SQLite) — model **ZIP** import/export; see the *Training & evaluation*
+  entry below for what it does, kept there to stay next to the training
+  workflow it feeds.
+
+### Filesystem (`sorter/paths.py` — top level, not under `data/`)
 - **`paths.py`** — single source of truth for the on-disk layout (see §6) and
   the legacy-data migration. `CASESORTER_DATA_DIR` overrides the data root.
   **Stdlib-only and import-light on purpose:** the pre-launch update step
-  imports it before the venv has any third-party packages.
+  imports it before the venv has any third-party packages. Also tracks
+  `is_installed_package()` — whether this process's `sorter` is a real
+  install (pip/uv wheel) vs. a source checkout run as a script, which is how
+  this app is actually always launched (see §2); `_legacy_entry.py` records
+  the authoritative answer when it is the one running, falling back to a
+  `site-packages`/`dist-packages` path heuristic for anything that imports
+  `sorter` another way (e.g. a test). `bootstrap.py`'s launch log records it.
+
+### Community backend config (`sorter/community/appenv.py`)
 - **`appenv.py`** — developer overrides for the community backend, read from the
   environment with an optional `.env` (real env vars always win; see
   `.env.example`). `api_base()` applies `CASESORTER_API_BASE` over the
   production default; `tls_verify()` returns what to pass `requests` as
   `verify=` — a `CASESORTER_API_CA_BUNDLE` path, or `False` when
   `CASESORTER_API_INSECURE=1` **and** the base URL is loopback (it is ignored,
-  with a warning, for any other host). `main.py` calls `load_dotenv()` at
+  with a warning, for any other host). `__main__.py` calls `load_dotenv()` at
   startup; `CommunityApi` resolves both at construction, not import.
 
 ### Active-model concept
@@ -216,7 +283,7 @@ between them from the Run tab's template dropdown.
   holding whatever is currently assigned, so existing installs keep their layout.
   The last template in a scope can't be deleted.
 
-### Hardware control
+### Hardware control (`sorter/hardware/`)
 - **`serial_broker.py`** — `SerialBroker`: ASCII command protocol over UART
   (default 9600 8N1). A **reader thread** parses responses and fans them out to
   callback lists (`on_done`/`on_ok`/`on_error`/`on_received`/…); a **ping thread**
@@ -244,7 +311,7 @@ between them from the Run tab's template dropdown.
   pygrabber for friendly names + resolution probing, CAP_V4L2 on Linux, MJPG for
   ≥1080p). `enumerate_devices` / `list_cameras_with_metadata` for the Camera tab.
 
-### The sort loop
+### The sort loop (`sorter/control/run_controller.py`)
 - **`run_controller.py`** — `RunController`: the production loop on a daemon
   thread. Per case: capture → `image_proc.crop_headstamp` → optional primer mask
   → `classifier.classify_active` → `_resolve_destination(label, confidence)` →
@@ -256,7 +323,7 @@ between them from the Run tab's template dropdown.
   optional run-image storage, and feedback capture. Also `cycle_once()` (manual
   feed) and `test_once()` (feed+classify, no sort). Posts `run/*` and `test/*`.
 
-### Classification
+### Classification (`sorter/ml/`)
 - **`classifier.py`** — `classify_active`: **the active model alone picks the
   backend.** A model is active → local inference; AI Config mode (no active
   model) → HTTP. Passes the trained `image_size` through. A local model whose
@@ -289,7 +356,7 @@ between them from the Run tab's template dropdown.
   strategy is ported but UI-hidden. `apply_primer_mask` (none/use/hide),
   `overlay_detection` for preview.
 
-### Training & evaluation
+### Training & evaluation (`sorter/training/`, plus evaluation in `sorter/ml/` and ZIP import/export in `sorter/data/model_io.py`)
 - **`training/manager.py`** — `TrainingManager`: spawns `train_convnext.py` as a
   **subprocess** (clean cancellation, no GIL fights), pumps stdout for
   `[PROGRESS] {json}` markers, and re-emits them as `training/*` events. SIGTERM
@@ -316,12 +383,14 @@ between them from the Run tab's template dropdown.
   open for locally-evaluated, trusted image folders.
 - **`gpu_detect.py`** — shells out to `nvidia-smi` (torch not yet installed) to
   detect a compute-capability ≥ 8.0 NVIDIA GPU for the Install-PyTorch dialog.
-- **`image_store.py`** — pure pathlib helpers to list/filter/reclassify/delete
-  training images by their `{headstamp}__{ticks}` filenames.
-- **`models.py` ownership helpers** — `is_foreign_model` / `is_trainable` /
-  `FOREIGN_MODEL_TYPES`: the single definition of "this model belongs to
-  someone else" (see §5, *Model ownership*).
-- **`model_io.py`** — model **ZIP** import/export compatible with the WinForms
+- **`image_store.py`** (`sorter/data/image_store.py`) — pure pathlib helpers to
+  list/filter/reclassify/delete training images by their `{headstamp}__{ticks}`
+  filenames.
+- **`models.py` ownership helpers** (`sorter/data/models.py`) —
+  `is_foreign_model` / `is_trainable` / `FOREIGN_MODEL_TYPES`: the single
+  definition of "this model belongs to someone else" (see §5, *Model
+  ownership*).
+- **`model_io.py`** (`sorter/data/model_io.py`) — model **ZIP** import/export compatible with the WinForms
   format (`manifest.json` + `model/<id>.pth` + `images/*`). Accepts both
   snake_case and WinForms PascalCase manifest keys. Import **rejects `..`
   traversal entries** and only uses entry basenames; export strips paths/secrets.
@@ -333,16 +402,20 @@ between them from the Run tab's template dropdown.
   forces a separate copy. `community_download=True` marks the install as the
   publisher's, and an update never downgrades that (§5, *Model ownership*).
 
-### Self-update (see §7 for the full flow)
+### Self-update (`sorter/update/`; see §7 for the full flow)
 - **`updater.py`** — GitHub Releases check, version comparison, and download →
   verify → stage. Needs `requests`. Never writes to the app folder.
 - **`apply_update.py`** — the pre-launch half: copies a staged tree over the app
   folder, with backup/rollback. **Stdlib-only** — it runs before `uv sync`.
-  Also stamps `sorter/_version.py` with the applied version when the archive
-  didn't carry one, so an install updated from the source-archive fallback
-  doesn't keep reporting `0.0.0+unknown` and re-prompting forever.
+  Grouped with `updater.py` under `sorter/update/` for subsystem organization
+  only; `sorter/update/__init__.py` is (like every subpackage `__init__.py`)
+  deliberately empty, so importing this module alone never drags in
+  `updater.py`'s `requests` import. Also stamps `src/sorter/_version.py` with
+  the applied version when the archive didn't carry one, so an install
+  updated from the source-archive fallback doesn't keep reporting
+  `0.0.0+unknown` and re-prompting forever.
 
-### Community / cloud
+### Community / cloud (`sorter/community/`)
 - **`auth.py`** — `AuthManager`: MSAL `PublicClientApplication` against Azure AD
   B2C (hardcoded tenant/client/authority/redirect, mirroring WinForms). Token
   cache is a single file, chmod 0600 on POSIX. Decodes ID-token claims **for
@@ -532,7 +605,7 @@ Everything the app writes lives under a single **data root**, resolved once by
 `paths.app_data_dir()`:
 
 1. `CASESORTER_DATA_DIR` — explicit override, wins over everything.
-2. A `portable.txt` marker next to `main.py` → `<app>/data` (USB-stick installs).
+2. A `portable.txt` marker next to `bootstrap.py` → `<app>/data` (USB-stick installs).
 3. Otherwise the per-user OS location: `%LOCALAPPDATA%\CaseSorter` on Windows,
    `$XDG_DATA_HOME/CaseSorter` (default `~/.local/share/CaseSorter`) elsewhere.
 
@@ -582,10 +655,11 @@ has the same trust anchor as `git pull` over HTTPS, and the source tree is
 `[tool.hatch.version] source = "vcs"`, via hatch-vcs), not hand-bumped —
 removes the old "forgot to bump `__version__` in the release commit" footgun
 entirely; the manual step just doesn't exist anymore. hatch-vcs's build hook
-writes `sorter/_version.py` (gitignored, generated), which `sorter/__init__.py`
-imports as its first choice, falling back to `importlib.metadata` (an
-actual pip/uv install from a wheel) and finally a literal placeholder if
-neither is available — see that file's comments for why each tier exists.
+writes `src/sorter/_version.py` (gitignored, generated), which
+`src/sorter/__init__.py` imports as its first choice, falling back to
+`importlib.metadata` (an actual pip/uv install from a wheel) and finally a
+literal placeholder if neither is available — see that file's comments for
+why each tier exists.
 
 Two things this makes load-bearing that weren't before:
 
@@ -595,12 +669,12 @@ Two things this makes load-bearing that weren't before:
   fires for an end user at all — confirmed empirically that running it
   without `.git` either hard-crashes the build, or (with a
   `fallback-version` configured) silently *overwrites* an already-correct
-  `sorter/_version.py` with that fallback. See `bootstrap.py`'s docstring.
+  `src/sorter/_version.py` with that fallback. See `bootstrap.py`'s docstring.
 - **The version has to reach the user some other way, then.** `updater.py`'s
   `_pick_asset` downloads the release's own **sdist** by exact name
   (`ai_case_sorter-<tag>.tar.gz`) — the same file `uv build` already
   produces and `publish.yml` already attaches, not a separately built
-  artifact. hatch-vcs's build hook stamps `sorter/_version.py` into every
+  artifact. hatch-vcs's build hook stamps `src/sorter/_version.py` into every
   build target it runs against, sdist included, so it already carries the
   correct version with nothing to copy in by hand. (An earlier revision
   built a bespoke `git archive`-based zip for this instead; that second
@@ -616,8 +690,8 @@ flowchart TD
     A["updater.check_for_update()<br/>GET /releases/latest, compare tags — needs requests"]
     B["updater.stage_update()<br/>download → verify → &lt;data&gt;/updates/pending/<br/>(the app folder is NOT touched)"]
     C(["restart"])
-    D["main.py --apply-update<br/>run by bootstrap.py BEFORE uv sync — stdlib ONLY"]
-    E["sorter.apply_update<br/>backup → copy over app dir → prune → clear pending"]
+    D["apply_update<br/>run by bootstrap.py BEFORE uv sync — stdlib ONLY"]
+    E["sorter.update.apply_update<br/>backup → copy over app dir → prune → clear pending"]
 
     A --> B --> C --> D --> E
 ```
@@ -627,9 +701,14 @@ flowchart TD
   only a tarball can carry, and a containment check on the resolved output
   path), strips the single top-level wrapper (the sdist's `<name>-<version>/`
   or, on the fallback, GitHub's `<repo>-<tag>/`), requires at least one of
-  `REQUIRED_ENTRY_SETS` to be fully present before trusting an archive (today's
-  flat `main.py` + `sorter/__init__.py`, **or** a future `src/sorter/__init__.py`
-  layout — accepted ahead of #58's move for the reason below), and caps archive
+  `REQUIRED_ENTRY_SETS` to be fully present before trusting an archive (the
+  current `src/sorter/__init__.py` layout, **or** the pre-#58 flat
+  `main.py` + `sorter/__init__.py` layout — the flat-layout entry stays
+  forever, not because this tree can ever produce it again, but because the
+  in-app updater on an install that predates #58 is the *only* thing that
+  can ever validate an archive going forward, and that check can't be patched
+  after the fact; see #58's issue thread for why the two-release migration
+  this implies doesn't actually need engineering around it), and caps archive
   size and entry count. Staging is atomic: `pending/` only ever exists complete.
   - `check_for_update()` (`GET /releases/latest`) is unchanged: latest stable
     only, newer-than-current only, used for the silent startup check and the
@@ -644,22 +723,47 @@ flowchart TD
     fails: `check_for_update` has exactly one release to report, so it raises;
     `list_releases` has many, so it drops the offending one rather than hiding
     every legitimate release behind it.
-  - **Why `REQUIRED_ENTRY_SETS` accepts a layout that doesn't exist yet:** the
+  - **Why `REQUIRED_ENTRY_SETS` still carries the flat-layout tuple:** the
     updater that validates a new release archive is whatever version is
-    *already installed* on a user's machine. A `src/`-layout release can only
-    be accepted by installs that already run the relaxed check — there is no
-    way to patch that logic retroactively once the layout has actually moved.
-    So the acceptance has to ship, and propagate, before #58's move ships.
-    `REQUIRED_ENTRIES` (the flat-layout tuple) is still read directly by
-    `tests/integration/test_sdist_contents.py`, which asserts today's real
-    sdist against it — that test doesn't change just because the *acceptance*
-    check now tries a second shape too.
+    *already installed* on a user's machine, and updates aren't cumulative —
+    an install several releases behind the current one only ever fetches
+    `/releases/latest` and validates that single archive with whatever check
+    it shipped with. A pre-#58 install therefore has to keep recognizing a
+    plain ZIP/reinstall of the current, `src/`-layout app as "the app" for as
+    long as any such install might still exist; there is no way to patch that
+    logic retroactively after the fact. `REQUIRED_ENTRIES` (the flat-layout
+    tuple) exists purely for that backward direction now — nothing this repo
+    builds produces that shape anymore. `tests/integration/test_sdist_contents.py`
+    asserts the real, current sdist against `REQUIRED_ENTRY_SETS` as a whole
+    (satisfies *at least one* set), not against the flat tuple specifically.
 - **`apply_update.py`** — **must stay stdlib-only.** It runs against a venv that
   may hold nothing at all yet; importing `requests` here would break the very
   launch it exists to fix. Backs up everything it will overwrite, rolls back on
   failure, and **always exits 0** so a broken updater can never stop the app
-  starting. Pruning stale files is confined to `sorter/`; `PROTECTED_TOP_LEVEL`
+  starting. Pruning stale files is confined to `PRUNE_ROOTS`; `PROTECTED_TOP_LEVEL`
   (`.git`, `.venv`, `.uv`, `data`, `.env`, `portable.txt`) is never touched.
+  - **`PRUNE_ROOTS` covers both layouts** (`src/sorter`, `sorter`) because an
+    archive can be either: the version picker makes downgrading to a pre-#58
+    release a supported move, and an install upgraded *from* one leaves a
+    stale root `sorter/` behind (the old updater empties the flat package,
+    then re-creates `sorter/_version.py` inside it). Empty directories left
+    by a prune are swept afterwards, best-effort.
+- **The launch that applies an update re-launches itself.** `bootstrap.py`
+  resolved its own module and the entry-point path before the update replaced
+  the tree underneath it, so continuing would sync and then launch the
+  *previous* release's paths — which is precisely how a layout change breaks.
+  `apply_pending_update()` returns whether it applied anything;
+  `relaunch_after_update()` then re-runs `bootstrap.py` from disk, once
+  (`CASESORTER_BOOTSTRAP_RELAUNCHED` guards the loop). subprocess, not
+  `os.execv`: exec on Windows returns cmd.exe to its prompt, defeating
+  `start.bat`'s pause-on-failure.
+- **1.0.0 and 1.0.1 cannot update directly to a `src/`-layout release.**
+  `REQUIRED_ENTRY_SETS` arrived in 1.1.0 (#62); before it the only accepted
+  set was the flat `("main.py", "sorter/__init__.py")`, so those installs
+  reject the archive outright as "not the app". Nothing can patch an already
+  installed updater, so this is permanent: those users step to 1.1.0 via the
+  version picker first. Say so in the release notes of the first `src/`
+  release.
 - **Why a pre-launch step at all:** on Windows the venv's `.pyd`/`.dll` files
   (opencv, numpy) are locked while the app runs, so in-place replacement is
   unreliable. Applying before Python loads anything sidesteps locking — and puts
@@ -695,7 +799,7 @@ flowchart TD
 - **Logging, and why it spans three files.** The chain is
   `install-windows.ps1` → `start.bat` → `bootstrap.py` → the app, and every
   step after the first runs in a **detached console that closes with the
-  process** — so a traceback from `main.py` was visible for a fraction of a
+  process** — so a traceback out of the app was visible for a fraction of a
   second and then gone, reaching the user as "nothing happened". Both halves
   now write to `<data root>/logs/` (§6): the installer via `Start-Transcript`,
   and `bootstrap.py` via `open_log()` + `run_app()`, which **pipes the app's
@@ -782,7 +886,7 @@ flowchart TD
   stubs. Note the job does a **full** `uv sync` rather than `--only-group dev`:
   ty resolves third-party imports from the environment, so without the runtime
   deps the output drowns in unresolved-import noise. The one `[tool.ty]` block
-  in `pyproject.toml` exists because `sorter/_version.py` is generated and
+  in `pyproject.toml` exists because `src/sorter/_version.py` is generated and
   gitignored (§7): it is absent in CI (which never fires the build hook) and
   present for anyone who has run `uv build`, so the `# ty: ignore` on its
   import would otherwise flip to an *unused* ignore and fail the build for

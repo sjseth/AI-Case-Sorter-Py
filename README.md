@@ -141,10 +141,9 @@ cd AI-Case-Sorter-Py
 start.bat
 ```
 
-**Run it directly** (if you have `uv` yourself and want to manage it):
-```bash
-uv run python main.py
-```
+Prefer to drive `uv` yourself, or need to run under a debugger? See
+[CONTRIBUTING.md](CONTRIBUTING.md#development-setup) — the flags matter, and
+getting them wrong makes the app misreport its own version.
 
 ### Running without hardware
 
@@ -193,14 +192,14 @@ in one folder, **outside** the app directory:
 Keeping it separate is what makes updating safe — the updater replaces the app
 folder, and nothing of yours is in it. Delete the folder to reset all state.
 
-**Upgrading from an older version?** If your data is still in `data/` next to
-`main.py`, it's moved to the new location automatically the first time you run
-the app. Nothing to do.
+**Upgrading from an older version?** If your data is still in `data/` in the
+app folder, it's moved to the new location automatically the first time you
+run the app. Nothing to do.
 
 **Overrides:**
 - Set `CASESORTER_DATA_DIR` to put the data anywhere you like.
-- Create an empty `portable.txt` next to `main.py` to keep data in `<app>/data`
-  instead — for USB-stick or fully self-contained installs.
+- Create an empty `portable.txt` next to `bootstrap.py` to keep data in
+  `<app>/data` instead — for USB-stick or fully self-contained installs.
 
 ### Updating
 
@@ -236,7 +235,7 @@ for setup and guidelines, and [`SECURITY.md`](SECURITY.md) to report a vulnerabi
 
 The community client talks to `https://www.reloadingrecipes.com/api` and
 verifies TLS normally. To develop against a local copy of that backend, copy
-[`.env.example`](.env.example) to `.env` (next to `main.py`, or in
+[`.env.example`](.env.example) to `.env` (next to `bootstrap.py`, or in
 `data/config/`) and set:
 
 | Variable | Purpose |

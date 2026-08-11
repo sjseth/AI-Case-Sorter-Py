@@ -3,6 +3,13 @@
 # Labels map to this repo's actual subsystem boundaries as CLAUDE.md describes
 # them (UI vs. hardware I/O vs. control logic vs. persistence), not to generic
 # folder names, so a label on a PR tells you which part of the app is in play.
+# Since #58's `src/` layout gave each of those boundaries its own real
+# subpackage, one directory glob per label is enough -- no more enumerated
+# per-file lists to keep in sync as files move within a subsystem.
+#
+# Two things stay deliberately unlabelled, because `sync-labels: true` means a
+# glob here also *removes* a hand-applied label: `src/sorter/paths.py` and the
+# package's `__init__.py`/`__main__.py`, which belong to no one subsystem.
 #
 # NOTE: actions/labeler does not create labels -- every label named here must
 # already exist in the repo or the action errors. They are declared in
@@ -11,36 +18,36 @@
 
 ui:
   - changed-files:
-      - any-glob-to-any-file: 'sorter/ui/**'
+      - any-glob-to-any-file: 'src/sorter/ui/**'
 
 training:
   - changed-files:
       - any-glob-to-any-file:
-          - 'sorter/training/**'
-          - 'sorter/local_inference.py'
-          - 'sorter/evaluator.py'
-          - 'sorter/eval_report.py'
+          # sorter/ml/ holds local inference, evaluation, and classification --
+          # all training-adjacent in the sense this label describes.
+          - 'src/sorter/training/**'
+          - 'src/sorter/ml/**'
 
 hardware:
   - changed-files:
-      - any-glob-to-any-file:
-          - 'sorter/serial_broker.py'
-          - 'sorter/serial_emulator.py'
-          - 'sorter/camera.py'
-          - 'sorter/image_proc.py'
+      - any-glob-to-any-file: 'src/sorter/hardware/**'
+
+control:
+  - changed-files:
+      - any-glob-to-any-file: 'src/sorter/control/**'
+
+data:
+  - changed-files:
+      - any-glob-to-any-file: 'src/sorter/data/**'
 
 community:
   - changed-files:
-      - any-glob-to-any-file:
-          - 'sorter/community_api.py'
-          - 'sorter/auth.py'
-          - 'sorter/feedback.py'
+      - any-glob-to-any-file: 'src/sorter/community/**'
 
 updater:
   - changed-files:
       - any-glob-to-any-file:
-          - 'sorter/updater.py'
-          - 'sorter/apply_update.py'
+          - 'src/sorter/update/**'
           - 'installer/**'
 
 launcher:

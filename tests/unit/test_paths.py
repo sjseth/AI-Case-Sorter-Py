@@ -16,6 +16,25 @@ def _no_override(monkeypatch):
     monkeypatch.delenv("CASESORTER_DATA_DIR", raising=False)
 
 
+def test_app_root_is_the_folder_holding_bootstrap_py() -> None:
+    """Anchored on real files, because a relative re-derivation proves nothing.
+
+    ``app_root()`` is ``paths.py``'s own path minus three components, and the
+    obvious test -- re-deriving the same thing from ``__file__`` -- is a
+    tautology that stays green whatever the count is. Verified: mutating it
+    to ``.parent.parent`` left the whole suite passing.
+
+    Off by one is not cosmetic. ``app_root()`` is what ``apply_update`` backs
+    up, overwrites and prunes, and what ``find_uv``/``is_portable``/
+    ``legacy_data_dir`` resolve against. One level down and the updater
+    operates on ``src/``.
+    """
+    root = paths.app_root()
+    assert (root / "bootstrap.py").is_file()
+    assert (root / "src" / "sorter" / "paths.py").is_file()
+    assert (root / "pyproject.toml").is_file()
+
+
 def test_env_override_wins(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("CASESORTER_DATA_DIR", str(tmp_path))
     assert paths.app_data_dir() == tmp_path

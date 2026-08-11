@@ -21,11 +21,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from sorter import paths
-from sorter.db import Database
-from sorter.repository import ModelRepo, SettingsRepo
+from sorter.data.db import Database
+from sorter.data.repository import ModelRepo, SettingsRepo
 
 
 def main() -> int:

@@ -12,10 +12,13 @@ dist/
 # lets that happen for an end-user launch (see its docstring); the version
 # shipped in a release archive is a plain file placed there by the release
 # workflow, not tracked in git at all.
-/sorter/_version.py
+/src/sorter/_version.py
 
 # Runtime state. The data root normally lives outside the repo (see README);
 # `data/` only appears here for portable installs and legacy checkouts.
-data/
+# Root-anchored: `src/sorter/data/` is a tracked subpackage (persistence
+# layer), not a runtime data folder, and an unanchored pattern would swallow
+# it.
+/data/
 # Marker that pins the data root to <app>/data — a local choice, never committed.
 portable.txt

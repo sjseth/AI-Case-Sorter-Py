@@ -40,7 +40,7 @@
     Install without starting the app afterwards.
 
 .PARAMETER Repo
-    Override the "owner/repo" to install from. Mirrors sorter/updater.py's
+    Override the "owner/repo" to install from. Mirrors sorter/update/updater.py's
     CASESORTER_UPDATE_REPO -- same reason: verifying against a fork's own
     releases without editing the script.
 
@@ -260,7 +260,7 @@ function Assert-SafeArchiveEntries {
        version anchored the drive-letter test with '^[A-Za-z]:', which
        matches only when the drive sits at the very start -- so the exact
        "pkg/D:/evil.py" this exists to stop went straight through it. That is
-       the same mistake sorter/updater.py's Python-side extraction had (it
+       the same mistake sorter/update/updater.py's Python-side extraction had (it
        tested name[1] of the whole name) and was fixed for; the two paths
        consume the same archives and must reject the same shapes. See
        Test-ArchiveEntryValidation.ps1, and _safe_members in updater.py. #>
@@ -289,6 +289,38 @@ function Assert-SafeArchiveEntries {
     }
 }
 
+function Test-LooksLikeTheApp {
+    <# Whether an extracted archive is this app, in either supported layout.
+
+       Kept in lock-step with sorter/update/updater.py's REQUIRED_ENTRY_SETS,
+       down to the semantics: a set matches only when *every* entry in it is
+       present, and any one set matching is enough. Checking `main.py` alone
+       is what made these two disagree -- a bare main.py with no package was
+       accepted here and rejected by the updater, so an archive could install
+       and then never update.
+
+       Both arms stay indefinitely. A release published before the src/ move
+       is still a legitimate thing to install from a pinned -Version. #>
+    param([Parameter(Mandatory)][string]$Root)
+
+    $requiredEntrySets = @(
+        @('main.py', 'sorter\__init__.py'),   # flat, up to and including 1.1.0
+        @('src\sorter\__init__.py')           # src/ layout
+    )
+
+    foreach ($entrySet in $requiredEntrySets) {
+        $complete = $true
+        foreach ($entry in $entrySet) {
+            if (-not (Test-Path (Join-Path $Root $entry))) {
+                $complete = $false
+                break
+            }
+        }
+        if ($complete) { return $true }
+    }
+    return $false
+}
+
 function Select-ReleaseAsset {
     <# Given a release API response, matches the sdist by its exact name --
        mirroring updater._expected_asset_name -- not "the first .tar.gz",
@@ -311,7 +343,7 @@ function Select-ReleaseAsset {
 function Get-ReleaseInfo {
     <# Release tag + archive URL, latest by default or a specific tag via
        -Version. Prefers the published sdist, which is the same artifact
-       sorter/updater.py updates from; falls back to a source archive, and
+       sorter/update/updater.py updates from; falls back to a source archive, and
        (only when no -Version was requested) to the default branch if there
        are no releases at all yet.
 
@@ -319,7 +351,7 @@ function Get-ReleaseInfo {
        sorter/_version.py (hatch-vcs stamps it at build time). A source archive
        has neither that file nor .git, so an install made from one reports
        0.0.0+unknown -- which parses as a pre-release, so every launch would
-       see the current release as "newer" and re-prompt. sorter/apply_update.py
+       see the current release as "newer" and re-prompt. sorter/update/apply_update.py
        stamps a version after an in-app update, but nothing does so here.
 
        -Version used to skip all of this and always fetch the raw source
@@ -469,8 +501,8 @@ extract the release archive by hand:
             $entries[0].FullName
         } else { $unpack }
 
-        if (-not (Test-Path (Join-Path $src 'main.py'))) {
-            throw "The downloaded archive does not look like the app (no main.py)."
+        if (-not (Test-LooksLikeTheApp -Root $src)) {
+            throw "The downloaded archive does not look like the app (no src/sorter/__init__.py, and no main.py + sorter/__init__.py)."
         }
 
         New-Item -ItemType Directory -Path $Dest -Force | Out-Null
@@ -487,7 +519,7 @@ extract the release archive by hand:
         # version string, say '1.0.0' -> '0.3.0') passes both checks and the
         # stale .pyc wins. The app then runs the previous release's code.
         # .venv/.uv are skipped: their caches belong to packages this did not
-        # touch. sorter/apply_update.py gets this for free, since its stale
+        # touch. sorter/update/apply_update.py gets this for free, since its stale
         # sweep already removes .pyc the new tree does not ship.
         Get-ChildItem -LiteralPath $Dest -Directory -Filter '__pycache__' -Recurse -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -notlike '*\.venv\*' -and $_.FullName -notlike '*\.uv\*' } |
@@ -566,7 +598,7 @@ try {
     if ($LogFile) { Write-Note "Log          : $LogFile" }
     Write-Host ""
 
-    if (Test-Path (Join-Path $InstallDir 'main.py')) {
+    if ((Test-Path (Join-Path $InstallDir 'main.py')) -or (Test-Path (Join-Path $InstallDir 'src\sorter\__init__.py'))) {
         Write-Step "Updating the existing install at $InstallDir"
     } else {
         Write-Step "Installing to $InstallDir"

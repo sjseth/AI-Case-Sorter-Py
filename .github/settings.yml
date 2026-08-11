@@ -72,6 +72,12 @@ labels:
   - name: hardware
     color: "b60205"
     description: "Serial board, camera, image processing"
+  - name: control
+    color: "5319e7"
+    description: "Sort loop and the event bus"
+  - name: data
+    color: "bfd4f2"
+    description: "SQLite, config, models, image store"
   - name: community
     color: "0e8a16"
     description: "Community backend, auth, feedback loop"

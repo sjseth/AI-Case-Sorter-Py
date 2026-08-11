@@ -28,6 +28,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Tags, not just the tip: test_cross_version_update.py checks out the
+          # previous release and runs *its* updater against this tree. Without
+          # them that test self-skips, and the flat->src upgrade path is
+          # covered by nothing.
+          fetch-depth: 0
 
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:

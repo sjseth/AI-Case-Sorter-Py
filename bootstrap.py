@@ -36,15 +36,23 @@ What it does, in order:
      stay deterministic and offline-safe (CI uses `--locked` instead, which
      fails if the lock has drifted from pyproject.toml -- see
      .github/workflows/build.yml). --no-install-project skips building the
-     sorter package itself: main.py imports it straight from the source
-     tree, so it was never needed for that, and building it is actively
-     harmful when there's no .git to derive a version from (see
-     pyproject.toml's [tool.hatch.version] and sorter/__init__.py).
+     sorter package itself: step 5 puts src/ on PYTHONPATH instead, so it
+     was never needed for that, and building it is actively harmful when
+     there's no .git to derive a version from (see pyproject.toml's
+     [tool.hatch.version] and src/sorter/__init__.py).
      --no-dev keeps the `dev` group (pytest, ruff) out of a user's venv --
      uv installs it by default, and it is pure CI tooling.
-  5. Launch the app: `uv run --no-sync python main.py <forwarded args>`.
-     --no-sync, not --frozen: `uv run` syncs implicitly by default even with
-     --frozen, which would redo the very build step 4 skipped.
+  5. Launch the app: `uv run --no-sync python -m sorter <forwarded args>`,
+     with PYTHONPATH=src in the child's environment. --no-sync, not
+     --frozen: `uv run` syncs implicitly by default even with --frozen,
+     which would redo the very build step 4 skipped.
+
+     PYTHONPATH is what makes `-m` work at all here -- the package is never
+     installed into the venv (step 4), so there is otherwise nothing for it
+     to resolve. Doing it this way keeps sys.path surgery out of the
+     application entirely: `-m` also leaves `src/sorter` itself off the
+     path, where subpackages like `ui` and `data` would shadow same-named
+     third-party ones.
 """
 
 from __future__ import annotations
@@ -57,6 +65,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+SRC = ROOT / "src"
 
 # Bump deliberately, not automatically -- re-verify tkinter/libGL behavior
 # (see the module docstring) after bumping, the same way this version was
@@ -81,7 +90,7 @@ def open_log():
     """
     global _log_file, _log_path
     try:
-        sys.path.insert(0, str(ROOT))
+        sys.path.insert(0, str(SRC))
         from sorter.paths import logs_dir
 
         directory = logs_dir()
@@ -97,6 +106,24 @@ def open_log():
         _log_file = None
         _log_path = None
     return _log_path
+
+
+def close_log():
+    """Release the launch log so another process can rotate it.
+
+    Only the re-launch after an update needs this: the child calls open_log()
+    too, and on Windows os.replace() on a file this process still holds open
+    fails -- silently, since open_log swallows everything -- leaving that
+    launch unlogged.
+    """
+    global _log_file
+    if _log_file is None:
+        return
+    try:
+        _log_file.close()
+    except Exception:
+        pass
+    _log_file = None
 
 
 def _record(line: str) -> None:
@@ -141,7 +168,7 @@ def find_uv() -> str | None:
     # The logic lives in sorter/paths.py, not duplicated here, because
     # dialog_install_torch.py needs the same lookup after launch (a
     # uv-managed venv doesn't ship pip, so it uses `uv pip install` instead).
-    sys.path.insert(0, str(ROOT))
+    sys.path.insert(0, str(SRC))
     from sorter.paths import find_uv as _find_uv
 
     return _find_uv()
@@ -308,17 +335,50 @@ def ensure_linux_runtime_libs(uv: str, auto_install: bool) -> None:
 
 # ---------------------------------------------------------------------------
 # Staged self-update -- must run before `uv sync` so a staged update's own
-# pyproject.toml/uv.lock is what gets synced. sorter.apply_update is
+# pyproject.toml/uv.lock is what gets synced. sorter.update.apply_update is
 # stdlib-only by design (see its module docstring) specifically so it's
 # importable here, before uv has put anything in a venv yet.
 # ---------------------------------------------------------------------------
 
 
-def apply_pending_update() -> None:
-    sys.path.insert(0, str(ROOT))
-    from sorter.apply_update import main as apply_main
+# Set on the process a re-launch starts, so an update that somehow stays
+# pending can cost one extra launch and not an infinite chain of them.
+RELAUNCH_ENV = "CASESORTER_BOOTSTRAP_RELAUNCHED"
 
-    apply_main()  # always exits 0 internally; a broken updater must never block launch
+
+def apply_pending_update() -> bool:
+    """Apply a staged update. True if one was applied, i.e. this file changed."""
+    sys.path.insert(0, str(SRC))
+    from sorter.update.apply_update import apply_pre_launch
+
+    # Never raises internally; a broken updater must never block launch.
+    return apply_pre_launch()
+
+
+def relaunch_after_update(forwarded: list[str]):
+    """Re-run this file from disk after an update replaced it. None to carry on.
+
+    An update rewrites bootstrap.py and moves the entry point it launches,
+    but this process resolved both before that happened -- the module in
+    memory and the path in run_app() are the previous release's. That is what
+    breaks a layout change in either direction: an update that moves the
+    entry point makes the in-memory path stale by definition, and the process
+    holding it is the one that just installed the move.
+
+    subprocess rather than os.execv: on Windows exec replaces the process
+    image and cmd.exe treats the original as finished, returning to the
+    prompt while the app is still starting -- which would defeat start.bat's
+    pause-on-failure, the thing that keeps a launch error on screen.
+    """
+    if os.environ.get(RELAUNCH_ENV) == "1":
+        warn("an update was applied again after a re-launch; continuing rather than looping.")
+        return None
+
+    env = dict(os.environ)
+    env[RELAUNCH_ENV] = "1"
+    log("update applied; re-launching with the new bootstrap ...")
+    close_log()  # the child rotates the log this process is holding open
+    return subprocess.call([sys.executable, str(Path(__file__).resolve())] + forwarded, cwd=str(ROOT), env=env)
 
 
 # ---------------------------------------------------------------------------
@@ -334,13 +394,19 @@ def run_app(uv: str, forward_args: list[str]) -> int:
     """
     env = dict(os.environ)
     env["PYTHONUNBUFFERED"] = "1"
+    # What makes `-m sorter` resolve without installing the package. Setting it
+    # here means no file in the tree has to rewrite sys.path to launch itself:
+    # the launcher owns the environment, which is what a launcher is for.
+    # Replaces rather than prepends, deliberately -- an inherited PYTHONPATH is
+    # a classic source of "why did it import the other sorter".
+    env["PYTHONPATH"] = str(SRC)
 
     # --no-sync, not --frozen: `uv run` syncs implicitly by default even with
     # --frozen (frozen only constrains *how* it syncs, not whether), which
     # would silently redo the project build main() went out of its way to
     # skip. --no-sync trusts that sync and skips its own.
     proc = subprocess.Popen(
-        [uv, "run", "--no-sync", "python", "main.py"] + forward_args,
+        [uv, "run", "--no-sync", "python", "-m", "sorter"] + forward_args,
         cwd=ROOT,
         env=env,
         stdout=subprocess.PIPE,
@@ -400,7 +466,14 @@ def main(argv: list[str] | None = None) -> int:
     uv = find_uv() or install_uv()
     log(f"uv: {uv}")
 
-    apply_pending_update()
+    from sorter.paths import is_installed_package
+
+    log(f"installed package: {is_installed_package()}")
+
+    if apply_pending_update():
+        code = relaunch_after_update(args)
+        if code is not None:
+            return code
 
     log("Syncing dependencies with uv ...")
     # --no-install-project: don't build/install the sorter package itself as
