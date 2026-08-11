@@ -22,20 +22,23 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Image Recognition",
 ]
+# Every dependency is pinned exactly; see .github/renovate.json5 for how
+# bumps arrive. This ships as an application, not a library others resolve
+# against, so exact pins cost nothing in dependency conflicts.
 dependencies = [
-    "pyserial>=3.5",
-    "opencv-python>=4.8",
-    "numpy>=1.24",
-    "Pillow>=10.0",
-    "requests>=2.31",
-    "msal>=1.28",
-    "platformdirs>=4.0",
+    "pyserial==3.5",
+    "opencv-python==5.0.0.93",
+    "numpy==2.5.2",
+    "Pillow==12.3.0",
+    "requests==2.34.2",
+    "msal==1.37.0",
+    "platformdirs==4.11.1",
     # Schema migrations: sorter/data/db.py runs its migration steps through
     # sqlite_utils.Migrations (tracking table `_sqlite_migrations`).
-    "sqlite-utils>=4",
+    "sqlite-utils==4.1.1",
     # Windows-only: enumerates friendly DirectShow camera names so the Camera
     # tab can show real device names instead of just "Camera N".
-    "pygrabber>=0.2; platform_system == 'Windows'",
+    "pygrabber==0.2; platform_system == 'Windows'",
 ]
 
 [project.urls]
@@ -45,10 +48,12 @@ Issues = "https://github.com/sjseth/AI-Case-Sorter-Py/issues"
 
 [project.optional-dependencies]
 # Local PyTorch training/inference. Install with `pip install .[ml]`.
-ml = ["torch>=2.2", "torchvision>=0.17"]
+# Must match _TARGETS in sorter/ui/dialog_install_torch.py, which is how
+# PyTorch actually gets installed at runtime. Bump both together.
+ml = ["torch==2.9.1", "torchvision==0.24.1"]
 
 [build-system]
-requires = ["hatchling>=1.27", "hatch-vcs>=0.4"]
+requires = ["hatchling==1.31.0", "hatch-vcs==0.5.0"]
 build-backend = "hatchling.build"
 
 # Version comes from the git tag at build time -- only ever meaningful when
@@ -160,9 +165,9 @@ markers = [
 
 [dependency-groups]
 dev = [
-    "pytest>=9.1.1",
-    "ruff>=0.16.1",
-    "ty>=0.0.69",
+    "pytest==9.1.1",
+    "ruff==0.16.2",
+    "ty==0.0.69",
 ]
 
 # ty (type checker) configuration.

@@ -15,6 +15,9 @@
 
   branchPrefix: "renovate/",
 
+  // Backstop: converts a range back to an exact pin if one ever creeps in.
+  rangeStrategy: "pin",
+
   addLabels: [
     "bot-renovate",
   ],

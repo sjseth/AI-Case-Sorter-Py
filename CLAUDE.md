@@ -291,6 +291,18 @@ between them from the Run tab's template dropdown.
   (feed one), `xf:<slot>` (force feed + sort), bare `<slot>` (sort imaged case),
   `sortto:<slot>` (move arm), `getconfig` (JSON board state), `version`, `stop`,
   `<key>:<value>` (set board param). `try_open()` does a version handshake.
+  Responses are matched as **anchored tokens** — the line, stripped and
+  lowercased, equals `ok`/`done`/`error`/`waiting` or begins with it followed
+  by a non-alphanumeric delimiter — so `error: broken sensor` routes as the
+  error it is and `undone` doesn't satisfy a pending feed. Everything else
+  falls through to `on_response`.
+  **The authority on what the board actually prints is the firmware, which
+  lives upstream — not here and not the emulator** (the emulator only ever
+  emits the clean tokens the parser wants, so it can never disprove a parser
+  bug). Read it at
+  [`CS72_Firmware_V1.7.ino`](https://github.com/sjseth/AI-Case-Sorter-CS7.2/blob/main/MicroController/CS72_Firmware_V1.7/CS72_Firmware_V1.7.ino)
+  before changing the protocol; `tests/unit/test_serial_broker.py` pins the
+  vocabulary derived from it, against a named upstream commit.
 - **`serial_emulator.py`** — `SerialEmulator`: drop-in fake mirroring the broker
   API (port name `"Emulated"`), responding after a timer delay. Enables running
   and testing without hardware.

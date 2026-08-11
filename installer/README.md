@@ -83,6 +83,28 @@ explicitly.
 
 ## Testing the installer locally
 
+### Archive-entry validation — runs on any OS
+
+`Test-ArchiveEntryValidation.ps1` needs no Windows. It dot-sources this
+directory's script for its functions only (the guard on the main block stops
+it installing anything), so it runs under PowerShell on Linux or macOS:
+
+```bash
+docker run --rm -v "$PWD:/w" -w /w mcr.microsoft.com/powershell:7.4-ubuntu-22.04 \
+  pwsh -File installer/Test-ArchiveEntryValidation.ps1
+```
+
+Run it from the repo root; it takes a few seconds. There is no bare `7.4`
+tag on that registry — the tags are OS-qualified.
+
+Two things it does **not** prove. It runs PowerShell 7.4, whereas a real
+double-click through `install-windows.bat` runs **Windows PowerShell 5.1** —
+which is why CI uses `shell: powershell`, and why this file's header warns
+about BOM/codepage decoding. And it covers the entry-name checks only, not
+winget, `tar.exe`, the registry, or the python.org bundle.
+
+### The three provisioning paths — need a real Windows machine
+
 The installer has three Python-provisioning paths. CI exercises all three on
 every change to `installer/**` (the `installer-smoke` matrix:
 `preinstalled` / `winget` / `pythonorg`); this is how to run the same three by
