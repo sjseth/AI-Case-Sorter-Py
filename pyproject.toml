@@ -50,7 +50,7 @@ Issues = "https://github.com/sjseth/AI-Case-Sorter-Py/issues"
 # Local PyTorch training/inference. Install with `pip install .[ml]`.
 # Must match _TARGETS in sorter/ui/dialog_install_torch.py, which is how
 # PyTorch actually gets installed at runtime. Bump both together.
-ml = ["torch==2.9.1", "torchvision==0.24.1"]
+ml = ["torch==2.13.0", "torchvision==0.24.1"]
 
 [build-system]
 requires = ["hatchling==1.31.0", "hatch-vcs==0.5.0"]
