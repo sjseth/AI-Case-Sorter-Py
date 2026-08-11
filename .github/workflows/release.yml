@@ -27,6 +27,12 @@ name: Release
 # No draft anywhere. A draft would be invisible to the verification too --
 # /releases/tags/<tag> 404s for the unauthenticated fetch the installer does --
 # which is exactly why the release is a prerelease and not a draft.
+#
+# Publishing an actual release candidate then costs one thing: not taking the
+# promote step. The `prerelease` input stops there, so an rc is a normal
+# release that was built, asserted and installer-verified exactly like any
+# other -- it just never becomes /releases/latest. Testers reach it through
+# the update dialog's version picker ("Show prereleases").
 
 on:
   workflow_dispatch:
@@ -35,6 +41,12 @@ on:
         description: "Version to release (PEP 440, no v prefix), e.g. 0.2.0. Leave empty to auto-detect from Conventional Commits."
         required: false
         type: string
+      prerelease:
+        description: "Publish as a release candidate instead of a release: verified like any release, but never promoted to latest. The number is chosen for you (0.5.0 -> 0.5.0rc1, then rc2)."
+        required: false
+        type: choice
+        options: [none, rc, b, a]
+        default: none
       ref:
         description: "Branch, tag, or commit SHA to release from. Leave empty for the branch this workflow was dispatched on."
         required: false
@@ -69,6 +81,7 @@ jobs:
       auto: ${{ steps.resolve.outputs.auto }}
       source: ${{ steps.resolve.outputs.source }}
       previous: ${{ steps.previous.outputs.tag }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -83,33 +96,43 @@ jobs:
         with:
           version: ${{ inputs.version }}
 
-      # Captured before the release job creates the new tag -- git describe run
+      # Captured before the release job creates the new tag -- a lookup run
       # after that would find the just-created tag instead.
+      #
+      # Selects tags the way git-cliff does, so this names the boundary the
+      # notes actually came from: the grep mirrors cliff.toml's tag_pattern,
+      # and there is no `--merged` because git-cliff does not require the tag
+      # to be an ancestor of HEAD.
       - name: Record previous tag
         id: previous
         run: |
-          echo "tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")" >> "$GITHUB_OUTPUT"
+          PREV="$(git tag --list --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -1)"
+          echo "tag=$PREV" >> "$GITHUB_OUTPUT"
 
       - name: Resolve version
         id: resolve
         env:
           REQUESTED: ${{ inputs.version }}
           FORCE: ${{ inputs.force }}
+          KIND: ${{ inputs.prerelease }}
         run: |
           AUTO="$(git-cliff --config cliff.toml --bumped-version)"
 
+          # The force check compares the *base*, not the suffixed version:
+          # git-cliff never proposes an rc, so the latter would demand `force`
+          # for every candidate.
           if [ -z "$REQUESTED" ]; then
-            VERSION="$AUTO"
+            BASE="$AUTO"
             SOURCE="auto-detected from Conventional Commits"
           else
             # Already validated by check-version above.
-            VERSION="$REQUESTED"
-            if [ "$VERSION" != "$AUTO" ]; then
+            BASE="$REQUESTED"
+            if [ "$BASE" != "$AUTO" ]; then
               if [ "$FORCE" != "true" ]; then
-                echo "::error::Version '$VERSION' disagrees with the auto-detected '$AUTO'. Re-run with force enabled if that is deliberate."
+                echo "::error::Version '$BASE' disagrees with the auto-detected '$AUTO'. Re-run with force enabled if that is deliberate."
                 exit 1
               fi
-              echo "::warning::Forcing '$VERSION' over the auto-detected '$AUTO'."
+              echo "::warning::Forcing '$BASE' over the auto-detected '$AUTO'."
               SOURCE="user-specified (forced over '$AUTO')"
             else
               SOURCE="user-specified (matches auto-detected)"
@@ -119,16 +142,43 @@ jobs:
           # Auto-detect can legitimately return nothing useful -- e.g. a repo
           # with no tags *and* no conventional commits to infer a bump from.
           # Better to fail here than to try tagging an empty string.
-          if [ -z "$VERSION" ]; then
+          if [ -z "$BASE" ]; then
             echo "::error::Could not determine a version to release. Pass one explicitly."
             exit 1
+          fi
+
+          VERSION="$BASE"
+          if [ "$KIND" != "none" ] && [ -n "$KIND" ]; then
+            # A version typed with its own segment is taken at face value --
+            # re-suffixing 0.5.0rc1 would produce nonsense.
+            if echo "$BASE" | grep -qE '(a|b|rc)[0-9]+$'; then
+              echo "::warning::'$BASE' already names a prerelease; using it as given rather than appending '$KIND'."
+            else
+              VERSION="$(.github/scripts/next-prerelease.sh "$BASE" "$KIND")"
+              SOURCE="$SOURCE, as $KIND"
+            fi
+          fi
+
+          # Read off the resolved version, not the input, so a hand-typed
+          # 0.5.0rc1 is treated as the prerelease it is.
+          if echo "$VERSION" | grep -qE '(a|b|rc)[0-9]+$'; then
+            PRERELEASE=true
+          else
+            PRERELEASE=false
           fi
 
           {
             echo "version=$VERSION"
             echo "auto=$AUTO"
             echo "source=$SOURCE"
+            echo "prerelease=$PRERELEASE"
           } >> "$GITHUB_OUTPUT"
+
+      # The input is validated above; this validates what was *computed* from
+      # it, which until now nothing did.
+      - uses: ./.github/actions/check-version
+        with:
+          version: ${{ steps.resolve.outputs.version }}
 
       # Also enforced in check-release.yml: this prevents before tagging, that
       # catches a release made by hand in the UI.
@@ -166,7 +216,13 @@ jobs:
           REF: ${{ inputs.ref || github.ref }}
           DRY_RUN: ${{ inputs.dry-run }}
           LATEST: ${{ steps.previous.outputs.tag }}
+          PRERELEASE: ${{ steps.resolve.outputs.prerelease }}
         run: |
+          if [ "$PRERELEASE" = "true" ]; then
+            FINISH="tag + prerelease + verify, then STOP -- not promoted to latest, no PyPI"
+          else
+            FINISH="tag + prerelease + verify + promote to latest + publish"
+          fi
           # Test the value: "false" is non-empty, so ${DRY_RUN:+...} would
           # expand for both.
           if [ "$DRY_RUN" = "true" ]; then
@@ -174,7 +230,7 @@ jobs:
             MODE="dry run -- nothing tagged, nothing published"
           else
             HEADING="Release"
-            MODE="awaiting approval, then tag + prerelease + verify + publish"
+            MODE="awaiting approval, then $FINISH"
           fi
           {
             echo "### $HEADING"
@@ -286,9 +342,12 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          BUILT="$(grep -oP "(?<=^__version__ = version = ')[^']+" sorter/_version.py)"
+          # Path tracks `version-file` in pyproject.toml's [tool.hatch.build.hooks.vcs].
+          # `head -1` keeps the exit status at 0 when the file is missing, so the
+          # error below is what a reader sees rather than a bare `set -e` abort.
+          BUILT="$(grep -hoP "(?<=^__version__ = version = ')[^']+" src/sorter/_version.py 2>/dev/null | head -1)"
           if [ "$BUILT" != "$VERSION" ]; then
-            echo "::error::Built version '$BUILT' does not match '$VERSION' -- refusing to release."
+            echo "::error::Built version '${BUILT:-<src/sorter/_version.py not found>}' does not match '$VERSION' -- refusing to release."
             exit 1
           fi
 
@@ -339,6 +398,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.prepare.outputs.version }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
         run: |
           URL=$(gh release create "$VERSION" \
             --title "$VERSION" \
@@ -351,8 +411,12 @@ jobs:
             echo ""
             echo "\`$VERSION\` -- $URL"
             echo ""
-            echo "Not visible to updaters yet: \`/releases/latest\` excludes prereleases."
-            echo "It is promoted only if the installer verification below passes."
+            echo "Not visible to updaters: \`/releases/latest\` excludes prereleases."
+            if [ "$PRERELEASE" = "true" ]; then
+              echo "This is a release candidate, so it stays that way -- it is verified below but never promoted."
+            else
+              echo "It is promoted only if the installer verification below passes."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -375,6 +439,10 @@ jobs:
   # The moment the release becomes real. One flag flip, with the assets already
   # in place -- so there is no window where /releases/latest returns a release
   # whose sdist has not landed yet.
+  #
+  # A release candidate skips the flip and nothing else. Gated per *step*, not
+  # by skipping the job: a skipped job cascades through `needs: promote` and
+  # would take TestPyPI with it.
   promote:
     name: promote to latest
     needs: [prepare, verify-installer]
@@ -383,6 +451,7 @@ jobs:
       contents: write
     steps:
       - name: Promote the prerelease
+        if: ${{ needs.prepare.outputs.prerelease != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -393,6 +462,25 @@ jobs:
             echo "### Released"
             echo ""
             echo "\`$VERSION\` is now the latest release. Updaters will pick it up."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Leave it as a prerelease
+        if: ${{ needs.prepare.outputs.prerelease == 'true' }}
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          {
+            echo "### Release candidate published"
+            echo ""
+            echo "\`$VERSION\` stays a prerelease. \`/releases/latest\` is unchanged, so no"
+            echo "existing install is offered it by the startup check."
+            echo ""
+            echo "To install it:"
+            echo ""
+            echo "- **In the app** -- \"Check for updates\" -> \"Choose a different version…\" -> tick \"Show prereleases\"."
+            echo "- **Fresh Windows install** -- \`install-windows.ps1 -Version $VERSION\`."
+            echo ""
+            echo "Cut the real release by running this workflow again with \`prerelease: none\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Gated behind a repo variable, unset = off, so this changes nothing until a
@@ -421,11 +509,12 @@ jobs:
 
   # Last, because it is the only step that cannot be undone: a PyPI version can
   # be yanked but never replaced. Everything before it -- the tag, the release,
-  # even the promotion -- can be deleted and redone.
+  # even the promotion -- can be deleted and redone. A release candidate
+  # therefore stops at TestPyPI; pip needs --pre to see a prerelease anyway.
   publish-to-pypi:
     name: publish to PyPI
-    needs: [promote, publish-to-testpypi]
-    if: vars.PYPI_PUBLISH_ENABLED == 'true'
+    needs: [prepare, promote, publish-to-testpypi]
+    if: vars.PYPI_PUBLISH_ENABLED == 'true' && needs.prepare.outputs.prerelease != 'true'
     runs-on: ubuntu-latest
     environment:
       name: stable

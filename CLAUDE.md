@@ -786,7 +786,25 @@ flowchart TD
   currently offered, and even when the plain check said there was nothing
   newer — replaces what "Download & Install" targets and the notes/detail
   text update to match; the detail text says explicitly when the selection
-  isn't the newest release available.
+  isn't the newest release available. **This picker is the only route to a
+  release candidate** — the startup check hits `/releases/latest`, which
+  excludes prereleases, so an rc is never announced.
+- **Release candidates.** `release.yml`'s `prerelease` input (`none`/`rc`/`b`/
+  `a`) cuts one: everything a release does, minus the `promote` step, so the
+  GitHub release stays a prerelease permanently instead of as a staging state.
+  Three things hold it together, and each is pinned by a test:
+  - **`.github/scripts/next-prerelease.sh`** picks the number, because
+    git-cliff only emits final versions. `0.5.0` → `0.5.0rc1` → `0.5.0rc2`,
+    compared numerically so `rc9` → `rc10`.
+  - **`cliff.toml`'s `tag_pattern` is anchored at both ends**, making rc tags
+    invisible to git-cliff — otherwise `--bumped-version` hands back the rc
+    tag *itself* as the next version, and the release's notes would start at
+    the candidate rather than the last stable tag.
+  - **PEP 440's canonical spelling, no separator** (`0.5.0rc1`). hatchling
+    names the sdist from the normalized version and `release.yml` asserts the
+    two match, so `0.5.0-rc1` fails the release by design. `updater.is_newer`
+    ranks the same segments, which is what lets an rc install see the eventual
+    release as newer.
 - **`installer/`** — `install-windows.ps1` (+ `.bat` wrapper) provisions Python
   via winget or a silent python.org install, lays the app down in
   `%LOCALAPPDATA%\Programs\CaseSorter`, and hands off to `start.bat` (which just
@@ -862,8 +880,9 @@ flowchart TD
   edit that file. The backend itself is a separate service, not in this repo.
 - **Releases drive the updater.** There is no version string to edit — tagging
   *is* the bump (§7), and the release workflow derives the tag from the commit
-  types since the last one. `/releases/latest` excludes pre-releases, so
-  tagging an rc won't reach stable users. See `RELEASING.md`.
+  types since the last one. `/releases/latest` excludes pre-releases, which is
+  exactly what makes the `prerelease` input safe: an rc reaches testers who go
+  looking for it and nobody else. See `RELEASING.md`.
 - **The distribution path assumes a public repo.** The installer and updater
   both fetch anonymously over HTTPS; against a private repo every request
   404s and there is no in-band way to tell that apart from "no releases yet"

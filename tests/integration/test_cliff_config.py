@@ -134,6 +134,27 @@ def test_tag_pattern_ignores_a_v_prefixed_tag(tmp_path: Path) -> None:
     assert _bumped_version(repo) == "0.2.0"
 
 
+def test_a_release_candidate_is_not_a_release_boundary(tmp_path: Path) -> None:
+    """tag_pattern is anchored at *both* ends so `0.5.0rc1` is invisible to
+    git-cliff. Two things follow, and both are the reason the `$` is there.
+
+    The bump is computed from the last stable tag, so cutting rc1, rc2 and
+    then the release all resolve the same 0.5.0. Without the anchor git-cliff
+    2.13.1 hands back `0.5.0rc1` verbatim -- not the rc's successor, the rc
+    itself -- so the release would try to tag a name that already exists, and
+    every further candidate would too.
+
+    And the changelog window spans back past the rc, so the release ships
+    notes covering everything the candidates were cut to test instead of only
+    what changed after the last one.
+    """
+    repo = _repo(tmp_path, "0.4.0", ["feat: a feature"])
+    subprocess.run(["git", "tag", "0.5.0rc1"], cwd=repo, check=True, capture_output=True)
+
+    assert _bumped_version(repo) == "0.5.0"
+    assert "A feature" in _changelog(repo)
+
+
 def test_changelog_line_degrades_gracefully_without_a_github_remote(tmp_path: Path) -> None:
     """The `by @user in #N` attribution suffix reads commit.remote.username /
     commit.remote.pr_number, both populated only by git-cliff's GitHub

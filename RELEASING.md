@@ -26,6 +26,8 @@
    - `force`: only needed when you pass a `version` that **disagrees** with the auto-detected
      one. Without it, a mismatch is a hard error naming both numbers -- that's the guard that
      catches "meant 0.3.0, typed 0.2.0" before it becomes a tag.
+   - `prerelease`: leave at `none` for a real release. See
+     [Cutting a release candidate](#cutting-a-release-candidate) below.
    - `dry-run`: **defaults to on.** Shows the resolved version and generated notes in the job
      summary without pushing a tag or creating anything. Uncheck it to actually release.
 4. The workflow resolves the version and generates changelog notes from commits since the last
@@ -41,9 +43,10 @@
 8. The Windows installer is run for real against that exact tag, and the resulting install has
    to carry that exact version.
 9. Only then is the prerelease promoted to the latest release -- one flag flip, assets already
-   in place.
+   in place. **A release candidate stops here instead**, staying a prerelease.
 10. Finally TestPyPI, then PyPI. Both are gated on the repo variable `PYPI_PUBLISH_ENABLED`,
-    unset by default, and each waits on its environment's reviewer.
+    unset by default, and each waits on its environment's reviewer. A release candidate reaches
+    TestPyPI but not PyPI.
 
 ### Why a prerelease rather than a draft
 
@@ -63,6 +66,38 @@ This also closes a window that used to exist: artifacts were attached *after* pu
 for a short time (26 seconds, measured on 1.0.0) `/releases/latest` returned a release with no
 matching sdist, and clients silently fell back to the source archive and installed something
 reporting `0.0.0+unknown`.
+
+## Cutting a release candidate
+
+Set `prerelease` to `rc` (or `b`/`a`) and run the workflow as normal. It does everything a real
+release does -- tags, builds, asserts the artifacts, publishes with assets attached, and installs
+the result on Windows for real -- and then **stops before step 9**. The release stays a
+prerelease permanently rather than as a staging state.
+
+- **The number is chosen for you.** git-cliff only ever emits final versions, so the workflow
+  appends the next unused suffix to whatever it resolved: `0.5.0` becomes `0.5.0rc1`, and running
+  it again gives `0.5.0rc2`. You don't pass `version`, and you don't need `force` -- the guard
+  that catches a mistyped version compares the *base*, which is unchanged.
+- **It's PEP 440, so there's no separator**: `0.5.0rc1`, never `0.5.0-rc1`. hatchling names the
+  sdist from the normalized version, and the workflow asserts the name matches the tag -- a
+  hyphenated tag fails the release on purpose (see `_expected_asset_name` in
+  `src/sorter/update/updater.py`).
+- **Candidates are invisible to versioning.** `cliff.toml`'s `tag_pattern` is anchored at both
+  ends, so an rc tag is not a release boundary: the eventual `0.5.0` is still computed from the
+  last stable tag, and its notes still span everything since that tag rather than starting at the
+  last candidate. Without that anchor git-cliff hands back the rc tag itself as the "next"
+  version -- pinned in `tests/integration/test_cliff_config.py`.
+- **TestPyPI yes, PyPI no.** PyPI is the one irreversible step and a candidate doesn't earn it;
+  `pip` needs `--pre` to see a prerelease anyway.
+
+**How a tester installs one.** `/releases/latest` still points at the last stable release, so
+nothing is offered automatically -- that's the point. In the app: the status-bar **Check for
+updates** button opens the dialog even when there's nothing new, then **"Choose a different
+version…"** → tick **"Show prereleases"** → pick the rc. For a fresh Windows machine,
+`install-windows.ps1 -Version 0.5.0rc1`.
+
+**Shipping the real release afterwards** is just the workflow again with `prerelease: none`. The
+candidates' tags stay where they are; nothing needs deleting.
 
 ## Versioning
 
