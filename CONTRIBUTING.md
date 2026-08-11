@@ -53,6 +53,51 @@ updater reads as a pre-release and offers to "update" on every launch,
 forever. `bootstrap.py` passes the same flags for the same reason — see its
 module docstring.
 
+### Debugging
+
+Wrap that same command with [debugpy](https://github.com/microsoft/debugpy) and
+attach your editor to it:
+
+```bash
+PYTHONPATH=src uv run --no-sync --with debugpy \
+    python -m debugpy --listen 5678 --wait-for-client -m sorter
+```
+
+It blocks until you attach. Nothing to install — `--with debugpy` layers it on
+for that one run.
+
+Attach with any DAP client on `localhost:5678`. For VS Code, put this in
+`.vscode/launch.json` (untracked — editor config is a personal choice here)
+and pick **Attach to the app** in *Run and Debug*:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach to the app",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "127.0.0.1", "port": 5678 },
+      "justMyCode": false
+    }
+  ]
+}
+```
+
+Worth setting `"python.analysis.extraPaths": ["src"]` in
+`.vscode/settings.json` too, or the language server reports every
+`from sorter... import` as unresolved — the package is never installed, so
+nothing puts `src` on its path.
+
+**Debug this way, not by launching `start.sh` under a debugger.** That looks
+like it works and doesn't: the launcher runs the app as a *grandchild*
+(`bootstrap.py` → `uv` → `python -m sorter`), and debugpy's `"subProcess": true`
+only follows children whose command line looks like Python. Ours starts with
+`uv`, a Rust binary, so it is left alone — you get an attached session on
+`bootstrap.py`, and breakpoints in app code never hit. Verified against
+debugpy 1.8.21; `pydevd`'s `is_python()` returns `False` for `uv`.
+
 Local training/inference additionally needs PyTorch (optional):
 ```bash
 uv sync --extra ml      # torch + torchvision

@@ -141,15 +141,9 @@ cd AI-Case-Sorter-Py
 start.bat
 ```
 
-**Run it directly** (if you have `uv` yourself and want to manage it):
-```bash
-uv sync --frozen --no-dev --no-install-project
-PYTHONPATH=src uv run --no-sync python -m sorter
-```
-Same flags `bootstrap.py` uses. `--no-install-project` / `--no-sync` keep uv
-from building the project itself: on a copy with no `.git` folder — i.e. any
-downloaded release — that overwrites the version the app reports with
-`0.0.0`, and it then offers you the same update on every launch.
+Prefer to drive `uv` yourself, or need to run under a debugger? See
+[CONTRIBUTING.md](CONTRIBUTING.md#development-setup) — the flags matter, and
+getting them wrong makes the app misreport its own version.
 
 ### Running without hardware
 

@@ -75,7 +75,11 @@ automatically):**
   `bootstrap.py` itself, not to run the app), syncs dependencies from the
   committed `uv.lock`, then launches. See `bootstrap.py`'s module docstring
   for the full ordering and why it has to stay stdlib-only.
-- Directly (once synced), same as `bootstrap.py` does it:
+- Directly (once synced), same as `bootstrap.py` does it — this is the form to
+  use under a debugger (insert `-m debugpy --listen 5678 --wait-for-client`
+  before `-m sorter`; see CONTRIBUTING.md) or for a tight edit-run loop, since
+  `start.sh` re-does uv discovery, the Linux library probe and a sync every
+  time:
   ```bash
   PYTHONPATH=src uv run --no-sync python -m sorter     # PowerShell: $env:PYTHONPATH="src"
   ```
