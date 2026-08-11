@@ -262,20 +262,30 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           $dest = "$env:LOCALAPPDATA\Programs\CaseSorter"
-          if (-not (Test-Path "$dest\main.py")) {
-            Write-Error "main.py is missing -- the app was not installed."
+          # Either layout, matching install-windows.ps1's own entry check and
+          # updater.REQUIRED_ENTRY_SETS. This job runs against whatever release
+          # is current, which can predate or postdate the #58 src/ move -- and
+          # it gates promotion to `latest`, so pinning one layout here strands
+          # the first release of the other shape as a permanent prerelease.
+          $entry = @("$dest\src\sorter\__main__.py", "$dest\main.py") |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $entry) {
+            Write-Error "No entry point (src\sorter\__main__.py or main.py) -- the app was not installed."
             exit 1
           }
-          $versionFile = "$dest\sorter\_version.py"
-          if (-not (Test-Path $versionFile)) {
-            Write-Error "sorter\_version.py is missing -- installed from the source archive, not the sdist."
+          Write-Host "entry point: $entry"
+
+          $versionFile = @("$dest\src\sorter\_version.py", "$dest\sorter\_version.py") |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $versionFile) {
+            Write-Error "_version.py is missing -- installed from the source archive, not the sdist."
             exit 1
           }
           $content = Get-Content $versionFile -Raw
-          Write-Host "----- sorter/_version.py -----"
+          Write-Host "----- $versionFile -----"
           Write-Host $content
           if ($content -notmatch "__version__\s*=.*'([0-9][^']*)'") {
-            Write-Error "sorter/_version.py does not carry a real version."
+            Write-Error "$versionFile does not carry a real version."
             exit 1
           }
           $installed = $Matches[1]

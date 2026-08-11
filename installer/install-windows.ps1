@@ -474,9 +474,15 @@ extract the release archive by hand:
         # src/ layout it moved to (src/sorter/__init__.py). Both checks stay
         # here indefinitely -- an old release published before the move is
         # still a legitimate archive to install from a pinned -Version.
-        $looksLikeTheApp = (Test-Path (Join-Path $src 'main.py')) -or (Test-Path (Join-Path $src 'src\sorter\__init__.py'))
+        # Each arm must match a full set, exactly as updater.REQUIRED_ENTRY_SETS
+        # does -- the flat one is ('main.py', 'sorter/__init__.py'), *both*. An
+        # arm that accepts main.py alone would take an archive the updater
+        # rejects, which is the divergence these two files assert cannot exist.
+        $looksLikeTheApp = `
+            ((Test-Path (Join-Path $src 'main.py')) -and (Test-Path (Join-Path $src 'sorter\__init__.py'))) -or `
+            (Test-Path (Join-Path $src 'src\sorter\__init__.py'))
         if (-not $looksLikeTheApp) {
-            throw "The downloaded archive does not look like the app (no main.py or src/sorter/__init__.py)."
+            throw "The downloaded archive does not look like the app (no main.py + sorter/__init__.py, and no src/sorter/__init__.py)."
         }
 
         New-Item -ItemType Directory -Path $Dest -Force | Out-Null

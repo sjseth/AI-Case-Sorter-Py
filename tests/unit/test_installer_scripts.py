@@ -16,6 +16,7 @@ lands on some unrelated line much further down.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -90,3 +91,34 @@ def test_powershell_script_has_no_unpaired_quotes_per_line() -> None:
         if line.count('"') % 2 != 0:
             bad.append(n)
     assert not bad, f"odd number of double quotes on line(s): {bad}"
+
+
+def test_archive_gate_matches_the_updaters_entry_sets() -> None:
+    """The installer and the updater must accept exactly the same archives.
+
+    Both files claim in comments to mirror the other, and they drifted: the
+    installer's flat arm tested `main.py` alone while
+    ``updater.REQUIRED_ENTRY_SETS`` requires `main.py` *and*
+    `sorter/__init__.py`, so a bare-main.py archive was installable but not
+    updatable. Comments cannot enforce that; this can.
+
+    Parses the `$looksLikeTheApp` assignment rather than executing it -- there
+    is no PowerShell here -- and compares the set of paths each arm tests
+    against the updater's own tuples.
+    """
+    from sorter.update import updater
+
+    text = (INSTALLER / "install-windows.ps1").read_text(encoding="utf-8")
+    start = text.index("$looksLikeTheApp")
+    body = text[start : text.index("\n        if (-not $looksLikeTheApp)", start)]
+
+    # Each arm is a parenthesised group of Test-Path calls joined by -and;
+    # the arms themselves are joined by -or.
+    arms = [
+        frozenset(re.findall(r"Join-Path \$src '([^']+)'", arm)) for arm in re.split(r"-or", body) if "Join-Path" in arm
+    ]
+    expected = [frozenset(entry.replace("/", "\\") for entry in entries) for entries in updater.REQUIRED_ENTRY_SETS]
+
+    assert sorted(map(sorted, arms)) == sorted(map(sorted, expected)), (
+        f"installer accepts {sorted(map(sorted, arms))}, updater accepts {sorted(map(sorted, expected))}"
+    )

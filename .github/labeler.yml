@@ -28,6 +28,14 @@ hardware:
   - changed-files:
       - any-glob-to-any-file: 'src/sorter/hardware/**'
 
+control:
+  - changed-files:
+      - any-glob-to-any-file: 'src/sorter/control/**'
+
+data:
+  - changed-files:
+      - any-glob-to-any-file: 'src/sorter/data/**'
+
 community:
   - changed-files:
       - any-glob-to-any-file: 'src/sorter/community/**'
