@@ -90,7 +90,7 @@ jobs:
       # installer being broken but the release it resolved to not carrying an
       # sdist under the name the installer matches -- after a package rename
       # every release cut before it is in exactly that state, and the symptom
-      # is an unhelpful "sorter\_version.py is missing" three steps later.
+      # is an unhelpful "_version.py is missing" three steps later.
       - name: Show the release under test
         shell: bash
         env:
@@ -266,16 +266,19 @@ jobs:
             Write-Error "main.py is missing -- the app was not installed."
             exit 1
           }
-          $versionFile = "$dest\sorter\_version.py"
-          if (-not (Test-Path $versionFile)) {
-            Write-Error "sorter\_version.py is missing -- installed from the source archive, not the sdist."
+          # Searched, not pinned: an untagged run installs /releases/latest,
+          # whose layout is whatever that release shipped.
+          $versionFile = Get-ChildItem -Path $dest -Filter _version.py -Recurse -File -ErrorAction SilentlyContinue |
+                         Select-Object -First 1
+          if (-not $versionFile) {
+            Write-Error "_version.py is missing -- installed from the source archive, not the sdist."
             exit 1
           }
-          $content = Get-Content $versionFile -Raw
-          Write-Host "----- sorter/_version.py -----"
+          $content = Get-Content $versionFile.FullName -Raw
+          Write-Host "----- $($versionFile.FullName) -----"
           Write-Host $content
           if ($content -notmatch "__version__\s*=.*'([0-9][^']*)'") {
-            Write-Error "sorter/_version.py does not carry a real version."
+            Write-Error "$($versionFile.FullName) does not carry a real version."
             exit 1
           }
           $installed = $Matches[1]

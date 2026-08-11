@@ -99,10 +99,9 @@ jobs:
       # Captured before the release job creates the new tag -- a lookup run
       # after that would find the just-created tag instead.
       #
-      # Selects tags the way git-cliff does, so this names the boundary the
-      # notes actually came from: the grep mirrors cliff.toml's tag_pattern,
-      # and there is no `--merged` because git-cliff does not require the tag
-      # to be an ancestor of HEAD.
+      # Selects tags as git-cliff does, so this names the boundary the notes
+      # came from: cliff.toml's tag_pattern, and no `--merged` because
+      # git-cliff does not require an ancestor of HEAD.
       - name: Record previous tag
         id: previous
         run: |

@@ -4,15 +4,11 @@
 #
 #   next-prerelease.sh 0.5.0 rc   ->  0.5.0rc1, then 0.5.0rc2, ...
 #
-# git-cliff only ever emits final versions, so this is what turns its
-# --bumped-version into a release candidate. A separate file rather than
-# inline workflow bash because it decides a released tag, which is the one
-# category of logic in this repo that is always pinned by a test
-# (tests/unit/test_next_prerelease.py; cf. tests/integration/test_cliff_config.py).
+# git-cliff only emits final versions; this is what turns its
+# --bumped-version into a release candidate.
 #
-# No separator between base and suffix: that is PEP 440's canonical spelling,
-# and the only one that survives the round trip through hatchling's sdist name
-# that release.yml asserts on.
+# No separator before the suffix: PEP 440's canonical spelling, and the only
+# one that survives hatchling's sdist name, which release.yml asserts on.
 
 set -euo pipefail
 
