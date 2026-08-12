@@ -625,7 +625,9 @@ a separate one, so a built-in is never the thing being written to),
   auto-connect probe) happens seconds before anyone can open a window. Two
   constructor options mark what differs between the two hosts: `show_baud`
   (the window's speed picker, which persists to `config.serial["baud"]` and
-  reconnects — the tab's Connection panel already owns that setting) and
+  reconnects — the tab's Connection panel already owns that setting;
+  `BAUD_RATES` is what a 16 MHz AVR can generate inside 8N1's ±2% tolerance,
+  **not** the Arduino IDE's ladder, so don't re-add 230400) and
   `detach_command` (the tab's "Open monitor ↗", on the control row rather
   than a row of its own). Text tags bake their colours in and
   `retheme_widgets` can't reach them, so `set_theme` calls `apply_palette()`

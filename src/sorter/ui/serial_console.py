@@ -28,9 +28,10 @@ from typing import Any
 
 from .theme import PALETTE, get_fonts
 
-# The Arduino IDE's ladder, and its default.
-BAUD_RATES = (300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 74880, 115200, 230400, 250000)
-DEFAULT_BAUD = 9600
+# What a 16 MHz AVR's U2X divisor can actually hit inside 8N1's ±2% tolerance:
+# 230400 misses by -3.55%, and 250000 (16 MHz / 64) is exact despite looking odd.
+BAUD_RATES = (9600, 19200, 38400, 57600, 115200, 250000)
+DEFAULT_BAUD = 9600  # the rate the firmware's Serial.begin() runs at
 
 # Label → what actually goes on the wire after the typed text.
 LINE_ENDINGS: dict[str, str] = {
