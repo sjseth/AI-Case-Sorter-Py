@@ -621,3 +621,85 @@ def test_try_open_returns_false_when_the_port_cannot_be_opened(
     monkeypatch.setattr(serial_broker.serial, "Serial", _boom)
     assert broker.try_open() is False
     assert broker.is_connected is False
+
+
+# ----- handshake visibility (issue #76) --------------------------------------
+
+
+def test_try_open_reports_the_handshake_through_the_callbacks(
+    broker: SerialBroker, sink: _Sink, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The probe talks to the port directly, so it has to narrate itself.
+
+    Without this the serial monitor is blank for exactly the connection that
+    failed — the one worth reading.
+    """
+    fake = _FakeSerial(lines=["Ready\n", "7.2.260128.7.1\n"])
+    _patch_serial(monkeypatch, fake)
+    sent: list[str] = []
+    broker.on_sent.append(sent.append)
+    try:
+        assert broker.try_open() is True
+    finally:
+        broker.close()
+    assert sink.received == ["Ready", "7.2.260128.7.1"]
+    assert sent == ["version"]
+
+
+def test_try_open_reports_a_multi_line_banner_and_a_failed_handshake(
+    broker: SerialBroker, sink: _Sink, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeSerial(lines=["booting...\n", "3.2.1\n"], read_all_text="init ok\n\n")
+    _patch_serial(monkeypatch, fake)
+    assert broker.try_open() is False
+    # Blank lines are dropped; everything the board actually printed survives.
+    assert sink.received == ["booting...", "init ok", "3.2.1"]
+
+
+def test_try_open_survives_a_callback_that_raises(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(_line: str) -> None:
+        raise RuntimeError("subscriber bug")
+
+    broker.on_received.append(_boom)
+    broker.on_sent.append(_boom)
+    fake = _FakeSerial(lines=["Ready\n", "7.4.1\n"])
+    _patch_serial(monkeypatch, fake)
+    try:
+        assert broker.try_open() is True
+    finally:
+        broker.close()
+
+
+# ----- send_raw ---------------------------------------------------------------
+
+
+def test_send_raw_writes_the_text_verbatim(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The monitor's line-ending selector owns the terminator; send_raw must
+    # neither add one (as send_command does) nor drop the one it was given.
+    fake = _WritableSerial()
+    monkeypatch.setattr(broker, "_sp", fake)
+    sent: list[str] = []
+    broker.on_sent.append(sent.append)
+
+    broker.send_raw("version\r\n")
+    broker.send_raw("getconfig")
+
+    assert fake.written == [b"version\r\n", b"getconfig"]
+    # The echo is for display, so it carries no line ending either way.
+    assert sent == ["version", "getconfig"]
+
+
+def test_send_raw_is_a_noop_without_an_open_port(broker: SerialBroker) -> None:
+    sent: list[str] = []
+    broker.on_sent.append(sent.append)
+    broker.send_raw("version\n")
+    assert sent == []
+
+
+def test_send_command_still_owns_its_newline(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The protocol helpers are pinned to the firmware's vocabulary; send_raw
+    # landing next to them must not have changed what they put on the wire.
+    fake = _WritableSerial()
+    monkeypatch.setattr(broker, "_sp", fake)
+    broker.send_command("xf:0")
+    assert fake.written == [b"xf:0\n"]

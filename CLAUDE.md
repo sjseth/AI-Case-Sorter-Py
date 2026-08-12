@@ -296,6 +296,13 @@ between them from the Run tab's template dropdown.
   by a non-alphanumeric delimiter — so `error: broken sensor` routes as the
   error it is and `undone` doesn't satisfy a pending feed. Everything else
   falls through to `on_response`.
+  `try_open()` talks to the port directly rather than through the reader
+  thread, so it **fires `on_received`/`on_sent` by hand** for the banner and
+  the `version` exchange — without that the serial monitor is blank for
+  exactly the connection that failed. `send_raw` writes a string verbatim (no
+  newline added or stripped) for the monitor's line-ending selector; every
+  protocol helper still goes through `send_command`, which owns the `\n` the
+  firmware expects.
   **The authority on what the board actually prints is the firmware, which
   lives upstream — not here and not the emulator** (the emulator only ever
   emits the clean tokens the parser wants, so it can never disprove a parser
@@ -453,7 +460,11 @@ between them from the Run tab's template dropdown.
 `MainWindow` (`app.py`) is the shell: gradient title bar (with the theme picker
 parked at its right edge), a `ttk.Notebook` of tabs (each wrapped in a
 `ScrollableFrame` for small displays, and hosted on a backdrop canvas that owns
-the margin around it), and a status bar with connection indicators + sign-in. It owns the `EventBus`, `SerialBroker`,
+the margin around it), and a status bar with connection indicators + sign-in.
+Both indicators are links (hand cursor, underline on hover): serial opens the
+serial monitor, camera selects the Camera tab. The transient message shares
+that bar and is packed **last**, so a crowded bar truncates it rather than the
+standing connection state. It owns the `EventBus`, `SerialBroker`,
 `Camera`, `RunController`, and `AuthManager`, auto-connects serial/camera on
 startup, and runs the bus drain loop. `run_worker(fn, on_done, on_error)` is the
 standard helper for offloading blocking work to a thread and marshaling the
@@ -508,7 +519,7 @@ modal), and never gate on `is_available()`.
 | **Train** | `tab_train.py` | Feed→capture→classify→label→save loop; "Sort While Training"; launches training (Install-PyTorch dialog if needed → progress dialog). |
 | **AI Config** | `tab_ai.py` | HTTP server config (endpoint/key/model/prompt/encoding), headstamp manager, single-shot test. Visible only in AI Config mode. |
 | **Camera** | `tab_camera.py` | Device + resolution detection and live preview. |
-| **Serial** | `tab_serial.py` | Connection, 14 board init settings, sort-arm test, airdrop config, raw serial monitor. |
+| **Serial** | `tab_serial.py` | Connection, 14 board init settings, sort-arm test, airdrop config, in-tab traffic log + "Open monitor ↗" (see `serial_monitor.py`). |
 | **Image Proc** | `tab_imageproc.py` | Tune Hough params + primer mask + LED brightness against a captured frame (before/after preview). |
 | **Community** | `tab_community.py` | Browse/search/download community models; share entry point. Auth-gated. |
 
@@ -592,6 +603,19 @@ a separate one, so a built-in is never the thing being written to),
   `NumericField`, labeled-entry/button-row helpers.
 - **`monitor.py`** — detachable history window: ring buffer of recent
   classifications with a color "snake" trailing the latest. Subscribes `run/history`.
+- **`serial_monitor.py`** — detachable Arduino-IDE-style serial monitor,
+  opened by clicking the status bar's `● Serial: …` indicator (or the Serial
+  tab's button); `app.open_serial_monitor()` keeps it to one instance.
+  Autoscroll / timestamps / pause (held lines flush on resume, they are not
+  dropped), Clear, Save…, a line-ending selector that sends through
+  `broker.send_raw`, command history, and a baud picker that persists to
+  `config.serial["baud"]` and reconnects. Subscribes `serial/rx`, `serial/tx`,
+  `serial/note` (probe commentary) and `serial/state` (indicator mirror).
+  **On open it replays `MainWindow.serial_backlog`** — the rolling deque the
+  bus subscriptions fill — because the traffic worth reading (a failed
+  auto-connect probe) happens seconds before anyone can click. Text tags bake
+  their colours in and `retheme_widgets` can't reach them, so `set_theme`
+  calls the window's `apply_palette()`.
 - **`torch_gate.py`** — `ensure_torch(parent, proceed, reason=…)`: the only
   sanctioned way to front a local-model action with the PyTorch install dialog.
   See *The PyTorch install gate* above.

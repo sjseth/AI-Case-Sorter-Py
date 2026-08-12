@@ -118,7 +118,11 @@ class SerialBroker:
                 self.is_connected = False
                 return False
 
-        # Handshake: read banner, write "version", inspect reply.
+        # Handshake: read banner, write "version", inspect reply. It talks to
+        # the port directly rather than through send_command/_reader_loop, so
+        # it has to report itself to the callbacks by hand — otherwise a probe
+        # that never handshakes leaves the serial monitor blank, which is
+        # exactly when its contents matter (issue #76).
         try:
             banner = self._sp.readline().decode("ascii", errors="ignore")
         except Exception:
@@ -127,12 +131,19 @@ class SerialBroker:
             banner += self._sp.read_all().decode("ascii", errors="ignore")
         except Exception:
             pass
+        for line in banner.splitlines():
+            line = line.strip("\r\n\t ")
+            if line:
+                self._fire(self.on_received, line)
 
         try:
             self._sp.write(b"version\n")
+            self._fire(self.on_sent, "version")
             version_line = self._sp.readline().decode("ascii", errors="ignore").strip()
         except Exception:
             version_line = ""
+        if version_line:
+            self._fire(self.on_received, version_line)
 
         self.firmware_version = version_line or "Unknown"
         normalized = version_line.lower()
@@ -201,6 +212,25 @@ class SerialBroker:
                 cb(stripped)
             except Exception:
                 pass
+
+    def send_raw(self, text: str) -> None:
+        """Write `text` byte-for-byte — nothing appended, nothing normalised.
+
+        For the serial monitor's line-ending selector. Every protocol helper
+        goes through `send_command`, which owns the trailing newline the
+        firmware expects; keep it that way.
+        """
+        with self._write_lock:
+            if self._sp is None or not self._sp.is_open:
+                return
+            try:
+                self._sp.write(text.encode("ascii", errors="ignore"))
+                self._sp.flush()
+            except (serial.SerialException, OSError):
+                self.is_connected = False
+                return
+            self._last_activity = time.monotonic()
+        self._fire(self.on_sent, text.rstrip("\r\n"))
 
     def purge_responses(self) -> None:
         time.sleep(0.2)

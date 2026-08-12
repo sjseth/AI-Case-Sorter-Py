@@ -62,6 +62,10 @@ class EmulatorBroker:
         timer.daemon = True
         timer.start()
 
+    def send_raw(self, text: str) -> None:
+        """Parity with SerialBroker.send_raw — the terminator is the caller's."""
+        self.send_command(text.rstrip("\r\n"))
+
     def _fire_response_for(self, cmd: str) -> None:
         lower = cmd.lower()
         if lower in ("ping", "version"):

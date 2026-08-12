@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import threading
+import time
 import tkinter as tk
 import traceback
+from collections import deque
 from collections.abc import Callable
+from tkinter import font as tkfont
 from tkinter import ttk
 from typing import Any
 
@@ -51,6 +54,9 @@ PAGE_MARGIN_SCREENED = 20
 # Resting label of the status-bar update button, i.e. what it says when there
 # is nothing waiting. Clicking it in that state runs an explicit check.
 CHECK_FOR_UPDATES_LABEL = "Check for updates"
+# Serial lines kept for a monitor window opened later. The interesting traffic
+# is a failed auto-connect, which happens seconds before anyone can click.
+SERIAL_BACKLOG_LINES = 2000
 
 
 class MainWindow:
@@ -68,6 +74,9 @@ class MainWindow:
         self.fonts = apply_theme(self.root, theme=self.theme_name)
 
         self.broker: Any | None = None
+        # (kind, epoch seconds, line) — see SERIAL_BACKLOG_LINES.
+        self.serial_backlog: deque[tuple[str, float, str]] = deque(maxlen=SERIAL_BACKLOG_LINES)
+        self._serial_monitor: Any | None = None
         self.camera = Camera(
             device_index=int(config.camera.get("device_index", 0)),
             width=int(config.camera.get("width", 640)),
@@ -128,12 +137,6 @@ class MainWindow:
         status_bar = ttk.Frame(self.root, style="StatusBar.TFrame")
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
         ttk.Separator(status_bar, orient=tk.HORIZONTAL).pack(side=tk.TOP, fill=tk.X)
-        ttk.Label(
-            status_bar,
-            textvariable=self.status_var,
-            anchor=tk.W,
-            style="Status.TLabel",
-        ).pack(side=tk.LEFT, padx=12, pady=6)
         # Sign-in / sign-out button on the right side of the status bar.
         self.signin_var = tk.StringVar(value="Sign in")
         self.signin_button = ttk.Button(
@@ -168,8 +171,25 @@ class MainWindow:
         # dot stays glued to its label when the bar resizes.
         self._serial_connected = False
         self._camera_connected = False
-        self.serial_dot = self._build_status_indicator(status_bar, self.serial_status_var)
-        self.camera_dot = self._build_status_indicator(status_bar, self.camera_status_var)
+        self.serial_dot = self._build_status_indicator(
+            status_bar,
+            self.serial_status_var,
+            on_click=self.open_serial_monitor,
+        )
+        self.camera_dot = self._build_status_indicator(
+            status_bar,
+            self.camera_status_var,
+            on_click=lambda: self.select_tab("Camera"),
+        )
+        # Packed last on purpose: when the bar runs out of room, pack starves
+        # whatever was packed last, and a truncated transient message costs
+        # less than a truncated connection state.
+        ttk.Label(
+            status_bar,
+            textvariable=self.status_var,
+            anchor=tk.W,
+            style="Status.TLabel",
+        ).pack(side=tk.LEFT, padx=12, pady=6)
 
         # The notebook rides on a backdrop canvas rather than being packed
         # straight into the root: the canvas owns the margin around it, which
@@ -489,11 +509,15 @@ class MainWindow:
         self,
         parent: tk.Misc,
         text_var: tk.StringVar,
+        *,
+        on_click: Callable[[], None] | None = None,
     ) -> tk.Label:
         """[●][text] pair on the right side of the status bar.
 
         Returns the dot Label so callers can recolour it (green/red) when
-        the underlying connection state flips.
+        the underlying connection state flips. With `on_click` the whole pair
+        becomes a link — underlined on hover, since a bare label gives no hint
+        that it does anything.
         """
         frame = ttk.Frame(parent, style="StatusBar.TFrame")
         frame.pack(side=tk.RIGHT, padx=12, pady=6)
@@ -505,10 +529,59 @@ class MainWindow:
             font=self.fonts["small"],
         )
         dot.pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Label(frame, textvariable=text_var, style="Status.TLabel").pack(
-            side=tk.LEFT,
-        )
+        label = ttk.Label(frame, textvariable=text_var, style="Status.TLabel")
+        label.pack(side=tk.LEFT)
+        if on_click is not None:
+            self._make_clickable(frame, dot, label, on_click)
         return dot
+
+    def _make_clickable(
+        self,
+        frame: ttk.Frame,
+        dot: tk.Label,
+        label: ttk.Label,
+        on_click: Callable[[], None],
+    ) -> None:
+        """Turn a status indicator into a link: hand cursor + hover underline."""
+        rest_font = ttk.Style(self.root).lookup("Status.TLabel", "font") or self.fonts["small"]
+        hover_font = tkfont.Font(root=self.root, font=rest_font)
+        hover_font.configure(underline=True)
+        for widget in (frame, dot, label):
+            widget.configure(cursor="hand2")
+            # Every part of the pair has to answer the click — the dot and the
+            # gap between them are as clickable-looking as the text.
+            widget.bind("<Button-1>", lambda _e: on_click())
+            widget.bind("<Enter>", lambda _e: label.configure(font=hover_font))
+            # Clear the override rather than restoring the captured font, so
+            # the label goes back to following Status.TLabel — a widget-level
+            # font would outlive the next theme switch.
+            widget.bind("<Leave>", lambda _e: label.configure(font=""))
+
+    def select_tab(self, title: str) -> None:
+        """Bring the named notebook tab to the front (no-op if it isn't there)."""
+        try:
+            for tab_id in self.notebook.tabs():
+                if self.notebook.tab(tab_id, "text") == title:
+                    self.notebook.select(tab_id)
+                    return
+        except tk.TclError:
+            pass
+
+    def open_serial_monitor(self) -> None:
+        """Open (or re-focus) the detachable serial monitor."""
+        from .serial_monitor import SerialMonitorWindow
+
+        window = self._serial_monitor
+        if window is not None:
+            try:
+                if window.winfo_exists():
+                    window.deiconify()
+                    window.lift()
+                    window.focus_set()
+                    return
+            except tk.TclError:
+                pass
+        self._serial_monitor = SerialMonitorWindow(self.root, app=self)
 
     def _set_camera_indicator(self, message: str, *, connected: bool) -> None:
         self.camera_status_var.set(message)
@@ -523,6 +596,8 @@ class MainWindow:
         self.serial_dot.config(
             foreground=PALETTE["success" if connected else "error"],
         )
+        # The monitor window mirrors this indicator; it may not be open.
+        self.bus.post("serial/state", {"connected": connected, "message": message})
 
     def _refresh_status_indicators(self) -> None:
         """Re-apply the dot colors from the live palette (after a theme switch).
@@ -685,6 +760,14 @@ class MainWindow:
         self._repaint_header()
         self._layout_page(force=True)
         self._refresh_status_indicators()
+        # Text tags aren't in retheme_widgets' reach; the monitor repaints its own.
+        window = self._serial_monitor
+        if window is not None:
+            try:
+                if window.winfo_exists():
+                    window.apply_palette()
+            except tk.TclError:
+                pass
         self._save_setting(SETTING_THEME, resolved)
 
     def _save_setting(self, key: str, value) -> None:
@@ -788,7 +871,8 @@ class MainWindow:
                 candidates.append(port)
 
         if not candidates:
-            self.set_status("Serial: no serial ports detected.")
+            self.set_status("No serial ports detected.")
+            self._set_serial_indicator("Serial: no ports", connected=False)
             return
 
         baud = int(self.config.serial.get("baud", 9600))
@@ -797,6 +881,7 @@ class MainWindow:
         def _probe() -> tuple[object, str] | tuple[None, None]:
             for port in candidates:
                 self.bus.post("status", f"Auto-connect: probing {port}…")
+                self.bus.post("serial/note", f"probing {port} @ {baud}…")
                 # Opening the port asserts DTR which resets the Arduino, and
                 # the board needs ~1-2 s to boot before it can answer
                 # `version`. Probe timeout is configurable in Serial Config.
@@ -806,9 +891,13 @@ class MainWindow:
                     require_serial_ready=True,
                     handshake_timeout_s=probe_timeout,
                 )
+                # Listen *before* the handshake: whatever the board says to a
+                # probe that fails is the only evidence of why it failed.
+                self._attach_serial_listeners(broker)
                 if broker.try_open():
                     broker.start()
                     return broker, port
+                self.bus.post("serial/note", f"{port} did not handshake")
             return None, None
 
         self.set_status(f"Auto-connecting to serial — {len(candidates)} port(s) to try…")
@@ -821,24 +910,36 @@ class MainWindow:
     def _finalize_auto_connect(self, result) -> None:
         broker, port = result
         if broker is None:
-            self.set_status("Serial: no board responded on any port.")
-            self._set_serial_indicator("Serial: disconnected", connected=False)
+            self.set_status("No board responded on any port.")
+            self._set_serial_indicator("Serial: no board found", connected=False)
             return
         self._after_connect(broker, port, source="auto")
+
+    def _attach_serial_listeners(self, broker: Any) -> None:
+        """Fan a broker's traffic onto the bus, once.
+
+        The auto-connect probe wires each candidate before its handshake, so
+        the winner reaches `_after_connect` already listening — attaching a
+        second time would double every line.
+        """
+        if getattr(broker, "_bus_listeners_attached", False):
+            return
+        broker.on_received.append(lambda line: self.bus.post("serial/rx", line))
+        broker.on_sent.append(lambda line: self.bus.post("serial/tx", line))
+        broker._bus_listeners_attached = True
 
     def _after_connect(self, broker, port: str, *, source: str) -> None:
         """Wire callbacks, persist the port, optionally push init settings.
 
         Shared by auto-connect and the manual Connect button.
         """
-        broker.on_received.append(lambda line: self.bus.post("serial/rx", line))
-        broker.on_sent.append(lambda line: self.bus.post("serial/tx", line))
+        self._attach_serial_listeners(broker)
         self.broker = broker
         if port != (self.config.serial.get("port") or ""):
             self.config.serial["port"] = port
             self.config.save()
         self._set_serial_indicator(
-            f"Serial: connected ({port}) — {broker.firmware_version}",
+            f"Serial: connected ({port} @ {getattr(broker, 'baud', '?')}) — {broker.firmware_version}",
             connected=True,
         )
         self.set_status(f"{'Auto-connected' if source == 'auto' else 'Connected'} to {port}.")
@@ -869,8 +970,8 @@ class MainWindow:
         if port is None:
             port = (self.config.serial.get("port") or "").strip()
         if not port:
-            self.set_status("Serial: no port selected.")
-            self._set_serial_indicator("Serial: disconnected", connected=False)
+            self.set_status("No port selected.")
+            self._set_serial_indicator("Serial: no port selected", connected=False)
             return
 
         if port == EMULATED_PORT:
@@ -882,9 +983,11 @@ class MainWindow:
                 baud=int(self.config.serial.get("baud", 9600)),
                 require_serial_ready=True,
             )
+            # Same reason as the probe: a failed open should still leave a trace.
+            self._attach_serial_listeners(broker)
             if not broker.try_open():
-                self.set_status(f"Serial: failed to open {port}.")
-                self._set_serial_indicator("Serial: disconnected", connected=False)
+                self.set_status(f"Failed to open {port}.")
+                self._set_serial_indicator(f"Serial: failed to open {port}", connected=False)
                 return
             broker.start()
 
@@ -951,9 +1054,15 @@ class MainWindow:
 
     def run(self) -> None:
         # Wire serial-log topics to the Serial tab now that the bus is alive.
-        self.bus.subscribe("serial/rx", lambda line: self.serial_tab.append_log(f"<- {line}"))
-        self.bus.subscribe("serial/tx", lambda line: self.serial_tab.append_log(f"-> {line}"))
+        self.bus.subscribe("serial/rx", lambda line: self._log_serial("rx", f"<- {line}", line))
+        self.bus.subscribe("serial/tx", lambda line: self._log_serial("tx", f"-> {line}", line))
+        self.bus.subscribe("serial/note", lambda line: self._log_serial("note", f"-- {line}", line))
         self.root.mainloop()
+
+    def _log_serial(self, kind: str, tab_line: str, line: str) -> None:
+        """Fan one serial line out to the in-tab log and the replay backlog."""
+        self.serial_backlog.append((kind, time.time(), str(line)))
+        self.serial_tab.append_log(tab_line)
 
     def _on_close(self) -> None:
         try:

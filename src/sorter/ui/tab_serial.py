@@ -179,6 +179,9 @@ class SerialTab(ttk.Frame):
         entry.pack(side=tk.LEFT, padx=4)
         entry.bind("<Return>", lambda _e: self.send_command())
         ttk.Button(cmd_row, text="Send", command=self.send_command).pack(side=tk.LEFT)
+        ttk.Button(cmd_row, text="Open monitor ↗", command=self.app.open_serial_monitor).pack(
+            side=tk.LEFT, padx=(12, 0)
+        )
 
         self.log = tk.Text(monitor, height=10, wrap=tk.NONE, state=tk.DISABLED)
         self.log.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=4, pady=4)
