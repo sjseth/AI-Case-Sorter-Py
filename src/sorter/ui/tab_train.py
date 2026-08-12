@@ -321,7 +321,7 @@ class TrainTab(ttk.Frame):
         # normal path here, not an error.
         if not classifier.has_local_checkpoint(active):
             return True
-        if local_inference.is_installed():
+        if local_inference.is_installed() and local_inference.meets_min_version():
             return True
         self._torch_prompt_shown = True
         resume = lambda: self._feed(sort_label=sort_label)  # noqa: E731
@@ -330,6 +330,7 @@ class TrainTab(ttk.Frame):
             resume,
             reason="Predicting labels needs PyTorch",
             on_cancel=resume,
+            model=active,
         )
 
     def _feed(self, sort_label: str | None = None) -> None:
@@ -560,6 +561,7 @@ class TrainTab(ttk.Frame):
             self,
             self._start_training,
             reason="Training needs PyTorch",
+            model=m,
         ):
             return
 

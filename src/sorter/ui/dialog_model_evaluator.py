@@ -417,6 +417,7 @@ class ModelEvaluatorDialog(tk.Toplevel):
             self,
             self._run,
             reason="Evaluating needs PyTorch",
+            model=self.model,
         ):
             return
 

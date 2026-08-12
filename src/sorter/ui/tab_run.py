@@ -1657,6 +1657,7 @@ class RunTab(ttk.Frame):
             self,
             self._toggle_run,
             reason="Sorting needs PyTorch",
+            model=classifier.active_model(self.app.db),
         ):
             return
         self._begin_wish_list_fetch(controller)
@@ -1686,6 +1687,7 @@ class RunTab(ttk.Frame):
             self,
             self._manual_feed,
             reason="Sorting needs PyTorch",
+            model=classifier.active_model(self.app.db),
         ):
             return
         self.app.run_worker(controller.cycle_once)

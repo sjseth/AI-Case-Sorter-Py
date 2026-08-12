@@ -553,6 +553,66 @@ def is_installed() -> bool:
         return False
 
 
+# The oldest torch that may load a checkpoint this app did not produce.
+#
+# CVE-2026-24747 (GHSA-63cw-57p8-fm3p, fixed in torch 2.10.0): a crafted .pth
+# defeats the `weights_only=True` unpickler itself -- memory corruption, and
+# potentially code execution, from the very call `_load` relies on to make an
+# untrusted checkpoint safe (see the comment at that torch.load). Community
+# downloads and ZIP imports are exactly the delivery path, so a foreign model
+# on an older wheel is the one combination this app must refuse.
+#
+# Deliberately NOT derived from pyproject.toml's [ml] pin. The pin is "what a
+# fresh install gets" and moves on every routine bump; this is "below here the
+# safety property is gone", it moves only when a new advisory says so, and it
+# records which advisory. It also bounds any future opt-into-an-older-build
+# override (issue #67) -- and since it sits above the 2.3.0 floor where
+# torch.amp.GradScaler first appears, honouring it can't regress the trainer
+# onto the AttributeError that older wheels produce.
+MIN_TORCH_VERSION = "2.10.0"
+
+
+def installed_version() -> str | None:
+    """The installed torch's version string, *without* importing torch.
+
+    Reads distribution metadata, so it stays cheap enough for a button
+    handler -- same constraint as `is_installed()`. Returns None when torch
+    isn't installed, or is present with no metadata (a vendored or
+    source-built copy): callers must treat that as "unknown", not "old".
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("torch")
+    except PackageNotFoundError:
+        return None
+    except Exception:
+        # Metadata can be malformed on a half-written install; unknown rather
+        # than a crash on the UI thread.
+        return None
+
+
+def meets_min_version(minimum: str = MIN_TORCH_VERSION) -> bool:
+    """Is the installed torch at or above `minimum`?
+
+    **Fails open** -- an unreadable or unparseable version returns True. A
+    version we cannot determine is far more likely to be a developer's source
+    build than an exploit attempt, and hard-blocking those installs would
+    break legitimate setups to guard against a case the metadata says nothing
+    about. The check is defence in depth over the pinned installer, not the
+    only thing standing between a user and CVE-2026-24747.
+    """
+    from packaging.version import InvalidVersion, Version
+
+    raw = installed_version()
+    if raw is None:
+        return True
+    try:
+        return Version(raw) >= Version(minimum)
+    except InvalidVersion:
+        return True
+
+
 def is_available() -> bool:
     """Does importing torch succeed?
 

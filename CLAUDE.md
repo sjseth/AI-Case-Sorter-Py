@@ -505,6 +505,28 @@ if not ensure_torch(self, self._start, reason="Sorting needs PyTorch"):
     return
 ```
 
+**A second rule sits on top of presence, and it is a security floor.**
+`local_inference.MIN_TORCH_VERSION` (2.10.0) is the oldest torch allowed to
+load a checkpoint this app did not produce: CVE-2026-24747 lets a crafted
+`.pth` defeat the `weights_only=True` unpickler that `_load` relies on, and
+the Community tab and ZIP import are exactly that delivery path. So
+`ensure_torch` takes the `model` the action will load and picks the policy
+from `models.is_foreign_model`: a **foreign** model **blocks** until the user
+upgrades; the user's **own** model gets an **offer** that proceeds on decline,
+remembered for the session (their own checkpoint isn't an attack, and a
+multi-GB download shouldn't stand between them and sorting). Omitting `model`
+takes the blocking branch — unknown provenance is treated as foreign.
+The floor is deliberately **not** derived from the `[ml]` pin: the pin is
+"what a fresh install gets" and moves on every routine bump, while this is
+"below here the safety property is gone", moves only when an advisory says
+so, and records which one. It also bounds any future opt-into-an-older-build
+override (#67), and since it sits above the 2.3.0 floor where
+`torch.amp.GradScaler` first appears, honouring it cannot regress
+`train_convnext.py` onto the `AttributeError` older wheels produce.
+`meets_min_version()` **fails open** on unreadable metadata — a source build
+is likelier than an exploit, and bricking those installs would trade a real
+breakage for a speculative one.
+
 Gated: Run tab Start + Manual feed (only when `classifier.uses_local_inference`
 is True), the evaluator, and training. The Train tab's Feed *offers* rather
 than gates — capturing and labelling images is exactly the workflow that

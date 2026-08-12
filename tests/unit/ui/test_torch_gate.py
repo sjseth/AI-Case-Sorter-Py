@@ -229,3 +229,123 @@ def test_cancelling_the_install_does_not_run_the_action(
     if dialog.on_cancel is not None:
         dialog.on_cancel()
     assert ran == []
+
+
+# ----- the security floor ---------------------------------------------------
+# CVE-2026-24747: on torch < 2.10.0 a crafted .pth defeats the
+# weights_only=True unpickler that _load relies on, so a checkpoint from
+# someone else must not be loaded on an older wheel.
+
+
+@pytest.fixture(autouse=True)
+def _forget_declined_upgrade():
+    """The declined-offer memory is module state; isolate every test from it."""
+    torch_gate.reset_upgrade_prompt()
+    yield
+    torch_gate.reset_upgrade_prompt()
+
+
+@pytest.mark.parametrize(
+    ("installed", "expected"),
+    [
+        ("2.9.1", False),  # the version this repo shipped before the bump
+        ("2.2.0", False),
+        ("2.10.0", True),  # exactly the floor
+        ("2.13.0", True),
+        ("2.13.0+cu129", True),  # a wheel-index build carries a local version
+    ],
+)
+def test_meets_min_version(monkeypatch, installed: str, expected: bool) -> None:
+    monkeypatch.setattr(local_inference, "installed_version", lambda: installed)
+    assert local_inference.meets_min_version() is expected
+
+
+def test_min_version_fails_open_when_the_version_is_unknowable(monkeypatch) -> None:
+    """A torch with no readable metadata is a source build far more often than
+    an attack, and hard-blocking it would break legitimate setups."""
+    monkeypatch.setattr(local_inference, "installed_version", lambda: None)
+    assert local_inference.meets_min_version() is True
+    monkeypatch.setattr(local_inference, "installed_version", lambda: "not-a-version")
+    assert local_inference.meets_min_version() is True
+
+
+def _foreign() -> Model:
+    return Model(name="Community", model_type="CommunityManaged")
+
+
+def _own() -> Model:
+    return Model(name="Mine", model_type="Standard")
+
+
+@pytest.fixture
+def _outdated_torch(monkeypatch):
+    monkeypatch.setattr(torch_gate.local_inference, "is_installed", lambda: True)
+    monkeypatch.setattr(torch_gate.local_inference, "meets_min_version", lambda: False)
+    monkeypatch.setattr(torch_gate.local_inference, "installed_version", lambda: "2.9.1")
+
+
+def test_foreign_model_on_an_outdated_torch_is_blocked(_outdated_torch, fake_dialog) -> None:
+    ran = []
+    assert torch_gate.ensure_torch(_NO_PARENT, lambda: ran.append("proceed"), model=_foreign()) is False
+    assert ran == []
+    assert len(fake_dialog.instances) == 1
+    # And declining does NOT let it through -- there is no "not now" here.
+    dialog = fake_dialog.instances[0]
+    if dialog.on_cancel is not None:
+        dialog.on_cancel()
+    assert ran == []
+    assert torch_gate.ensure_torch(_NO_PARENT, lambda: ran.append("proceed"), model=_foreign()) is False
+    assert ran == []
+
+
+def test_unknown_provenance_is_treated_as_foreign(_outdated_torch, fake_dialog) -> None:
+    """Omitting `model` must take the conservative branch, not the lenient one."""
+    ran = []
+    assert torch_gate.ensure_torch(_NO_PARENT, lambda: ran.append("proceed")) is False
+    assert ran == []
+
+
+def test_own_model_on_an_outdated_torch_is_offered_not_blocked(_outdated_torch, fake_dialog) -> None:
+    """The user's own checkpoint is not an attack: offer the upgrade, but let
+    them decline and carry on sorting."""
+    ran = []
+    assert torch_gate.ensure_torch(_NO_PARENT, lambda: ran.append("proceed"), model=_own()) is False
+    assert ran == []
+    fake_dialog.instances[0].on_cancel()
+    assert ran == ["proceed"]
+
+
+def test_a_declined_upgrade_is_remembered_for_the_session(_outdated_torch, fake_dialog) -> None:
+    ran = []
+    torch_gate.ensure_torch(_NO_PARENT, lambda: ran.append("first"), model=_own())
+    fake_dialog.instances[0].on_cancel()
+    # Second action: straight through, no second prompt.
+    assert torch_gate.ensure_torch(_NO_PARENT, lambda: ran.append("second"), model=_own()) is True
+    assert len(fake_dialog.instances) == 1
+
+
+def test_declining_for_an_own_model_still_blocks_a_foreign_one(_outdated_torch, fake_dialog) -> None:
+    """The session-level 'not now' must not become a way to load community
+    models on a vulnerable torch."""
+    torch_gate.ensure_torch(_NO_PARENT, lambda: None, model=_own())
+    fake_dialog.instances[0].on_cancel()
+    ran = []
+    assert torch_gate.ensure_torch(_NO_PARENT, lambda: ran.append("proceed"), model=_foreign()) is False
+    assert ran == []
+
+
+def test_a_completed_upgrade_clears_the_declined_memory(_outdated_torch, fake_dialog) -> None:
+    ran = []
+    torch_gate.ensure_torch(_NO_PARENT, lambda: ran.append("proceed"), model=_own())
+    fake_dialog.instances[0].on_cancel()
+    assert torch_gate._upgrade_declined is True
+    torch_gate.ensure_torch(_NO_PARENT, lambda: None, model=_foreign())
+    fake_dialog.instances[-1].on_success()  # the install finished
+    assert torch_gate._upgrade_declined is False
+
+
+def test_a_current_torch_never_prompts(monkeypatch, fake_dialog) -> None:
+    monkeypatch.setattr(torch_gate.local_inference, "is_installed", lambda: True)
+    monkeypatch.setattr(torch_gate.local_inference, "meets_min_version", lambda: True)
+    assert torch_gate.ensure_torch(_NO_PARENT, lambda: None, model=_foreign()) is True
+    assert fake_dialog.instances == []
