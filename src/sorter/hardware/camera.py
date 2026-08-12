@@ -36,6 +36,13 @@ COMMON_RESOLUTIONS: list[tuple[int, int]] = [
     (3840, 2160),
 ]
 
+# How long `list_cameras_with_metadata` waits for one device to open, report its
+# resolutions and hand over a frame. Sized off the slowest camera seen so far, an
+# autofocus USB webcam that needs ~2.6 s for all three, having previously been
+# dropped by a 2.5 s budget. The cost of a generous value is bounded because only
+# genuine capture nodes are ever probed (see `_candidate_indices`).
+PROBE_TIMEOUT_S = 6.0
+
 
 class CameraInfo(TypedDict):
     """One entry in `list_cameras_with_metadata`'s result."""
@@ -355,7 +362,7 @@ def _probe_resolutions(cap: cv2.VideoCapture) -> list[tuple[int, int]]:
     return sorted(supported, key=lambda wh: wh[0] * wh[1])
 
 
-def list_cameras_with_metadata(max_index: int = 10, probe_timeout_s: float = 2.5) -> list[CameraInfo]:
+def list_cameras_with_metadata(max_index: int = 10, probe_timeout_s: float = PROBE_TIMEOUT_S) -> list[CameraInfo]:
     """Enumerate cameras and return [{'index': int, 'name': str, 'resolutions': [(w,h), ...]}].
 
     Resolutions are sorted ascending by pixel count, so `resolutions[-1]` is the
@@ -405,6 +412,16 @@ def list_cameras_with_metadata(max_index: int = 10, probe_timeout_s: float = 2.5
         t = threading.Thread(target=_probe, daemon=True)
         t.start()
         t.join(probe_timeout_s)
+        if t.is_alive():
+            # A device that opens and then times out used to vanish from the
+            # list in silence, which is exactly what made a camera 60 ms over
+            # budget so hard to account for. bootstrap.py pipes stderr into
+            # launch.log, so this lands where someone would go looking.
+            print(
+                f"[camera] index {idx} ({names.get(idx, 'unnamed')}) did not finish "
+                f"probing within {probe_timeout_s:g}s — not listing it",
+                file=sys.stderr,
+            )
         if result["opened"]:
             out.append(
                 {

@@ -318,6 +318,11 @@ between them from the Run tab's template dropdown.
   keeping the latest frame; platform backends (CAP_DSHOW on Windows w/ optional
   pygrabber for friendly names + resolution probing, CAP_V4L2 on Linux, MJPG for
   ≥1080p). `enumerate_devices` / `list_cameras_with_metadata` for the Camera tab.
+  Enumeration is deliberately noisy about what it *rejects*: only real V4L2
+  capture nodes are probed (a UVC camera also exposes a metadata node, which
+  OpenCV can only fail to open, loudly), and a device that overruns
+  `PROBE_TIMEOUT_S` is dropped **with a note on stderr** — silence there once
+  cost a hardware investigation to explain a camera missing from the list.
 
 ### The sort loop (`sorter/control/run_controller.py`)
 - **`run_controller.py`** — `RunController`: the production loop on a daemon
