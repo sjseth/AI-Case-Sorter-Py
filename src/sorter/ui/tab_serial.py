@@ -12,7 +12,7 @@ from tkinter import messagebox, ttk
 from ..control.events import EventBus
 from ..hardware import serial_broker
 from ..hardware.serial_emulator import EMULATED_PORT
-from .serial_console import BAUD_RATES, DEFAULT_BAUD, SerialConsole
+from .serial_console import SerialConsole
 from .widgets import NumericField, build_button_row
 
 # (UI label, init-settings key, min, max, default). Defaults are the
@@ -62,21 +62,8 @@ class SerialTab(ttk.Frame):
         self.port_combo.grid(row=0, column=1, padx=6, pady=4, sticky=tk.W)
         ttk.Button(connect, text="Refresh ports", command=self.refresh_ports).grid(row=0, column=2, padx=6)
 
-        ttk.Label(connect, text="Baud").grid(row=0, column=3, padx=6, pady=4, sticky=tk.W)
-        # The same list the console's picker offers, not free numeric entry: a
-        # rate outside it can't work (see BAUD_RATES). A value already saved by
-        # the old spinbox still displays; it just can't be re-selected. The
-        # console below carries its own picker — `_sync_baud` there and
-        # `_refresh_baud` here keep the two showing one setting.
-        self.baud_var = tk.IntVar(value=int(ser_cfg.get("baud", DEFAULT_BAUD)))
-        ttk.Combobox(
-            connect,
-            textvariable=self.baud_var,
-            values=[str(rate) for rate in BAUD_RATES],
-            state="readonly",
-            width=10,
-        ).grid(row=0, column=4, padx=6, sticky=tk.W)
-
+        # No baud control here: the console below owns the setting, picker and
+        # all, so there is exactly one of them in this window.
         ttk.Label(connect, text="Probe timeout (s)").grid(row=0, column=5, padx=6, pady=4, sticky=tk.W)
         self.probe_timeout_var = tk.DoubleVar(value=float(ser_cfg.get("handshake_timeout_s", 4.0)))
         ttk.Spinbox(
@@ -178,8 +165,7 @@ class SerialTab(ttk.Frame):
             self.init_widgets[key] = field
 
         # ---- monitor & debug ----
-        # The same widget the detached window uses, minus its baud selector —
-        # the Connection panel above already owns that setting.
+        # The same widget the detached window uses, baud picker included.
         monitor = ttk.LabelFrame(self, text="Serial monitor / debug")
         monitor.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=8)
         self.console = SerialConsole(
@@ -187,7 +173,6 @@ class SerialTab(ttk.Frame):
             app=self.app,
             height=10,
             detach_command=self.app.open_serial_monitor,
-            on_baud_changed=self._refresh_baud,
         )
         self.console.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=6, pady=6)
 
@@ -205,13 +190,6 @@ class SerialTab(ttk.Frame):
         self.save()
         self.app.connect_serial(port=port)
 
-    def _refresh_baud(self) -> None:
-        """Follow a speed picked in the console below."""
-        try:
-            self.baud_var.set(int(self.cfg.serial.get("baud", DEFAULT_BAUD)))
-        except (TypeError, ValueError, tk.TclError):
-            pass
-
     def refresh_ports(self) -> None:
         ports = serial_broker.list_serial_ports() + [EMULATED_PORT]
         self.port_combo["values"] = ports
@@ -219,8 +197,8 @@ class SerialTab(ttk.Frame):
             self.port_var.set(ports[0])
 
     def save(self) -> None:
+        # Not baud — the console's picker persists that one as it is chosen.
         self.cfg.serial["port"] = self.port_var.get()
-        self.cfg.serial["baud"] = int(self.baud_var.get())
         self.cfg.serial["handshake_timeout_s"] = float(self.probe_timeout_var.get())
         self.cfg.serial["slot_quantity"] = int(self.slot_count_var.get())
         self.cfg.serial["init_on_startup"] = bool(self.init_on_startup_var.get())

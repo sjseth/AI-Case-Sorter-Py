@@ -622,19 +622,21 @@ a separate one, so a built-in is never the thing being written to),
   `serial/rx`, `serial/tx` and `serial/note` (probe commentary) itself, and
   **replays `MainWindow.serial_backlog`** on construction — the rolling deque
   `app._log_serial` fills — because the traffic worth reading (a failed
-  auto-connect probe) happens seconds before anyone can open a window. Two
-  **speed picker is part of the component**, not something a host bolts on:
-  it persists to `config.serial["baud"]` and reconnects, and `BAUD_RATES` is
+  auto-connect probe) happens seconds before anyone can open a window.
+  The **speed picker is part of the component**, not something a host bolts
+  on, and it is the *only* baud control in the app — the Serial tab's
+  Connection panel deliberately has none, so one widget owns
+  `config.serial["baud"]`, persisting and reconnecting as it is picked (which
+  is also why `SerialTab.save()` does not write that key). `BAUD_RATES` is
   what a 16 MHz AVR can generate inside 8N1's ±2% tolerance — **not** the
-  Arduino IDE's ladder, so don't re-add 230400. The Serial tab shows baud in
-  its Connection panel as well, and the two are kept from disagreeing at both
-  ends: `_sync_baud` re-reads the setting on `serial/state`, and the
-  `on_baud_changed` callback tells the host to refresh after a pick here. The
-  one host-specific option left is `detach_command` (the tab's
-  "Open monitor ↗", on the control row rather than a row of its own).
-  Text tags bake their colours in and
-  `retheme_widgets` can't reach them, so `set_theme` calls `apply_palette()`
-  on every live console.
+  Arduino IDE's ladder, so don't re-add 230400. Two consoles can still be
+  live at once (the tab's and an open window's), so `_sync_baud` re-reads the
+  setting on `serial/state` and they can't drift apart; `on_baud_changed`
+  tells a host that wants to react (the window repaints its header). The one
+  host-specific option is `detach_command` (the tab's "Open monitor ↗", on
+  the control row rather than a row of its own). Text tags bake their colours
+  in and `retheme_widgets` can't reach them, so `set_theme` calls
+  `apply_palette()` on every live console.
 - **`serial_monitor.py`** — `SerialMonitorWindow`: a `SerialConsole` in its own
   window, under a connection header (port, baud, firmware behind a dot
   mirroring the status bar's — it subscribes `serial/state` for that). Opened
