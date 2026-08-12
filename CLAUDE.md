@@ -97,9 +97,10 @@ one-for-one (`tests/unit/hardware/`, `tests/unit/data/`, …), plus a handful of
 modules that test something at the package's own top level (`test_paths.py`,
 `test_bootstrap.py`, `test_version.py`, `test_installer_scripts.py`) and stay
 directly under `tests/unit/`. Everything in `tests/unit/` uses synthetic
-fixtures only; `tests/integration/` stays flat — the two files that shell out
-to a real external tool (`uv build`, `git-cliff`) instead, each self-skipping
-if that tool is missing; `pytest -m "not integration"` skips them outright.
+fixtures only; `tests/integration/` stays flat — the files that exercise a
+real external tool or service (`uv build`, `git-cliff`, the PyTorch wheel
+index) instead, each self-skipping if that tool — or, for the wheel index,
+the network — is missing; `pytest -m "not integration"` skips them outright.
 CI (`.github/workflows/build.yml`) runs the full matrix on every push/PR —
 run `pytest` locally before pushing regardless, since CI turnaround is slower
 than your own machine. The suite is threading-fragile by design (see
@@ -526,8 +527,9 @@ modal), and never gate on `is_available()`.
 ### Dialogs (`dialog_*.py`)
 `dialog_training_progress` (live training console), `dialog_training_config`
 (hyperparameters), `dialog_model_editor` (create/edit model + feedback-loop
-opt-in), `dialog_install_torch` (installs torch/torchvision into the venv via
-uv, falling back to pip),
+opt-in), `dialog_install_torch` (installs the torch/torchvision pinned by
+pyproject.toml's `[ml]` extra — read at install time; the extra is the pins'
+single source of truth — into the venv via uv, falling back to pip),
 `dialog_login` (MSAL interactive sign-in), `dialog_model_evaluator` (run eval +
 HTML report + history), `dialog_model_images` + `dialog_image_preview` (training
 image browser/reclassify/delete), `dialog_share_model` (publish to community),
@@ -901,6 +903,15 @@ flowchart TD
   `[ml]` extra. Any **new** entry point that runs a model locally must go
   through `ui/torch_gate.ensure_torch` (§5) — a bare `LocalInferenceError`
   reaching the user is the bug that gate exists to prevent.
+- **The `[ml]` extra is the only place the torch version lives.**
+  `dialog_install_torch` reads the pins out of `pyproject.toml` at install
+  time — never re-declare them as a constant, which is how the runtime
+  install once drifted from the lockfile and went invisible to dependency
+  scanning (#67). The one coupling to keep by hand: the GPU build installs
+  from a fixed CUDA wheel index (`_CUDA_INDEX` in that dialog), and each
+  index only carries the torch versions built for it, so a torch bump must
+  check the index still serves the new pin —
+  `tests/integration/test_torch_wheel_index.py` verifies exactly that.
 - **DB access is shared across threads** via one connection + RLock. Wrap
   multi-statement work in `db.transaction()` (reentrant via SAVEPOINT).
 - **Headstamps are read fresh, not cached** — don't reintroduce a cached

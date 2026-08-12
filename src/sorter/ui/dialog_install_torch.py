@@ -7,7 +7,7 @@ through `torch_gate.ensure_torch` rather than constructing it directly; pass
 wrong headline when the user just pressed Start on the Run tab.
 
 On open we detect a supported Nvidia GPU (compute capability ≥ 8.0). If one is
-present, the user gets to pick between the GPU build (CUDA 12.8 wheels) and the
+present, the user gets to pick between the GPU build (CUDA 12.9 wheels) and the
 CPU build; otherwise only the CPU build is offered.
 
 `uv pip install --python <this interpreter>` runs in a subprocess and streams
@@ -27,20 +27,61 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+import tomllib
 from collections.abc import Callable
+from pathlib import Path
 from tkinter import ttk
 
 from ..ml.gpu_detect import GpuInfo, detect_supported_nvidia_gpu
 from ..paths import find_uv
 from .theme import PALETTE
 
-# Pin exactly the versions the legacy project validates against. Floating
-# versions (`torch>=2.2`) let pip pull the
-# latest — which is a moving target and has been observed to regress
-# ConvNeXt inference on the RTX 50-series.
-_TARGETS = ("torch==2.9.1", "torchvision==0.24.1")
-_CPU_TARGETS = _TARGETS
-_CUDA_INDEX = "https://download.pytorch.org/whl/cu128"
+# The torch/torchvision versions come from pyproject.toml's [ml] extra —
+# read at install time by ml_pin_targets() below, never duplicated here as a
+# constant. One declaration means Renovate and vulnerability scanners see the
+# pins users actually install, and a bump in pyproject.toml is the whole bump
+# (#67: the two copies had drifted apart, and the .py copy was invisible to
+# every scanner). The pins themselves stay exact rather than floating
+# (`torch>=2.2`): the latest-at-install-time is a moving target and has been
+# observed to regress ConvNeXt inference on the RTX 50-series.
+#
+# Only the CUDA index for the GPU build is decided here. Why cu129 rather
+# than plain PyPI: each torch release ships on PyPI as a single build at that
+# release's default CUDA — for 2.13 that is CUDA 13, which needs an R580+
+# NVIDIA driver. The cu129 wheels cover the same cards (sm_75 Turing through
+# sm_120 Blackwell / RTX 50-series) but, being CUDA 12.x, run on any R525+
+# driver via CUDA 12 minor-version compatibility — a driver bar roughly three
+# years older. The index and the version are coupled: an index only carries
+# the torch versions actually built for it (cu129 carries 2.13; cu128 stopped
+# at 2.11), so a version bump in pyproject.toml must keep this index in
+# step — tests/integration/test_torch_wheel_index.py checks the pair
+# resolves before a user's install ever has to.
+_CUDA_INDEX = "https://download.pytorch.org/whl/cu129"
+
+
+def ml_pin_targets() -> tuple[str, ...] | None:
+    """The exact requirement strings pyproject.toml's [ml] extra pins.
+
+    Resolved relative to this source tree — the app always runs from one
+    (see CLAUDE.md §2), so the versions installed at runtime can never
+    drift from the ones declared to dependency scanners. Returns None when
+    the file is missing or doesn't parse; that's a tree the launcher
+    couldn't have synced either, so the caller reports it instead of
+    guessing at a version.
+    """
+    path = Path(__file__).resolve().parents[3] / "pyproject.toml"
+    try:
+        with path.open("rb") as fh:
+            data = tomllib.load(fh)
+        if data["project"]["name"] != "ai-case-sorter":
+            return None
+        targets = data["project"]["optional-dependencies"]["ml"]
+    except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError):
+        return None
+    if not isinstance(targets, list) or not targets or not all(isinstance(t, str) for t in targets):
+        return None
+    return tuple(targets)
+
 
 # Shown when the caller doesn't name the action. Deliberately generic: this
 # dialog now fronts inference as well as training.
@@ -196,6 +237,18 @@ class TorchInstallDialog(tk.Toplevel):
         active_btn = self.gpu_btn if (use_gpu and self._gpu is not None) else self.cpu_btn
         active_btn.config(text="Installing…")
 
+        targets = ml_pin_targets()
+        if targets is None:
+            self._append(
+                "Could not read the pinned PyTorch version from pyproject.toml "
+                "(expected next to bootstrap.py, at the top of the app folder). "
+                "The install can't proceed without it — restart via "
+                "start.sh/start.bat, or reinstall the app if the file is "
+                "really gone.\n"
+            )
+            self._finish(success=False)
+            return
+
         # uv first, because a uv-managed venv (the launcher's default) has no
         # pip in it at all. But a plain `python -m venv` + `pip install -e .`
         # checkout is a documented way to run this app, and there uv may
@@ -203,10 +256,10 @@ class TorchInstallDialog(tk.Toplevel):
         # rather than refusing to install. Only give up if neither exists.
         uv = find_uv()
         if uv is not None:
-            cmd: list[str] = [uv, "pip", "install", "--python", sys.executable, *list(_CPU_TARGETS)]
+            cmd: list[str] = [uv, "pip", "install", "--python", sys.executable, *targets]
         elif importlib.util.find_spec("pip") is not None:
             self._append("uv not found; falling back to pip in the running interpreter.\n")
-            cmd = [sys.executable, "-u", "-m", "pip", "install", *list(_CPU_TARGETS)]
+            cmd = [sys.executable, "-u", "-m", "pip", "install", *targets]
         else:
             self._append(
                 "Could not find uv or pip. uv should have been installed by "

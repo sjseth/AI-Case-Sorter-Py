@@ -191,7 +191,8 @@ def _dump_environment(torch_mod: Any) -> None:
                 if not supported:
                     print(
                         f"[env] FIX: install a PyTorch build that bakes {sm_tag} "
-                        "in its arch list (e.g. the nightly cu128 build).",
+                        "in its arch list (a newer release, or a newer CUDA "
+                        "wheel index than the one it was installed from).",
                         file=sys.stderr,
                         flush=True,
                     )

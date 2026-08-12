@@ -50,9 +50,15 @@ Issues = "https://github.com/sjseth/AI-Case-Sorter-Py/issues"
 
 [project.optional-dependencies]
 # Local PyTorch training/inference. Install with `pip install .[ml]`.
-# Must match _TARGETS in sorter/ui/dialog_install_torch.py, which is how
-# PyTorch actually gets installed at runtime. Bump both together.
-ml = ["torch==2.9.1", "torchvision==0.24.1"]
+# This is the single authoritative pin: sorter/ui/dialog_install_torch.py
+# reads it at runtime (that dialog is how PyTorch actually reaches a user's
+# venv), so bumping it here is the whole bump — and it keeps the versions
+# users really run visible to Renovate and vulnerability scanning, which a
+# constant in a .py file never was. One coupling to check when bumping: the
+# GPU build installs from a fixed CUDA index (_CUDA_INDEX in that dialog),
+# and each index only carries the torch versions built for it —
+# tests/integration/test_torch_wheel_index.py verifies the pair resolves.
+ml = ["torch==2.13.0", "torchvision==0.28.0"]
 
 [build-system]
 requires = ["hatchling==1.31.0", "hatch-vcs==0.5.0"]

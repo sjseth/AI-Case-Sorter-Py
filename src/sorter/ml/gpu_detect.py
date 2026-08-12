@@ -12,9 +12,14 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 
-# RTX 30-series (Ampere) is sm_80+ and is the first generation supported by
-# the cu128 wheel index. Older cards (Turing sm_75 and below) would need a
-# different wheel set and we don't support that flow.
+# Ampere (RTX 30-series, sm_80) and newer. This is a support floor, not a
+# wheel limitation: the cu129 wheels the install dialog uses bake in sm_75
+# (Turing) through sm_120 (Blackwell), so RTX 20-series cards *could* run
+# them — but Ampere+ is what gets validated on real hardware before a torch
+# bump lands (.github/renovate.json5's needs-hardware-test rule), and below
+# the floor the dialog offers the CPU build rather than an untested GPU one.
+# Lowering this for Turing is #67's call, made with hardware to test on —
+# not a comment edit.
 MIN_CUDA_COMPUTE = 8.0
 
 
