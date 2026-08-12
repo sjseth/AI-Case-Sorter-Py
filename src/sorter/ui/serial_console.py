@@ -56,11 +56,14 @@ KIND_PREFIX = {"rx": "<- ", "tx": "-> ", "note": "-- "}
 class SerialConsole(ttk.Frame):
     """Live serial traffic: filtered, timestamped, pausable, saveable.
 
-    `show_baud` adds the Arduino-style speed selector, which only the detached
-    window carries — the tab's Connection panel already owns baud, and two
-    controls writing one setting is how they disagree.
+    Self-contained: the speed selector is part of the component, not something
+    a host bolts on, so embedding it anywhere gives a console that can talk to
+    the board on its own terms. A host that shows baud elsewhere too keeps the
+    two in step — `on_baud_changed` fires after a pick here, and a `serial/state`
+    from anyone else re-reads the setting (see `_sync_baud`).
+
     `detach_command`, where given, puts the "open the window" button on the
-    control row rather than costing the tab another row of height.
+    control row rather than costing the host another row of height.
     """
 
     def __init__(
@@ -69,7 +72,6 @@ class SerialConsole(ttk.Frame):
         *,
         app: Any,
         height: int = 12,
-        show_baud: bool = False,
         detach_command: Callable[[], None] | None = None,
         on_baud_changed: Callable[[], None] | None = None,
     ) -> None:
@@ -93,12 +95,13 @@ class SerialConsole(ttk.Frame):
         self._build_filter_row()
         # The send row is packed against the bottom before the output claims
         # the rest, or a window smaller than the Text's natural size clips it.
-        self._build_send_row(show_baud)
+        self._build_send_row()
         self._build_output(height)
 
         self.bus.subscribe("serial/rx", self._on_rx)
         self.bus.subscribe("serial/tx", self._on_tx)
         self.bus.subscribe("serial/note", self._on_note)
+        self.bus.subscribe("serial/state", self._sync_baud)
 
         self._replay_backlog()
 
@@ -174,24 +177,23 @@ class SerialConsole(ttk.Frame):
             self.text.tag_configure(kind, foreground=PALETTE[role])
         self.text.tag_configure("stamp", foreground=PALETTE["text_subtle"])
 
-    def _build_send_row(self, show_baud: bool) -> None:
+    def _build_send_row(self) -> None:
         row = ttk.Frame(self)
         row.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
 
         # Right-hand controls claim their width first; the entry then absorbs
         # whatever is left, so nothing falls off the edge on a narrow window.
         self.baud_var = tk.StringVar(value=str(self.configured_baud()))
-        if show_baud:
-            baud = ttk.Combobox(
-                row,
-                textvariable=self.baud_var,
-                values=[str(b) for b in BAUD_RATES],
-                state="readonly",
-                width=8,
-            )
-            baud.pack(side=tk.RIGHT)
-            baud.bind("<<ComboboxSelected>>", self._on_baud_selected)
-            ttk.Label(row, text="Baud").pack(side=tk.RIGHT, padx=(16, 4))
+        baud = ttk.Combobox(
+            row,
+            textvariable=self.baud_var,
+            values=[str(b) for b in BAUD_RATES],
+            state="readonly",
+            width=8,
+        )
+        baud.pack(side=tk.RIGHT)
+        baud.bind("<<ComboboxSelected>>", self._on_baud_selected)
+        ttk.Label(row, text="Baud").pack(side=tk.RIGHT, padx=(16, 4))
 
         ttk.Button(row, text="Send", style="Accent.TButton", command=self.send_command).pack(side=tk.RIGHT)
         self.ending_var = tk.StringVar(value=DEFAULT_LINE_ENDING)
@@ -260,6 +262,15 @@ class SerialConsole(ttk.Frame):
             self.app.connect_serial(port=port)
         if self._on_baud_changed is not None:
             self._on_baud_changed()
+
+    def _sync_baud(self, _payload: Any = None) -> None:
+        """Follow a speed set somewhere else (the Serial tab, a reconnect).
+
+        Two controls for one setting only disagree if neither re-reads it.
+        """
+        current = str(self.configured_baud())
+        if self.baud_var.get() != current:
+            self.baud_var.set(current)
 
     # ----- inbound ------------------------------------------------------------
 
@@ -467,6 +478,7 @@ class SerialConsole(ttk.Frame):
             ("serial/rx", self._on_rx),
             ("serial/tx", self._on_tx),
             ("serial/note", self._on_note),
+            ("serial/state", self._sync_baud),
         ):
             try:
                 self.bus.unsubscribe(topic, handler)

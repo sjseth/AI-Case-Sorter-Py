@@ -30,7 +30,6 @@ def test_the_window_is_a_console_plus_a_header(root) -> None:
         app.bus.post("serial/rx", "done")
         app.bus.drain()
         assert "<- done" in win.console.text.get("1.0", "end")
-        # Only the detached window carries the speed selector.
         assert win.console.baud_var.get() == "9600"
     finally:
         win.close()

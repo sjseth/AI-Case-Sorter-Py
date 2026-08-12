@@ -40,7 +40,6 @@ class SerialMonitorWindow(tk.Toplevel):
         self.console = SerialConsole(
             self,
             app=app,
-            show_baud=True,
             on_baud_changed=self.refresh_connection,
         )
         self.console.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=(6, 10))

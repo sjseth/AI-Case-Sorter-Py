@@ -16,7 +16,7 @@ pytest.importorskip("tkinter")
 
 import tkinter as tk
 
-from sorter.ui.serial_console import LINE_ENDINGS, SerialConsole
+from sorter.ui.serial_console import BAUD_RATES, LINE_ENDINGS, SerialConsole
 
 from .conftest import FakeApp, FakeBroker
 
@@ -163,32 +163,47 @@ def test_up_and_down_walk_the_command_history(root) -> None:
 def test_changing_the_baud_persists_it_and_reconnects(root) -> None:
     app = FakeApp(broker=FakeBroker())
     repaints: list[int] = []
-    console = _console(root, app, show_baud=True, on_baud_changed=lambda: repaints.append(1))
+    console = _console(root, app, on_baud_changed=lambda: repaints.append(1))
     try:
         console.baud_var.set("115200")
         console._on_baud_selected()
         assert app.config.serial["baud"] == 115200
         assert app.config.saved == 1
         assert app.reconnects == ["/dev/ttyFAKE"]
-        assert repaints, "the owner is told to repaint its connection header"
+        assert repaints, "the host is told so its own baud control can follow"
     finally:
         console.close()
 
 
-def test_the_baud_selector_is_opt_in(root) -> None:
-    """The tab's Connection panel owns baud; two controls would disagree."""
+def test_the_baud_selector_is_part_of_the_component(root) -> None:
+    """Embedding the console anywhere gets the speed picker with it."""
     app = FakeApp(broker=FakeBroker())
     console = _console(root, app)
     try:
-        assert "Baud" not in _labels(console)
+        assert "Baud" in _labels(console)
+        assert console.baud_var.get() == "9600"
+        picker = next(
+            widget
+            for widget in _widgets(console)
+            if widget.winfo_class() == "TCombobox"
+            and tuple(str(value) for value in widget.cget("values")) == tuple(str(r) for r in BAUD_RATES)
+        )
+        assert str(picker.cget("state")) == "readonly", "a rate off the list can't work, so it can't be typed"
     finally:
         console.close()
 
-    with_baud = _console(root, FakeApp(broker=FakeBroker()), show_baud=True)
+
+def test_a_speed_set_elsewhere_is_followed(root) -> None:
+    """Two controls for one setting only disagree if neither re-reads it."""
+    app = FakeApp(broker=FakeBroker())
+    console = _console(root, app)
     try:
-        assert "Baud" in _labels(with_baud)
+        app.config.serial["baud"] = 250000
+        app.bus.post("serial/state", {"connected": True, "message": "Serial: connected"})
+        app.bus.drain()
+        assert console.baud_var.get() == "250000"
     finally:
-        with_baud.close()
+        console.close()
 
 
 def test_detach_button_is_opt_in_and_calls_back(root) -> None:
@@ -236,7 +251,7 @@ def test_unsubscribes_on_close(root) -> None:
     console = _console(root, app)
     assert console._on_rx in app.bus._subs.get("serial/rx", [])
     console.close()
-    for topic in ("serial/rx", "serial/tx", "serial/note"):
+    for topic in ("serial/rx", "serial/tx", "serial/note", "serial/state"):
         assert not app.bus._subs.get(topic), f"{topic} still has a subscriber"
 
 
