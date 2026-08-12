@@ -27,3 +27,8 @@ portable.txt
 # `mkdocs build`'s output. The published site is built in CI and pushed to the
 # gh-pages branch by mike; a local build is a preview.
 /site/
+
+# `.claude/skills/` is tracked, so the rest of `.claude/` has to be named:
+# worktrees are per-machine checkouts, and settings.local.json is personal.
+/.claude/worktrees/
+/.claude/settings.local.json

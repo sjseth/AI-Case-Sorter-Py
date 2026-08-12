@@ -154,6 +154,7 @@ AI-Case-Sorter-Py/
 │       ├── training/            # out-of-process ConvNeXt trainer
 │       └── ui/                  # PySide6 UI — the only UI (§5)
 ├── installer/               # Windows bootstrapper (see §7)
+├── tools/                   # developer utilities, not shipped or imported
 └── tests/                   # pytest suite, mirrors src/sorter/'s subpackages
 ```
 
@@ -1149,4 +1150,14 @@ flowchart TD
   — that's the interpreter a real double-click via `install-windows.bat`
   uses, and the one the script's own top-of-file comment calls out for its
   BOM/codepage decoding quirks.
+- **A UI change ships with before/after screenshots** on its issue and/or PR —
+  prose can't be reviewed without building the branch.
+  `tools/gh_attach_images.py` uploads them as real GitHub attachments
+  (`github.com/user-attachments/…`, exactly what dragging a file into the
+  comment box produces) using nothing but the `gh` token; `gh` has no command
+  for it but the endpoint behind it does not need a browser session. **Never
+  commit screenshots to a branch, and never use release assets** — `updater.py`
+  lists every release for the in-app version picker and `_TAG_RE` would accept
+  a tag like `pr-78-images`, offering it to users as an installable version.
+  `.claude/skills/ui-screenshots/` has the capture recipe.
 - See **`CONTRIBUTING.md`** for how to set up and contribute.
