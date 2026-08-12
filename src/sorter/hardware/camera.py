@@ -297,35 +297,6 @@ def _candidate_indices(max_index: int) -> list[int]:
     return list(range(max_index))
 
 
-def enumerate_devices(max_index: int = 10, probe_timeout_s: float = 1.5) -> list[int]:
-    """Return camera indices that successfully opened and returned a frame.
-
-    Each probe runs in a worker thread; we move on if it exceeds probe_timeout_s
-    (some V4L2 devices hang indefinitely on open).
-    """
-    backend = _preferred_backend()
-    found: list[int] = []
-    for idx in _candidate_indices(max_index):
-        result: list[bool] = [False]
-
-        def _probe(i: int = idx, res: list[bool] = result) -> None:
-            cap = cv2.VideoCapture(i, backend)
-            try:
-                if cap.isOpened():
-                    ok, _ = cap.read()
-                    if ok:
-                        res[0] = True
-            finally:
-                cap.release()
-
-        t = threading.Thread(target=_probe, daemon=True)
-        t.start()
-        t.join(probe_timeout_s)
-        if result[0]:
-            found.append(idx)
-    return found
-
-
 def _probe_resolutions(cap: cv2.VideoCapture) -> list[tuple[int, int]]:
     """Try each resolution in COMMON_RESOLUTIONS; collect what the device actually serves.
 

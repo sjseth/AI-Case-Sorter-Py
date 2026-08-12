@@ -317,7 +317,7 @@ between them from the Run tab's template dropdown.
 - **`camera.py`** — `Camera`: `cv2.VideoCapture` with a background **grab thread**
   keeping the latest frame; platform backends (CAP_DSHOW on Windows w/ optional
   pygrabber for friendly names + resolution probing, CAP_V4L2 on Linux, MJPG for
-  ≥1080p). `enumerate_devices` / `list_cameras_with_metadata` for the Camera tab.
+  ≥1080p). `list_cameras_with_metadata` enumerates for the Camera tab.
   Enumeration is deliberately noisy about what it *rejects*: only real V4L2
   capture nodes are probed (a UVC camera also exposes a metadata node, which
   OpenCV can only fail to open, loudly), and a device that overruns
