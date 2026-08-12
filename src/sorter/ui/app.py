@@ -760,12 +760,14 @@ class MainWindow:
         self._repaint_header()
         self._layout_page(force=True)
         self._refresh_status_indicators()
-        # Text tags aren't in retheme_widgets' reach; the monitor repaints its own.
-        window = self._serial_monitor
-        if window is not None:
+        # Text tags aren't in retheme_widgets' reach, so every serial console
+        # repaints its own — the Serial tab's, and the monitor window's if open.
+        for widget in (getattr(self.serial_tab, "console", None), self._serial_monitor):
+            if widget is None:
+                continue
             try:
-                if window.winfo_exists():
-                    window.apply_palette()
+                if widget.winfo_exists():
+                    widget.apply_palette()
             except tk.TclError:
                 pass
         self._save_setting(SETTING_THEME, resolved)
@@ -1053,16 +1055,15 @@ class MainWindow:
     # ----- lifecycle ----------------------------------------------------------
 
     def run(self) -> None:
-        # Wire serial-log topics to the Serial tab now that the bus is alive.
-        self.bus.subscribe("serial/rx", lambda line: self._log_serial("rx", f"<- {line}", line))
-        self.bus.subscribe("serial/tx", lambda line: self._log_serial("tx", f"-> {line}", line))
-        self.bus.subscribe("serial/note", lambda line: self._log_serial("note", f"-- {line}", line))
+        # Fill the replay backlog now that the bus is alive. Displaying the
+        # traffic is each SerialConsole's own subscription, not this.
+        for kind in ("rx", "tx", "note"):
+            self.bus.subscribe(f"serial/{kind}", lambda line, kind=kind: self._log_serial(kind, line))
         self.root.mainloop()
 
-    def _log_serial(self, kind: str, tab_line: str, line: str) -> None:
-        """Fan one serial line out to the in-tab log and the replay backlog."""
+    def _log_serial(self, kind: str, line: str) -> None:
+        """Keep one serial line for a monitor window opened later."""
         self.serial_backlog.append((kind, time.time(), str(line)))
-        self.serial_tab.append_log(tab_line)
 
     def _on_close(self) -> None:
         try:

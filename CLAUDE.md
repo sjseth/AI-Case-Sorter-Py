@@ -519,7 +519,7 @@ modal), and never gate on `is_available()`.
 | **Train** | `tab_train.py` | Feed→capture→classify→label→save loop; "Sort While Training"; launches training (Install-PyTorch dialog if needed → progress dialog). |
 | **AI Config** | `tab_ai.py` | HTTP server config (endpoint/key/model/prompt/encoding), headstamp manager, single-shot test. Visible only in AI Config mode. |
 | **Camera** | `tab_camera.py` | Device + resolution detection and live preview. |
-| **Serial** | `tab_serial.py` | Connection, 14 board init settings, sort-arm test, airdrop config, in-tab traffic log + "Open monitor ↗" (see `serial_monitor.py`). |
+| **Serial** | `tab_serial.py` | Connection, 14 board init settings, sort-arm test, airdrop config, and a `SerialConsole` + "Open monitor ↗" (see `serial_console.py`). |
 | **Image Proc** | `tab_imageproc.py` | Tune Hough params + primer mask + LED brightness against a captured frame (before/after preview). |
 | **Community** | `tab_community.py` | Browse/search/download community models; share entry point. Auth-gated. |
 
@@ -603,13 +603,14 @@ a separate one, so a built-in is never the thing being written to),
   `NumericField`, labeled-entry/button-row helpers.
 - **`monitor.py`** — detachable history window: ring buffer of recent
   classifications with a color "snake" trailing the latest. Subscribes `run/history`.
-- **`serial_monitor.py`** — detachable Arduino-IDE-style serial monitor,
-  opened by clicking the status bar's `● Serial: …` indicator (or the Serial
-  tab's button); `app.open_serial_monitor()` keeps it to one instance.
+- **`serial_console.py`** — `SerialConsole`, the Arduino-IDE-style traffic log.
+  **The Serial Config tab's "Serial monitor / debug" panel and the detached
+  monitor window are the same widget**, embedded twice, so neither can grow a
+  feature the other lacks — which is exactly how they had already drifted (the
+  tab log was one colour, uncoloured, unfilterable and capped at 500 lines).
   Autoscroll / timestamps / pause (held lines flush on resume, they are not
   dropped), Clear, Save…, a line-ending selector that sends through
-  `broker.send_raw`, command history, and a baud picker that persists to
-  `config.serial["baud"]` and reconnects. A case-insensitive substring filter
+  `broker.send_raw`, and command history. A case-insensitive substring filter
   and per-direction (RX/TX/notes) toggles narrow the view: `matches()` is the
   single predicate, applied by `_render` as lines arrive, by `_rerender` when
   the filter changes, and by `dump()` so Save… writes what's on screen. It
@@ -618,13 +619,22 @@ a separate one, so a built-in is never the thing being written to),
   everything — the filter hides, never deletes. **The log is never re-ordered**
   (no column sort): serial traffic only reads correctly in the order it
   happened, since a command and its reply are one exchange. Subscribes
-  `serial/rx`, `serial/tx`,
-  `serial/note` (probe commentary) and `serial/state` (indicator mirror).
-  **On open it replays `MainWindow.serial_backlog`** — the rolling deque the
-  bus subscriptions fill — because the traffic worth reading (a failed
-  auto-connect probe) happens seconds before anyone can click. Text tags bake
-  their colours in and `retheme_widgets` can't reach them, so `set_theme`
-  calls the window's `apply_palette()`.
+  `serial/rx`, `serial/tx` and `serial/note` (probe commentary) itself, and
+  **replays `MainWindow.serial_backlog`** on construction — the rolling deque
+  `app._log_serial` fills — because the traffic worth reading (a failed
+  auto-connect probe) happens seconds before anyone can open a window. Two
+  constructor options mark what differs between the two hosts: `show_baud`
+  (the window's speed picker, which persists to `config.serial["baud"]` and
+  reconnects — the tab's Connection panel already owns that setting) and
+  `detach_command` (the tab's "Open monitor ↗", on the control row rather
+  than a row of its own). Text tags bake their colours in and
+  `retheme_widgets` can't reach them, so `set_theme` calls `apply_palette()`
+  on every live console.
+- **`serial_monitor.py`** — `SerialMonitorWindow`: a `SerialConsole` in its own
+  window, under a connection header (port, baud, firmware behind a dot
+  mirroring the status bar's — it subscribes `serial/state` for that). Opened
+  by clicking the status bar's `● Serial: …` indicator or the Serial tab's
+  button; `app.open_serial_monitor()` keeps it to one instance.
 - **`torch_gate.py`** — `ensure_torch(parent, proceed, reason=…)`: the only
   sanctioned way to front a local-model action with the PyTorch install dialog.
   See *The PyTorch install gate* above.

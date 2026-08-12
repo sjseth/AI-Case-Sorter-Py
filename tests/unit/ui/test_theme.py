@@ -382,7 +382,8 @@ def _stub_window(root, db=None):
             )
             self._camera_connected = False
             self._serial_connected = True
-            # set_theme repaints an open serial monitor's Text tags.
+            # set_theme repaints each serial console's Text tags.
+            self.serial_tab = None
             self._serial_monitor = None
             self.camera_dot = tk.Label(
                 root,
