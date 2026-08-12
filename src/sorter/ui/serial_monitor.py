@@ -8,6 +8,11 @@ auto-connect diagnosable after the fact.
 Everything arrives over the EventBus (`serial/rx`, `serial/tx`, `serial/note`)
 and is therefore delivered on the Tk main thread — nothing here may be called
 from the reader thread. See CLAUDE.md §3.
+
+The log is deliberately never re-ordered. Serial traffic only means anything
+in the order it happened — a command and the reply it drew are one exchange —
+so the way to narrow it down is the filter box and the direction toggles,
+which hide lines without moving the ones that remain.
 """
 
 from __future__ import annotations
@@ -35,6 +40,9 @@ DEFAULT_LINE_ENDING = "New Line"
 
 MAX_LINES = 4000  # scrollback cap; the oldest are dropped, not the newest
 MAX_HISTORY = 100
+# Typing in the filter box re-renders the whole scrollback, so coalesce
+# keystrokes instead of doing it per character.
+FILTER_DEBOUNCE_MS = 120
 
 # Line kinds → the palette role they print in and the prefix they carry.
 KIND_ROLE = {"rx": "text", "tx": "update", "note": "text_muted"}
@@ -62,8 +70,10 @@ class SerialMonitorWindow(tk.Toplevel):
         self._held: deque[tuple[str, float, str]] = deque(maxlen=MAX_LINES)
         self._history: list[str] = []
         self._history_pos = 0
+        self._filter_job: str | None = None
 
         self._build_header()
+        self._build_filter_row()
         # The send row is packed against the bottom before the output claims
         # the rest, or a window smaller than the Text's natural size clips it.
         self._build_send_row()
@@ -115,6 +125,32 @@ class SerialMonitorWindow(tk.Toplevel):
         ).pack(side=tk.LEFT, padx=(12, 0))
         ttk.Button(controls, text="Save…", command=self.save_to_file).pack(side=tk.RIGHT)
         ttk.Button(controls, text="Clear", command=self.clear).pack(side=tk.RIGHT, padx=(0, 6))
+
+    def _build_filter_row(self) -> None:
+        """Substring filter + per-direction toggles, over the whole scrollback.
+
+        Filtering is a view, not a deletion: `_lines` keeps everything, so
+        clearing the box brings the hidden traffic straight back.
+        """
+        row = ttk.Frame(self, padding=(10, 6, 10, 0))
+        row.pack(side=tk.TOP, fill=tk.X)
+
+        ttk.Label(row, text="Filter").pack(side=tk.LEFT, padx=(0, 6))
+        self.filter_var = tk.StringVar()
+        self.filter_var.trace_add("write", lambda *_a: self._schedule_rerender())
+        entry = ttk.Entry(row, textvariable=self.filter_var, width=10)
+        entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        entry.bind("<Escape>", lambda _e: self.clear_filter())
+        ttk.Button(row, text="✕", width=3, command=self.clear_filter).pack(side=tk.LEFT, padx=(4, 0))
+
+        self.show_kind_vars: dict[str, tk.BooleanVar] = {}
+        for kind, label in (("rx", "RX"), ("tx", "TX"), ("note", "Notes")):
+            var = tk.BooleanVar(value=True)
+            self.show_kind_vars[kind] = var
+            ttk.Checkbutton(row, text=label, variable=var, command=self._rerender).pack(side=tk.LEFT, padx=(12, 0))
+
+        self._count_var = tk.StringVar(value="0 lines")
+        ttk.Label(row, textvariable=self._count_var, style="Muted.TLabel").pack(side=tk.LEFT, padx=(16, 0))
 
     def _build_output(self) -> None:
         box = ttk.Frame(self, padding=(10, 8))
@@ -261,6 +297,7 @@ class SerialMonitorWindow(tk.Toplevel):
             return
         self._lines.append(record)
         self._render(record)
+        self._update_count()
 
     def _on_pause_toggled(self) -> None:
         if self.paused_var.get():
@@ -269,6 +306,7 @@ class SerialMonitorWindow(tk.Toplevel):
         for record in held:
             self._lines.append(record)
             self._render(record)
+        self._update_count()
 
     def _replay_backlog(self) -> None:
         """Show what the app captured before this window existed."""
@@ -280,11 +318,55 @@ class SerialMonitorWindow(tk.Toplevel):
         self._rerender()
         self._lines.append(("note", time.time(), f"end of replay ({len(backlog)} earlier line(s))"))
         self._render(self._lines[-1])
+        self._update_count()
+
+    # ----- filtering ----------------------------------------------------------
+
+    def clear_filter(self) -> None:
+        self.filter_var.set("")
+
+    def _schedule_rerender(self) -> None:
+        if self._filter_job is not None:
+            self.after_cancel(self._filter_job)
+        self._filter_job = self.after(FILTER_DEBOUNCE_MS, self._run_scheduled_rerender)
+
+    def _run_scheduled_rerender(self) -> None:
+        self._filter_job = None
+        self._rerender()
+
+    def matches(self, record: tuple[str, float, str]) -> bool:
+        """Does this line survive the direction toggles and the filter box?
+
+        Case-insensitive substring, matched against the text as the board sent
+        it — not the rendered line, so a filter can't accidentally key off the
+        `<-`/`->` prefix or a timestamp that is only sometimes shown.
+        """
+        kind, _stamp, line = record
+        var = self.show_kind_vars.get(kind)
+        if var is not None and not var.get():
+            return False
+        needle = self.filter_var.get().strip().lower()
+        return not needle or needle in line.lower()
+
+    def _shown_line_count(self) -> int:
+        """How many lines the widget is actually displaying.
+
+        Every rendered record ends in a newline, so the insertion point sits at
+        the start of an empty trailing line that isn't output — hence the -1.
+        """
+        return max(0, int(self.text.index("end-1c").split(".")[0]) - 1)
+
+    def _update_count(self) -> None:
+        total = len(self._lines)
+        shown = self._shown_line_count()
+        self._count_var.set(f"{total} lines" if shown == total else f"{shown} of {total} lines")
 
     # ----- rendering ----------------------------------------------------------
 
     def _render(self, record: tuple[str, float, str]) -> None:
         kind, stamp, line = record
+        if not self.matches(record):
+            return
         self.text.configure(state=tk.NORMAL)
         if self.timestamps_var.get():
             self.text.insert(tk.END, f"{time.strftime('%H:%M:%S', time.localtime(stamp))} ", ("stamp",))
@@ -300,24 +382,29 @@ class SerialMonitorWindow(tk.Toplevel):
         self.text.configure(state=tk.DISABLED)
         for record in list(self._lines):
             self._render(record)
+        self._update_count()
 
     def _trim(self) -> None:
         """Keep the widget's line count in step with the deque's cap."""
-        count = int(self.text.index("end-1c").split(".")[0])
-        if count > MAX_LINES:
-            self.text.delete("1.0", f"{count - MAX_LINES}.0")
+        shown = self._shown_line_count()
+        if shown > MAX_LINES:
+            self.text.delete("1.0", f"{shown - MAX_LINES + 1}.0")
 
     def clear(self) -> None:
         self._lines.clear()
         self.text.configure(state=tk.NORMAL)
         self.text.delete("1.0", tk.END)
         self.text.configure(state=tk.DISABLED)
+        self._update_count()
 
     def dump(self) -> str:
-        """The scrollback as plain text, timestamped as currently displayed."""
+        """The scrollback as plain text — what's on screen, filter included."""
         stamps = self.timestamps_var.get()
         out = []
-        for kind, stamp, line in self._lines:
+        for record in self._lines:
+            if not self.matches(record):
+                continue
+            kind, stamp, line = record
             prefix = f"{time.strftime('%H:%M:%S', time.localtime(stamp))} " if stamps else ""
             out.append(f"{prefix}{KIND_PREFIX.get(kind, '')}{line}")
         return "\n".join(out) + ("\n" if out else "")
@@ -371,6 +458,13 @@ class SerialMonitorWindow(tk.Toplevel):
     # ----- lifecycle ----------------------------------------------------------
 
     def close(self) -> None:
+        # A debounced re-render still in flight would fire against a dead widget.
+        if self._filter_job is not None:
+            try:
+                self.after_cancel(self._filter_job)
+            except tk.TclError:
+                pass
+            self._filter_job = None
         for topic, handler in (
             ("serial/rx", self._on_rx),
             ("serial/tx", self._on_tx),

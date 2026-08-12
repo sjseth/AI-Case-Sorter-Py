@@ -253,3 +253,125 @@ def test_apply_palette_repaints_the_text_tags(root) -> None:
     finally:
         _apply(root, theme="Dark")
         win.close()
+
+
+def _flush_filter(win: SerialMonitorWindow) -> None:
+    """Run the debounced re-render now rather than waiting out the timer."""
+    if win._filter_job is not None:
+        win.after_cancel(win._filter_job)
+        win._filter_job = None
+    win._rerender()
+
+
+def _post(app: _FakeApp, *pairs: tuple[str, str]) -> None:
+    for topic, line in pairs:
+        app.bus.post(topic, line)
+    app.bus.drain()
+
+
+def test_typing_a_filter_debounces_instead_of_rerendering_per_keystroke(root) -> None:
+    app = _FakeApp(broker=_FakeBroker())
+    win = _open(root, app)
+    try:
+        win.filter_var.set("do")
+        assert win._filter_job is not None, "no re-render was scheduled"
+    finally:
+        win.close()
+
+
+def test_filter_hides_non_matching_lines_but_keeps_them_for_later(root) -> None:
+    app = _FakeApp(broker=_FakeBroker())
+    win = _open(root, app)
+    try:
+        _post(app, ("serial/tx", "xf:0"), ("serial/rx", "done"), ("serial/rx", "waiting"))
+        win.filter_var.set("done")
+        _flush_filter(win)
+        body = _body(win)
+        assert "done" in body
+        assert "xf:0" not in body
+        assert "waiting" not in body
+
+        # Filtering is a view, not a deletion.
+        win.clear_filter()
+        _flush_filter(win)
+        body = _body(win)
+        assert "xf:0" in body and "waiting" in body
+    finally:
+        win.close()
+
+
+def test_filter_is_case_insensitive_and_matches_the_board_text_only(root) -> None:
+    app = _FakeApp(broker=_FakeBroker())
+    win = _open(root, app)
+    try:
+        _post(app, ("serial/rx", "Done"))
+        win.filter_var.set("dOnE")
+        _flush_filter(win)
+        assert "Done" in _body(win)
+
+        # The `<-`/`->` prefixes are rendering, not content — a filter must not
+        # key off them or "->" would silently mean "everything I sent".
+        win.filter_var.set("<-")
+        _flush_filter(win)
+        assert "Done" not in _body(win)
+    finally:
+        win.close()
+
+
+def test_direction_toggles_hide_a_whole_kind(root) -> None:
+    app = _FakeApp(broker=_FakeBroker())
+    win = _open(root, app)
+    try:
+        _post(app, ("serial/tx", "version"), ("serial/rx", "7.2.1"), ("serial/note", "probing"))
+        win.show_kind_vars["tx"].set(False)
+        win._rerender()
+        body = _body(win)
+        assert "version" not in body
+        assert "7.2.1" in body and "probing" in body
+    finally:
+        win.close()
+
+
+def test_lines_arriving_while_a_filter_is_active_respect_it(root) -> None:
+    app = _FakeApp(broker=_FakeBroker())
+    win = _open(root, app)
+    try:
+        win.filter_var.set("done")
+        _flush_filter(win)
+        _post(app, ("serial/rx", "waiting"), ("serial/rx", "done"))
+        body = _body(win)
+        assert "done" in body
+        assert "waiting" not in body
+        # …and are still there once the filter goes away.
+        win.clear_filter()
+        _flush_filter(win)
+        assert "waiting" in _body(win)
+    finally:
+        win.close()
+
+
+def test_dump_follows_the_filter_so_save_writes_what_is_shown(root) -> None:
+    app = _FakeApp(broker=_FakeBroker())
+    win = _open(root, app)
+    try:
+        _post(app, ("serial/rx", "done"), ("serial/rx", "waiting"))
+        win.filter_var.set("done")
+        _flush_filter(win)
+        dumped = win.dump()
+        assert "done" in dumped
+        assert "waiting" not in dumped
+    finally:
+        win.close()
+
+
+def test_count_reports_shown_against_total_only_while_filtering(root) -> None:
+    app = _FakeApp(broker=_FakeBroker())
+    win = _open(root, app)
+    try:
+        _post(app, ("serial/rx", "done"), ("serial/rx", "waiting"), ("serial/tx", "xf:0"))
+        assert win._count_var.get() == "3 lines"
+        win.filter_var.set("done")
+        _flush_filter(win)
+        assert win._count_var.get() == "1 of 3 lines"
+    finally:
+        win.close()

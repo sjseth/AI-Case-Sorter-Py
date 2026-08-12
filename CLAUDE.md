@@ -609,7 +609,16 @@ a separate one, so a built-in is never the thing being written to),
   Autoscroll / timestamps / pause (held lines flush on resume, they are not
   dropped), Clear, Save…, a line-ending selector that sends through
   `broker.send_raw`, command history, and a baud picker that persists to
-  `config.serial["baud"]` and reconnects. Subscribes `serial/rx`, `serial/tx`,
+  `config.serial["baud"]` and reconnects. A case-insensitive substring filter
+  and per-direction (RX/TX/notes) toggles narrow the view: `matches()` is the
+  single predicate, applied by `_render` as lines arrive, by `_rerender` when
+  the filter changes, and by `dump()` so Save… writes what's on screen. It
+  matches the board's text, **not** the rendered line, so the `<-`/`->`
+  prefixes and timestamps can't be filtered against. `_lines` always keeps
+  everything — the filter hides, never deletes. **The log is never re-ordered**
+  (no column sort): serial traffic only reads correctly in the order it
+  happened, since a command and its reply are one exchange. Subscribes
+  `serial/rx`, `serial/tx`,
   `serial/note` (probe commentary) and `serial/state` (indicator mirror).
   **On open it replays `MainWindow.serial_backlog`** — the rolling deque the
   bus subscriptions fill — because the traffic worth reading (a failed
