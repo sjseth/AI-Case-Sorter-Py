@@ -164,7 +164,7 @@ known-first-party = ["sorter"]
 testpaths = ["tests"]
 addopts = "-ra"
 markers = [
-    "integration: exercises a real external tool (uv build, git-cliff) instead of a synthetic fixture",
+    "integration: exercises a real external tool or service (uv build, git-cliff, the PyTorch wheel index) instead of a synthetic fixture",
 ]
 # The suite is threading-fragile by design (see tests/conftest.py): Tk widget
 # garbage collected on a worker thread calls into Tcl from the wrong thread

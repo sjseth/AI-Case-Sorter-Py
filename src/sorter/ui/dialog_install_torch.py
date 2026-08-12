@@ -7,8 +7,9 @@ through `torch_gate.ensure_torch` rather than constructing it directly; pass
 wrong headline when the user just pressed Start on the Run tab.
 
 On open we detect a supported Nvidia GPU (compute capability ≥ 8.0). If one is
-present, the user gets to pick between the GPU build (CUDA 12.9 wheels) and the
-CPU build; otherwise only the CPU build is offered.
+present, the user gets to pick between the GPU build (CUDA 12.9 wheels on
+Linux, CUDA 13.0 on Windows) and the CPU build; otherwise only the CPU build
+is offered.
 
 `uv pip install --python <this interpreter>` runs in a subprocess and streams
 its output to the dialog's console. Prefers uv over `python -m pip` because a
@@ -45,18 +46,31 @@ from .theme import PALETTE
 # (`torch>=2.2`): the latest-at-install-time is a moving target and has been
 # observed to regress ConvNeXt inference on the RTX 50-series.
 #
-# Only the CUDA index for the GPU build is decided here. Why cu129 rather
-# than plain PyPI: each torch release ships on PyPI as a single build at that
+# Only the CUDA index for the GPU build is decided here, per OS. Why not
+# plain PyPI: each torch release ships there as a single build at that
 # release's default CUDA — for 2.13 that is CUDA 13, which needs an R580+
-# NVIDIA driver. The cu129 wheels cover the same cards (sm_75 Turing through
-# sm_120 Blackwell / RTX 50-series) but, being CUDA 12.x, run on any R525+
-# driver via CUDA 12 minor-version compatibility — a driver bar roughly three
-# years older. The index and the version are coupled: an index only carries
-# the torch versions actually built for it (cu129 carries 2.13; cu128 stopped
-# at 2.11), so a version bump in pyproject.toml must keep this index in
-# step — tests/integration/test_torch_wheel_index.py checks the pair
-# resolves before a user's install ever has to.
-_CUDA_INDEX = "https://download.pytorch.org/whl/cu129"
+# NVIDIA driver — and on Windows the PyPI wheel is CPU-only. Why two
+# indexes: upstream builds no Windows wheels at all for CUDA 12.9 (it is
+# Linux-only in pytorch's binary build matrix), so each OS gets the
+# lowest-driver-bar index that still covers every supported card:
+#
+#   linux — cu129: sm_75 (Turing) through sm_120 (Blackwell / RTX
+#     50-series), and CUDA 12.x minor-version compatibility means any R525+
+#     driver works — a driver bar roughly three years older than CUDA 13's.
+#   win32 — cu130: the only Windows index for current torch that bakes in
+#     sm_120; needs an R580+ driver. (Windows' CUDA-12.x alternative,
+#     cu126, stops at sm_90 and would drop the RTX 50-series.)
+#
+# The index and the version are coupled: an index only carries the torch
+# versions actually built for it (cu128 stopped at 2.11), so a version bump
+# in pyproject.toml must keep this table in step —
+# tests/integration/test_torch_wheel_index.py resolves every (pin, index,
+# platform) combination before a user's install ever has to.
+_CUDA_INDEX_BY_OS = {
+    "linux": "https://download.pytorch.org/whl/cu129",
+    "win32": "https://download.pytorch.org/whl/cu130",
+}
+_CUDA_INDEX = _CUDA_INDEX_BY_OS.get(sys.platform, _CUDA_INDEX_BY_OS["linux"])
 
 
 def ml_pin_targets() -> tuple[str, ...] | None:
@@ -76,7 +90,11 @@ def ml_pin_targets() -> tuple[str, ...] | None:
         if data["project"]["name"] != "ai-case-sorter":
             return None
         targets = data["project"]["optional-dependencies"]["ml"]
-    except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError):
+    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError, KeyError, TypeError):
+        # UnicodeDecodeError is spelled out because it is a sibling of
+        # TOMLDecodeError (both subclass ValueError), not covered by it:
+        # tomllib decodes the raw bytes itself, so a pyproject.toml re-saved
+        # in a non-UTF-8 editor raises it before parsing even starts.
         return None
     if not isinstance(targets, list) or not targets or not all(isinstance(t, str) for t in targets):
         return None

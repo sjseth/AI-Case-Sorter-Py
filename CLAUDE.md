@@ -908,10 +908,12 @@ flowchart TD
   time — never re-declare them as a constant, which is how the runtime
   install once drifted from the lockfile and went invisible to dependency
   scanning (#67). The one coupling to keep by hand: the GPU build installs
-  from a fixed CUDA wheel index (`_CUDA_INDEX` in that dialog), and each
-  index only carries the torch versions built for it, so a torch bump must
-  check the index still serves the new pin —
-  `tests/integration/test_torch_wheel_index.py` verifies exactly that.
+  from a per-OS CUDA wheel index (`_CUDA_INDEX_BY_OS` in that dialog —
+  Linux and Windows differ because upstream never builds Windows cu129
+  wheels), and each index only carries the torch versions built for it, so
+  a torch bump must check every index still serves the new pin for its
+  platform — `tests/integration/test_torch_wheel_index.py` verifies
+  exactly that.
 - **DB access is shared across threads** via one connection + RLock. Wrap
   multi-statement work in `db.transaction()` (reentrant via SAVEPOINT).
 - **Headstamps are read fresh, not cached** — don't reintroduce a cached

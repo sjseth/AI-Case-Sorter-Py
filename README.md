@@ -166,6 +166,15 @@ uv sync --extra ml        # torch + torchvision
 - **GPU:** an NVIDIA card with **compute capability ≥ 8.0** (Ampere / RTX
   30-series and newer) is used automatically; older or absent GPUs fall back to
   **CPU**, which still works but is slower.
+- **The two install routes ship different CUDA builds.** The in-app dialog
+  installs CUDA 12.9 wheels on Linux (NVIDIA driver **R525+**) and CUDA 13.0
+  wheels on Windows (driver **R580+**). `uv sync --extra ml` instead resolves
+  from PyPI, whose Linux build is CUDA 13 (driver **R580+**) and whose
+  Windows build is **CPU-only**. For GPU use, prefer the in-app dialog — or
+  install the exact `torch==…` / `torchvision==…` pins from
+  `pyproject.toml`'s `[ml]` extra yourself from the matching index:
+  `uv pip install --index-url https://download.pytorch.org/whl/cu129` on
+  Linux, `…/whl/cu130` on Windows.
 - **AI Config mode needs no PyTorch on the client** — inference runs on the
   server instead.
 

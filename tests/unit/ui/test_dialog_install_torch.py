@@ -115,6 +115,14 @@ def test_pin_targets_none_when_pyproject_missing_or_foreign(tmp_path, monkeypatc
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "someone-elses-app"\n', encoding="utf-8")
     assert dialog_install_torch.ml_pin_targets() is None
 
+    # A pyproject.toml re-saved in a non-UTF-8 encoding. tomllib decodes the
+    # raw bytes itself and raises UnicodeDecodeError — a ValueError sibling
+    # of TOMLDecodeError, not a subclass — and the real file's comments are
+    # full of em dashes (0x97 in cp1252), so a hand-edit in a legacy-encoding
+    # editor produces exactly this. Must be None, not an escaping exception.
+    (tmp_path / "pyproject.toml").write_bytes('[project]\nname = "ai-case-sorter"  # em — dash\n'.encode("cp1252"))
+    assert dialog_install_torch.ml_pin_targets() is None
+
     # The real shape resolves.
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "ai-case-sorter"\n'
@@ -122,6 +130,15 @@ def test_pin_targets_none_when_pyproject_missing_or_foreign(tmp_path, monkeypatc
         encoding="utf-8",
     )
     assert dialog_install_torch.ml_pin_targets() == ("torch==9.9.9", "torchvision==9.9.9")
+
+
+def test_cuda_index_covers_both_gpu_platforms() -> None:
+    """The GPU flow only runs where nvidia-smi exists — Linux and Windows —
+    and each needs its own index: upstream builds no Windows wheels for CUDA
+    12.9, so a single shared index would strand one platform or the other.
+    The active index must come from that table, never a third value."""
+    assert set(dialog_install_torch._CUDA_INDEX_BY_OS) == {"linux", "win32"}
+    assert dialog_install_torch._CUDA_INDEX in dialog_install_torch._CUDA_INDEX_BY_OS.values()
 
 
 def test_install_without_pins_fails_without_spawning_a_process(root, monkeypatch) -> None:

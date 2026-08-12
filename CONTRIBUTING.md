@@ -102,6 +102,11 @@ Local training/inference additionally needs PyTorch (optional):
 ```bash
 uv sync --extra ml      # torch + torchvision
 ```
+Note this resolves from PyPI: on Linux that's the CUDA 13 build (needs an
+R580+ NVIDIA driver), on Windows it's CPU-only. The in-app Install-PyTorch
+dialog instead uses per-OS CUDA wheel indexes (12.9 on Linux — R525+
+drivers; 13.0 on Windows — R580+, GPU included) — see README's "Optional:
+PyTorch" for installing those builds by hand.
 
 ### No hardware? Use the emulator
 
@@ -114,10 +119,11 @@ and the UI without a physical sorter attached.
 uv run pytest
 ```
 
-Split into `tests/unit/` and `tests/integration/` — the latter is the two
-files that shell out to a real external tool (`uv build`, `git-cliff`)
-instead of a synthetic fixture, each carrying `@pytest.mark.integration` and
-skipping individually if that tool isn't installed. `pytest -m "not
+Split into `tests/unit/` and `tests/integration/` — the latter is the files
+that exercise a real external tool or service (`uv build`, `git-cliff`, the
+PyTorch wheel index) instead of a synthetic fixture, each carrying
+`@pytest.mark.integration` and skipping individually if that tool — or, for
+the wheel index, network access — isn't available. `pytest -m "not
 integration"` skips them outright for a faster inner loop; plain
 `pytest`/CI runs everything.
 
