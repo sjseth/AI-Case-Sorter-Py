@@ -51,6 +51,36 @@
   packageRules: [
 
     // =====================================================
+    // Things rangeStrategy: "pin" must not touch
+    //
+    // The global "pin" above is a backstop for *dependencies*. Two places it
+    // reaches are not dependency pins and must keep their ranges:
+    //
+    // - requires-python is a support floor (>=3.12), not a version choice.
+    //   Pinning it to one exact interpreter breaks the 3.12/3.13 CI legs,
+    //   contradicts the installer's $PythonMin, and time-bombs every end-user
+    //   install: .python-version says "3.14", so uv provisions the *latest*
+    //   3.14.x -- the day a new patch ships, an exact ==3.14.x pin fails
+    //   every launch at `uv sync`. (.python-version itself is the deliberate
+    //   place where the app's actual interpreter is chosen.)
+    //
+    // - Workflow python-version / node-version inputs stay at the same
+    //   granularity as .python-version on purpose: they should track a minor
+    //   line, picking up patch releases for free, not drift stale on an
+    //   exact patch nobody bumps.
+    // =====================================================
+
+    {
+      matchDepTypes: ["requires-python"],
+      enabled: false,
+    },
+    {
+      matchManagers: ["github-actions"],
+      matchDepTypes: ["uses-with"],
+      rangeStrategy: "preserve",
+    },
+
+    // =====================================================
     // Version classification labels
     //
     // minimumReleaseAge is a supply-chain-attack mitigation, not just noise
