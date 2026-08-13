@@ -6,7 +6,7 @@ name = "ai-case-sorter"
 dynamic = ["version"]
 description ="Cross-platform desktop app that sorts spent brass cartridge casings by headstamp using a camera, an image classifier, and a serial-connected sorting machine."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "==3.14.7"
 license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "SJSeth Solutions" }]
 classifiers = [
