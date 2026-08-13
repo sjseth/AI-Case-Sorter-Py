@@ -214,11 +214,19 @@ def _dump_environment(torch_mod: Any) -> None:
             except Exception as exc:
                 print(f"[env] matmul benchmark failed: {exc}", file=sys.stderr, flush=True)
 
-            # ConvNeXt-Tiny forward — same model class our classify uses.
-            # If this matches our 800+ ms classify time, the bottleneck is
-            # purely cuDNN / Blackwell conv kernels. If it's much faster,
-            # the issue is something in our pipeline (.to(device) walks,
-            # tensor strides, etc.).
+            # ConvNeXt-Tiny forward — same model class our classify uses, so
+            # comparing it against the [classify] forward time separates "the
+            # GPU/cuDNN path itself is slow" from "something in our pipeline
+            # is slow" (.to(device) walks, tensor strides, etc.).
+            #
+            # The reference number below is a real measurement, not a target:
+            # torch 2.13 + cu130 (cuDNN 9.20) on an RTX 5060 Ti (sm_120).
+            # It is quoted with its hardware and version because that is the
+            # only way it stays falsifiable — the previous note here predicted
+            # 30-80 ms/iter on sm_120, which was true of the torch 2.9.1 /
+            # earlier-cuDNN pin this app used to install and became wrong by
+            # more than an order of magnitude when that pin moved. Re-measure
+            # rather than trusting it after a torch bump.
             try:
                 # torchvision is the optional `[ml]` extra — genuinely absent
                 # from this dev/CI environment by design.
@@ -239,7 +247,8 @@ def _dump_environment(torch_mod: Any) -> None:
                 ms_per = (time.perf_counter() - t) * 1000.0 / iters
                 print(
                     f"[env] convnext_tiny_fp32_synthetic: {ms_per:.1f} ms/iter "
-                    f"(expected ~10-30 on sm_80+, 30-80 on sm_120 with cuDNN 9.x)",
+                    f"(~3 ms measured on sm_120 with torch 2.13 + cuDNN 9.20; "
+                    f"hundreds of ms means a PTX JIT fallback or a CPU device)",
                     file=sys.stderr,
                     flush=True,
                 )
