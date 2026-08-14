@@ -73,8 +73,8 @@ against a real built sdist to keep all of this honest.
 **Launch (handles the Python runtime, system deps, and dependency sync
 automatically):**
 - Linux/macOS: `./start.sh` (`--auto` / `AUTO_INSTALL=1` auto-confirms `sudo`
-  package installs for libGL/glib — the only system packages still needed;
-  see below)
+  package installs — libGL/glib for opencv, and libxcb-cursor for Qt's xcb
+  plugin when there is a display; see below)
 - Windows: `start.bat`
 - Either just hands off to `bootstrap.py`, which does the actual work via
   [uv](https://docs.astral.sh/uv/): installs uv itself if it isn't already
@@ -740,7 +740,11 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   floated panel can't be moved or resized under native Wayland, which the move
   to QtAds didn't change (its floating containers are the same kind of
   frameless top-level) — and always yields to an explicit `QT_QPA_PLATFORM`,
-  which is what lets the tests run offscreen.
+  which is what lets the tests run offscreen. The xcb half of that list needs
+  **libxcb-cursor**, which no wheel carries; `bootstrap.ensure_qt_platform_libs`
+  offers to install it, and only when there is a display. It deliberately
+  warns rather than exits — the `;wayland` fallback means a missing library
+  costs that limitation, not the launch.
 - **Tests** live in `tests/unit/ui/` and run **offscreen, with no display
   server and no Xvfb** (§8). `conftest.py` supplies `qapp`, a real
   SQLite-backed `config`, `window_factory`/`window`, plus `seed_model` and

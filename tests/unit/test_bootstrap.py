@@ -177,6 +177,7 @@ def test_main_consumes_auto_flags_and_forwards_the_rest(bootstrap, monkeypatch) 
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
     monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=False))
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
+    monkeypatch.setattr(bootstrap, "ensure_qt_platform_libs", lambda *a, **kw: None)
 
     bootstrap.main(["--auto", "--some-app-flag", "value"])
 
@@ -196,6 +197,7 @@ def test_main_dash_y_is_equivalent_to_auto(bootstrap, monkeypatch) -> None:
         seen["auto_install"] = auto_install
 
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", fake_ensure)
+    monkeypatch.setattr(bootstrap, "ensure_qt_platform_libs", lambda *a, **kw: None)
     monkeypatch.setattr(bootstrap.subprocess, "run", MagicMock(returncode=0))
 
     bootstrap.main(["-y"])
@@ -209,6 +211,7 @@ def test_apply_update_runs_before_sync(bootstrap, monkeypatch) -> None:
     on this same launch."""
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
+    monkeypatch.setattr(bootstrap, "ensure_qt_platform_libs", lambda *a, **kw: None)
     monkeypatch.setattr(bootstrap.subprocess, "run", MagicMock(returncode=0))
 
     order = []
@@ -234,6 +237,7 @@ def test_sync_is_inexact_so_the_ml_extra_survives(bootstrap, monkeypatch) -> Non
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
     monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=False))
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
+    monkeypatch.setattr(bootstrap, "ensure_qt_platform_libs", lambda *a, **kw: None)
 
     sync_cmd = []
 
@@ -255,6 +259,7 @@ def test_sync_skips_the_dev_group(bootstrap, monkeypatch) -> None:
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
     monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=False))
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
+    monkeypatch.setattr(bootstrap, "ensure_qt_platform_libs", lambda *a, **kw: None)
 
     sync_cmd = []
 
@@ -275,6 +280,7 @@ def test_sync_failure_exits_with_a_readable_message(bootstrap, monkeypatch) -> N
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
     monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=False))
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
+    monkeypatch.setattr(bootstrap, "ensure_qt_platform_libs", lambda *a, **kw: None)
 
     def failing_run(cmd, *a, **kw):
         if cmd[1:2] == ["sync"]:
@@ -338,6 +344,7 @@ def test_main_makes_its_streams_tolerate_non_ascii(bootstrap, monkeypatch) -> No
     monkeypatch.setattr(bootstrap, "find_uv", lambda: "/fake/uv")
     monkeypatch.setattr(bootstrap, "apply_pending_update", lambda: False)
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", lambda *a, **kw: None)
+    monkeypatch.setattr(bootstrap, "ensure_qt_platform_libs", lambda *a, **kw: None)
     monkeypatch.setattr(bootstrap, "run_app", lambda *a, **kw: 0)
 
     bootstrap.main([])
@@ -390,6 +397,7 @@ def test_main_relaunches_itself_after_applying_an_update(bootstrap, monkeypatch)
     """
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
+    monkeypatch.setattr(bootstrap, "ensure_qt_platform_libs", lambda *a, **kw: None)
     monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=True))
     monkeypatch.setattr(bootstrap.subprocess, "call", MagicMock(return_value=7))
     monkeypatch.setattr(bootstrap, "run_app", MagicMock(return_value=0))
@@ -412,6 +420,7 @@ def test_relaunch_happens_at_most_once(bootstrap, monkeypatch) -> None:
     """
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
     monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
+    monkeypatch.setattr(bootstrap, "ensure_qt_platform_libs", lambda *a, **kw: None)
     monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=True))
     monkeypatch.setattr(bootstrap.subprocess, "call", MagicMock(return_value=0))
     monkeypatch.setattr(bootstrap, "run_app", MagicMock(return_value=0))
@@ -457,6 +466,49 @@ def test_open_log_failure_never_blocks_the_launch(monkeypatch, tmp_path) -> None
 
     assert module.open_log() is None
     module.log("still prints")  # must not raise
+
+
+def test_the_xcb_probe_offers_the_install_when_a_display_is_present(bootstrap, monkeypatch) -> None:
+    monkeypatch.setattr(bootstrap.sys, "platform", "linux")
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setattr("ctypes.util.find_library", lambda name: None)
+
+    installed = []
+    monkeypatch.setattr(
+        bootstrap,
+        "_try_install_system_pkg",
+        lambda feature, auto_install: installed.append(feature) or True,
+    )
+
+    bootstrap.ensure_qt_platform_libs(auto_install=True)
+    assert installed == ["xcb-cursor"]
+
+
+def test_the_xcb_probe_stays_out_of_a_headless_launch(bootstrap, monkeypatch) -> None:
+    """No display means the offscreen platform, which needs no xcb libraries —
+    and CI's launcher smoke test must never be asked for sudo."""
+    monkeypatch.setattr(bootstrap.sys, "platform", "linux")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setattr("ctypes.util.find_library", lambda name: None)
+    monkeypatch.setattr(
+        bootstrap,
+        "_try_install_system_pkg",
+        lambda feature, auto_install: pytest.fail("probed without a display"),
+    )
+
+    bootstrap.ensure_qt_platform_libs(auto_install=True)
+
+
+def test_a_declined_xcb_install_still_lets_the_app_start(bootstrap, monkeypatch) -> None:
+    """Qt asks for `xcb;wayland`, so the missing library costs the Wayland
+    fallback's limitations, not the launch."""
+    monkeypatch.setattr(bootstrap.sys, "platform", "linux")
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setattr("ctypes.util.find_library", lambda name: None)
+    monkeypatch.setattr(bootstrap, "_try_install_system_pkg", lambda feature, auto_install: False)
+
+    bootstrap.ensure_qt_platform_libs(auto_install=False)  # must not raise
 
 
 def test_runtime_lib_probe_retries_for_each_known_library(bootstrap, monkeypatch) -> None:

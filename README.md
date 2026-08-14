@@ -136,10 +136,21 @@ git clone https://github.com/sjseth/AI-Case-Sorter-Py.git
 cd AI-Case-Sorter-Py
 ./start.sh
 ```
-On minimal Linux installs the script may offer to install `libGL`/`glib` via
-`sudo` — the one thing uv genuinely can't provision, since they're system
-graphics libraries, not Python packages. Pass `--auto` (or set
-`AUTO_INSTALL=1`) to confirm that automatically; it prints a notice first.
+On Linux the script may offer to install a few system libraries via `sudo` —
+the one thing uv genuinely can't provision, since they're system libraries
+rather than Python packages. Pass `--auto` (or set `AUTO_INSTALL=1`) to
+confirm automatically; it prints a notice first.
+
+| Library | Needed by | Debian/Ubuntu | Fedora | Arch |
+|---|---|---|---|---|
+| libGL | OpenCV | `libgl1` | `mesa-libGL` | `libglvnd` |
+| glib | OpenCV | `libglib2.0-0` | `glib2` | `glib2` |
+| libxcb-cursor | Qt's X11 plugin | `libxcb-cursor0` | `xcb-util-cursor` | `xcb-util-cursor` |
+
+The first two are required — the app can't start without them. The third is
+not: without it Qt falls back to Wayland, where a floating panel can't be
+moved or resized. The launcher only asks about it when you have a display,
+so a headless run is never prompted.
 
 **Windows**
 ```bat
