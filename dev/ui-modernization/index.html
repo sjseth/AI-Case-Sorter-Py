@@ -1,0 +1,2114 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Sorts spent brass cartridge casings by headstamp -- camera, image classifier, serial-connected sorting machine.">
+      
+      
+      
+        <link rel="canonical" href="https://sjseth.github.io/AI-Case-Sorter-Py/latest/ui-modernization/">
+      
+      
+        <link rel="prev" href="../guide/GUIDE/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>UI Modernization - AI Case Sorter</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ui-modernization-research-decisions" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="AI Case Sorter" class="md-header__button md-logo" aria-label="AI Case Sorter" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AI Case Sorter
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              UI Modernization
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Follow system"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Follow system" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/sjseth/AI-Case-Sorter-Py" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    sjseth/AI-Case-Sorter-Py
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="AI Case Sorter" class="md-nav__button md-logo" aria-label="AI Case Sorter" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    AI Case Sorter
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/sjseth/AI-Case-Sorter-Py" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    sjseth/AI-Case-Sorter-Py
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/GUIDE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Modernization
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Modernization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whats-at-stake-sizing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's at stake (sizing)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#options-evaluated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options evaluated
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Options evaluated">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-pyside6-qt-for-python-rewrite-candidate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. PySide6 (Qt for Python) — rewrite candidate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-stay-on-tkinter-modernize-the-skin-cheap-option" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Stay on Tkinter, modernize the skin — cheap option
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-nicegui-flet-web-rendered-rejected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. NiceGUI / Flet (web-rendered) — rejected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-kivy-dear-pygui-rejected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Kivy / Dear PyGui — rejected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-wxpython-rejected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. wxPython — rejected
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spike-pyside6-shell-co-existing-with-the-tk-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spike: PySide6 shell co-existing with the Tk UI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Spike: PySide6 shell co-existing with the Tk UI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#spike-findings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spike findings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#second-increment-the-clean-slate-layout-2026-08-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Second increment: the clean-slate layout (2026-08-12)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#third-increment-the-showcase-implemented-2026-08-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Third increment: the showcase (implemented 2026-08-12)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#current-state-2026-08-14" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current state (2026-08-14)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-to-complete-calibration-in-progress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost to complete (calibration in progress)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-retiring-ui-would-remove-beyond-the-directory-itself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What retiring ui/ would remove (beyond the directory itself)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What retiring ui/ would remove (beyond the directory itself)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-hardware-layer-stays-toolkit-neutral-pyserial-cv2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The hardware layer stays toolkit-neutral: pyserial + cv2
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#proposed-layout-clean-slate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Proposed layout (clean-slate)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open questions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#judgment-call-register-revisit-before-the-upstream-pr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Judgment-call register (revisit before the upstream PR)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#free-hands-wishlist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Free-hands wishlist
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#windows-app-gap-analysis-guide-v1153-for-the-pr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Windows-app gap analysis (guide v1.1.53) — for the PR
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Windows-app gap analysis (guide v1.1.53) — for the PR">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-missing-in-the-whole-python-port-tk-and-qt-pre-existing-gaps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A. Missing in the whole Python port (Tk AND Qt) — pre-existing gaps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b-qt-polish-gaps-small-from-jls-testing-guide-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B. Qt polish gaps (small, from JL's testing + guide details)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#c-equivalent-by-design-no-action-explain-in-pr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C. Equivalent by design (no action; explain in PR)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#findings-for-the-pr-description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Findings for the PR description
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-log" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision log
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whats-at-stake-sizing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's at stake (sizing)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#options-evaluated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options evaluated
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Options evaluated">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-pyside6-qt-for-python-rewrite-candidate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. PySide6 (Qt for Python) — rewrite candidate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-stay-on-tkinter-modernize-the-skin-cheap-option" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Stay on Tkinter, modernize the skin — cheap option
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-nicegui-flet-web-rendered-rejected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. NiceGUI / Flet (web-rendered) — rejected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-kivy-dear-pygui-rejected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Kivy / Dear PyGui — rejected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-wxpython-rejected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. wxPython — rejected
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spike-pyside6-shell-co-existing-with-the-tk-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spike: PySide6 shell co-existing with the Tk UI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Spike: PySide6 shell co-existing with the Tk UI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#spike-findings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spike findings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#second-increment-the-clean-slate-layout-2026-08-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Second increment: the clean-slate layout (2026-08-12)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#third-increment-the-showcase-implemented-2026-08-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Third increment: the showcase (implemented 2026-08-12)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#current-state-2026-08-14" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current state (2026-08-14)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-to-complete-calibration-in-progress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost to complete (calibration in progress)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-retiring-ui-would-remove-beyond-the-directory-itself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What retiring ui/ would remove (beyond the directory itself)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What retiring ui/ would remove (beyond the directory itself)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-hardware-layer-stays-toolkit-neutral-pyserial-cv2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The hardware layer stays toolkit-neutral: pyserial + cv2
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#proposed-layout-clean-slate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Proposed layout (clean-slate)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open questions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#judgment-call-register-revisit-before-the-upstream-pr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Judgment-call register (revisit before the upstream PR)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#free-hands-wishlist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Free-hands wishlist
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#windows-app-gap-analysis-guide-v1153-for-the-pr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Windows-app gap analysis (guide v1.1.53) — for the PR
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Windows-app gap analysis (guide v1.1.53) — for the PR">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-missing-in-the-whole-python-port-tk-and-qt-pre-existing-gaps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A. Missing in the whole Python port (Tk AND Qt) — pre-existing gaps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b-qt-polish-gaps-small-from-jls-testing-guide-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B. Qt polish gaps (small, from JL's testing + guide details)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#c-equivalent-by-design-no-action-explain-in-pr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C. Equivalent by design (no action; explain in PR)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#findings-for-the-pr-description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Findings for the PR description
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-log" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision log
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/sjseth/AI-Case-Sorter-Py/edit/main/docs/ui-modernization.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="ui-modernization-research-decisions">UI modernization — research &amp; decisions<a class="headerlink" href="#ui-modernization-research-decisions" title="Permanent link">&para;</a></h1>
+<p>Working document tracking the investigation into replacing or refreshing the
+Tkinter UI. Audience: Seth + contributors. Status: <strong>research plus a built,
+opt-in Qt UI</strong> — the branch carries a full-parity <code>sorter/qtui/</code> behind
+<code>--qt</code> (see "Current state" below); whether it <em>replaces</em> <code>sorter/ui/</code> is
+still Seth's call, and nothing here retires the Tk UI.</p>
+<h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">&para;</a></h2>
+<p>The current Tkinter/ttk UI looks dated and has structural ceilings we can't
+theme our way out of:</p>
+<ul>
+<li>Blurry/limited fractional DPI scaling on Windows.</li>
+<li>Dated widget rendering, especially on Linux.</li>
+<li>Headless testing requires Xvfb (<code>xvfb-run -a pytest</code>); without a display the
+  UI test modules skip.</li>
+<li>No animation/layout niceties; a lot of hand-rolled infrastructure
+  (<code>ScrollableFrame</code>, <code>retheme_widgets</code>, gradient/halftone painting) exists to
+  compensate for the toolkit.</li>
+</ul>
+<h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Modern, UX-friendly look.</li>
+<li>Windows + Linux + macOS.</li>
+<li><strong>No dependencies outside PyPI</strong> — no system packages, no bundled
+   non-Python runtimes.</li>
+<li>Headless-testable, ideally without Xvfb.</li>
+</ol>
+<p><strong>Port principle: function parity, not UI parity.</strong> The end state must cover
+(more or less) everything the Tk UI does — sorting, models, training, AI
+config, camera/serial/image-proc setup, community, updates — but the Qt UI is
+free (and expected) to redesign the UX rather than clone the current screens
+one-for-one. Concretely: parity is tracked per <em>capability</em>, not per
+tab/dialog; the Tk UI is the behavioral reference (what must be possible),
+not the layout reference (how it looks). Note the app already deviates from
+the WinForms original in UI while keeping its behavior — this is the same
+move again.</p>
+<h2 id="whats-at-stake-sizing">What's at stake (sizing)<a class="headerlink" href="#whats-at-stake-sizing" title="Permanent link">&para;</a></h2>
+<p><code>src/sorter/ui/</code> is ~13,500 lines across 24 modules (largest: <code>tab_run.py</code>
+1751, <code>theme.py</code> 1500, <code>tab_models.py</code> 1246, <code>app.py</code> 1082), plus ~4,000 lines
+of UI tests. A toolkit swap is a full rewrite of that layer.</p>
+<p>Mitigating factor: the non-UI layers (<code>hardware/</code>, <code>control/</code>, <code>data/</code>, <code>ml/</code>,
+<code>community/</code>, <code>update/</code>) talk to the UI only through the event bus, so the
+seam for a swap already exists.</p>
+<h2 id="options-evaluated">Options evaluated<a class="headerlink" href="#options-evaluated" title="Permanent link">&para;</a></h2>
+<h3 id="1-pyside6-qt-for-python-rewrite-candidate">1. PySide6 (Qt for Python) — rewrite candidate<a class="headerlink" href="#1-pyside6-qt-for-python-rewrite-candidate" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Only option meeting all four requirements. Qt is bundled inside
+  the PyPI wheel (no system Qt) on all three OSes. Modern, DPI-aware widgets;
+  full styling via QSS so the theme system ports. Headless testing is
+  first-class: <code>QT_QPA_PLATFORM=offscreen</code> runs real widget tests with no
+  display, and <code>pytest-qt</code> is mature. Signals/slots are thread-safe by design
+  and could replace the hand-rolled <code>EventBus</code> + 50 ms drain loop. <code>QImage</code>
+  renders BGR numpy camera frames directly.</li>
+<li><strong>Cons:</strong> Full rewrite of <code>ui/</code> and its tests. Heavy wheels — measured in
+  the spike: the <code>PySide6</code> meta-package is 256 MB download / 648 MB on disk
+  (it drags in QtWebEngine/Qt3D/Charts via <code>pyside6-addons</code>, none of it
+  used); <code>PySide6-Essentials</code> alone is ~80 MB / ~200 MB and covers everything
+  the app needs. Still small next to torch. LGPL (fine for this project).
+  Prefer PySide6 over PyQt6 (same toolkit, but PyQt6 is GPL/commercial).</li>
+</ul>
+<h3 id="2-stay-on-tkinter-modernize-the-skin-cheap-option">2. Stay on Tkinter, modernize the skin — cheap option<a class="headerlink" href="#2-stay-on-tkinter-modernize-the-skin-cheap-option" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Near-zero migration risk; event bus, threading rules, and all UI
+  tests survive. sv-ttk (Sun Valley / Windows-11-style ttk theme, pure PyPI)
+  or continued investment in our own <code>theme.py</code> (already a full theming
+  engine).</li>
+<li><strong>Cons:</strong> Tkinter's ceiling remains: DPI, rendering, Xvfb-only testing.
+  customtkinter and ttkbootstrap specifically <strong>fight our architecture</strong> —
+  customtkinter replaces ttk widgets with canvas-drawn ones (breaks
+  <code>retheme_widgets</code> and the style system), ttkbootstrap wants to own the ttk
+  style engine that <code>theme.py</code> owns.</li>
+</ul>
+<h3 id="3-nicegui-flet-web-rendered-rejected">3. NiceGUI / Flet (web-rendered) — rejected<a class="headerlink" href="#3-nicegui-flet-web-rendered-rejected" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Pros:</strong> Easiest modern look; NiceGUI's headless pytest <code>user</code> fixture is
+  best-in-class (no browser at all).</li>
+<li><strong>Cons (deal-breakers):</strong> A native window needs pywebview → system
+  WebKitGTK on Linux, violating requirement 3; otherwise the app lives in a
+  browser tab. Live camera preview becomes MJPEG streaming over localhost.
+  Hardware threads + web event loop is a worse threading story than today.
+  Flet additionally ships a Flutter client binary and has had API churn.</li>
+</ul>
+<h3 id="4-kivy-dear-pygui-rejected">4. Kivy / Dear PyGui — rejected<a class="headerlink" href="#4-kivy-dear-pygui-rejected" title="Permanent link">&para;</a></h3>
+<p>Kivy: PyPI-pure but mobile-toolkit look on desktop (non-native dialogs, weak
+menu/DPI story); headless needs GL workarounds. Dear PyGui: GPU required,
+effectively untestable headless, poor accessibility.</p>
+<h3 id="5-wxpython-rejected">5. wxPython — rejected<a class="headerlink" href="#5-wxpython-rejected" title="Permanent link">&para;</a></h3>
+<p>No manylinux wheels on PyPI (Linux needs an extra index or a compiler),
+violating requirement 3. Look is native-2010, not modern.</p>
+<h2 id="recommendation">Recommendation<a class="headerlink" href="#recommendation" title="Permanent link">&para;</a></h2>
+<p><strong>PySide6</strong>, via an incremental port on a long-lived branch:</p>
+<ol>
+<li>Spike: shell (main window + status bar) plus one simple tab (Serial or
+   Camera) to prove out theming, threading, and camera-frame rendering.</li>
+<li>Judge look and per-tab effort from the spike before committing.</li>
+<li>If accepted, port tabs one at a time; the event bus keeps both UIs
+   drivable during the transition.</li>
+</ol>
+<p>Fallback if the rewrite cost is too high now: option 2 (sv-ttk / own theme
+work) — a visual refresh in days instead of weeks, but the DPI/rendering/Xvfb
+ceilings remain.</p>
+<h2 id="spike-pyside6-shell-co-existing-with-the-tk-ui">Spike: PySide6 shell co-existing with the Tk UI<a class="headerlink" href="#spike-pyside6-shell-co-existing-with-the-tk-ui" title="Permanent link">&para;</a></h2>
+<p>Status: implemented on this branch. Design goals: prove the risky parts
+(theming, threading, camera rendering, headless tests) <strong>without touching
+<code>src/sorter/ui/</code> at all</strong>, so the branch keeps merging cleanly with upstream
+<code>main</code>'s Tk UI changes and both UIs can be developed in parallel.</p>
+<p><strong>How the two UIs co-exist:</strong></p>
+<ul>
+<li>New package <code>src/sorter/qtui/</code> beside <code>ui/</code> — nothing in <code>ui/</code> changes.</li>
+<li>Launch: <code>python -m sorter --qt</code> (or <code>CASESORTER_QT=1</code>); default launch is
+  the Tk UI, unchanged. The only shared file touched is <code>__main__.py</code>, a
+  few-line branch — minimal merge surface against upstream.</li>
+<li>PySide6 is an optional extra (<code>[qt]</code>, mirroring how torch is <code>[ml]</code>), so
+  end users and CI don't pull the wheels at all — verified: bootstrap's
+  <code>--no-dev</code> sync never installs the extra. Dev setup:
+  <code>uv sync --no-install-project --extra qt</code> — <strong>add <code>--extra ml</code> in the same
+  command if you use local models</strong>: a sync installs exactly the extras named,
+  so syncing <code>qt</code> alone removes an installed torch (and a <code>.python-version</code>
+  bump recreates <code>.venv</code> outright, observed going 3.13→3.14 on Windows). Not
+  data loss — the in-app gate reinstalls torch on the next local-model run —
+  but a ~2 GB redownload waiting to happen.</li>
+<li>Both UIs reuse the non-UI layers unchanged: <code>EventBus</code> (Qt drains it with a
+  50 ms <code>QTimer</code> instead of <code>root.after</code> — same threading contract), <code>Camera</code>,
+  <code>SerialBroker</code>/<code>EmulatorBroker</code>, <code>Config</code>/<code>SettingsRepo</code>.</li>
+<li><strong>One source of truth for colors:</strong> the palettes and the custom-theme
+  registry live in <code>qtui/palettes.py</code> — a copy of <code>ui/theme.py</code>'s palette
+  half, byte-compared by <code>test_qt_drift_pins.py</code> — rendered as QSS by
+  <code>qtui/theme.py::build_stylesheet</code>. (It <em>imported</em> <code>sorter.ui.theme</code> until
+  2026-08-13; <code>ui/theme.py</code> imports tkinter at module level, so a
+  PySide6-only install couldn't launch. Both UIs still read the same
+  <code>ui.custom_themes</code> settings row, so a theme built in either shows up in the
+  other.)</li>
+</ul>
+<p><strong>Increment 1 scope</strong> (its layout is superseded by increment 2 below;
+everything else carries over): main-window shell (gradient header, theme
+picker, tabs, status bar), serial/camera status indicators driven by the bus, live camera
+preview (BGR numpy → <code>QImage</code>), serial auto-connect (same port-walking probe
+as the Tk UI), theme switching with persistence. Run/Serial tabs are
+placeholders — no tab logic is ported.</p>
+<p><strong>Headless testing:</strong> <code>tests/unit/qtui/</code> runs with
+<code>QT_QPA_PLATFORM=offscreen</code> — real widget construction and event-bus-driven
+UI updates with no display and no Xvfb. This is the requirement-4 proof.</p>
+<h3 id="spike-findings">Spike findings<a class="headerlink" href="#spike-findings" title="Permanent link">&para;</a></h3>
+<p>Implemented 2026-08-12 (~660 lines: <code>qtui/app.py</code> 407, <code>qtui/theme.py</code> 135,
+tests 115). All verification green: 17 qtui tests pass <strong>offscreen with
+<code>DISPLAY</code> unset</strong> in 0.24 s (no Xvfb, no pytest-qt); full unit suite 812
+passed / 0 failed; ruff and ty clean.</p>
+<ul>
+<li><strong>Headless testing is better than advertised</strong> — the whole window
+  constructs, the bus drives UI updates, and pixmaps rasterize with no
+  display server. Stronger than the Tk side, whose UI tests need a display.</li>
+<li><strong>Wheel cost is 3.2× the original estimate</strong> (256 MB / 648 MB on disk via
+  the <code>PySide6</code> meta-package — the venv grows ~360 MB → 1.0 GB). Cause:
+  <code>pyside6-addons</code> (QtWebEngine, Qt3D, Charts, Multimedia — all unused).
+  <strong>Depend on <code>PySide6-Essentials</code> (~80 MB / ~200 MB) for a real port.</strong>
+  End users are unaffected either way (extra never installs for them).</li>
+<li><strong>The <code>EventBus</code> ports unchanged.</strong> Swapping <code>root.after</code> for a <code>QTimer</code>
+  was the entire threading change; <code>run_worker</code>, the serial probe, and the
+  <code>serial/*</code> topics were copied verbatim and work.</li>
+<li><strong>Live theme switching collapses to one call</strong> — <code>setStyleSheet</code> on the
+  window re-polishes the whole tree; no <code>retheme_widgets</code> equivalent needed.
+  Port convention: express color roles as objectNames (<code>#action</code>, <code>#danger</code> —
+  the QSS analogue of ttk style names) and keep per-widget stylesheets to a
+  minimum, since those are the only thing a theme switch must re-apply by
+  hand.</li>
+<li><strong>QSS gotchas found:</strong> <code>QWidget { background-color }</code> cascades into child
+  labels (needs <code>#header QLabel { background: transparent }</code> under the
+  gradient); <code>QTabWidget::pane { top: -1px }</code> closes the seam under the
+  selected tab.</li>
+<li><strong>Halftone/ink-outline themes have no QSS equivalent.</strong> Comic Book renders
+  flat; the ben-day screen and ink borders would need <code>QPainter</code> in a
+  <code>paintEvent</code> or a generated tiled pixmap. The flat themes port 1:1.</li>
+<li><strong><code>qtui</code> still imports tkinter transitively</strong> — the palettes live in
+  <code>sorter/ui/theme.py</code>. Harmless during co-existence; the palette-extraction
+  refactor (see below) is the one <code>ui/</code> change the design eventually needs.
+  <em>(Resolved 2026-08-13, without touching <code>ui/</code>: <code>qtui/palettes.py</code> is a
+  drift-pinned copy instead.)</em></li>
+<li><strong>CI wiring is a decision, not free:</strong> <code>build.yml</code> syncs without the extra,
+  so the qtui tests skip there until a job adds <code>--extra qt</code>. <em>(Resolved: the
+  <code>qtui</code> job, Linux + Windows, <code>--extra qt</code> + <code>QT_QPA_PLATFORM=offscreen</code>,
+  deliberately outside the matrix — see CLAUDE.md §8.)</em></li>
+</ul>
+<h3 id="second-increment-the-clean-slate-layout-2026-08-12">Second increment: the clean-slate layout (2026-08-12)<a class="headerlink" href="#second-increment-the-clean-slate-layout-2026-08-12" title="Permanent link">&para;</a></h3>
+<p>The tabbed shell was a straight transcription of the Tk UI; increment 2 replaces
+it with the shell of the design in "Proposed layout (clean-slate)" below, to
+judge the <em>navigation</em> rather than the widgets. Still a layout spike — real
+chrome, placeholder content wherever porting tab logic would be needed.</p>
+<ul>
+<li><strong>Activities sidebar</strong> (fixed 84 px, exclusive <code>QToolButton</code>s) driving a
+  <code>QStackedWidget</code>: Sort / Train / Models / Community, with Settings pinned at
+  the bottom. Replaces the tab bar — the Tk UI's eight tabs don't fit one row,
+  and half of them are setup, not work.</li>
+<li><strong>Sort is a dashboard</strong>, not a tab: action row (Start/Stop/Manual feed,
+  disabled — no run controller in the spike) over a <code>QSplitter</code> holding the
+  camera preview beside the (unported) slot grid, with a one-line recent-
+  classification strip beneath.</li>
+<li><strong>Settings is one page with a section list</strong> (Camera, Serial, Image Proc, AI
+  Config, Updates, Theme), which is where the six configuration tabs go. The
+  theme picker moved out of the title bar into Settings → Theme; the header
+  keeps title/subtitle only.</li>
+<li><strong>Serial monitor is a dock panel</strong> (closable/floatable) instead of the Tk
+  detached <code>Toplevel</code> — <code>View → Serial Monitor</code> is literally the dock's
+  <code>toggleViewAction()</code>. It renders <code>serial/rx</code>, <code>serial/tx</code> and <code>serial/note</code>
+  from the bus into a <code>QPlainTextEdit</code> with <code>setMaximumBlockCount(500)</code> — the
+  ring buffer the Tk monitor hand-rolls with a deque. (Built on <code>QDockWidget</code>;
+  moved to Qt Advanced Docking System later — see the decision log.)</li>
+<li><strong>Menu bar</strong>: File → Open Data Folder / Quit, View, Help → About. The Tk UI
+  has no menu bar at all; this is where "not a tab, not a button" actions
+  (data folder, updates, about) stop competing for status-bar space.</li>
+</ul>
+<p>Verified the same way as increment 1: 28 offscreen tests, full unit suite (823)
+green, ruff/ty clean.</p>
+<p><strong>Gotchas found in increment 2:</strong></p>
+<ul>
+<li><strong><code>QAction.menu()</code> destroys the menu.</strong> Iterating <code>menuBar().actions()</code> and
+  calling <code>.menu()</code> on each hands back a <em>Python-owned</em> wrapper; when the
+  temporary is collected, shiboken deletes the C++ <code>QMenu</code> and the menu bar
+  silently loses that entry (later access raises "Internal C++ object already
+  deleted"). Keep the menus in a dict on the window (<code>self.menus</code>) and go
+  through that — in app code and in tests.</li>
+<li><strong><code>QWidget</code>-selector cascade bites again, harder.</strong> The base
+  <code>QMainWindow, QWidget</code> rule paints every descendant, so each new container
+  (<code>#sidebar</code>, its <code>QToolButton</code>s) needs an explicit background or it fights
+  the surface it sits on. Same class of fix as <code>#header QLabel</code>.</li>
+<li><strong><code>QDockWidget::title</code> is style-able, its buttons are not</strong> (without shipping
+  icons): float/close glyphs come from the platform style, so a dark palette
+  gets platform-colored controls on a themed title bar. Acceptable; icons are a
+  later polish item. <em>(Resolved by the QtAds move: it ships its own SVG button
+  icons as Qt resources, which theme.py re-declares.)</em></li>
+<li><strong><code>QSplitter::handle</code> needs an explicit <code>width</code>/<code>height</code></strong> as well as a
+  background, or the themed handle is invisible.</li>
+<li>Emoji-as-icon in the sidebar works and renders fine offscreen, but real SVG
+  icons (<code>QIcon</code>) are the end state — emoji colour is out of the palette's
+  control, which breaks the "every color comes from the theme" rule.</li>
+</ul>
+<h3 id="third-increment-the-showcase-implemented-2026-08-12">Third increment: the showcase (implemented 2026-08-12)<a class="headerlink" href="#third-increment-the-showcase-implemented-2026-08-12" title="Permanent link">&para;</a></h3>
+<p>Makes the Sort dashboard actually sort, so the demo needs no slideware: slot
+cards with live counts from the real <code>Config</code>, the <code>RunController</code> wired
+(same preflights as the Tk Run tab; PyTorch install still deferred to the Tk
+UI), a live recent-classification feed, and a minimally real Settings→Serial
+page whose port picker includes <strong>"Emulated"</strong> — the whole demo runs against
+the <code>SerialEmulator</code> with no machine on the bench, over the same code path
+the real board uses.</p>
+<p><strong>Demo script (~2 minutes):</strong></p>
+<ol>
+<li><code>./start.sh</code> → the familiar Tk UI. Close it. Same command with <code>--qt</code> →
+   the new UI. (Point: both ship from one tree; end users see no change.)</li>
+<li>Sort dashboard: sidebar, live camera preview, slot cards.</li>
+<li>Settings → Serial → port "Emulated" → Connect → status dot goes green,
+   serial dock streams the handshake.</li>
+<li>Back to Sort → Manual feed, then Start: cards count up, the recent feed
+   scrolls with confidence coloring, the dock shows each exchange.</li>
+<li>Switch theme mid-run (Settings → Theme): everything restyles live,
+   including the dock and cards.</li>
+<li>Close, <code>git log --oneline</code>: every increment tested headless (no display
+   server) and green in the same suite as the Tk UI.</li>
+</ol>
+<p>Explicitly not in the showcase (parity items for the real port): package
+mode counters/reset, sorting-template UI, slot-assignment editing (checkbox
+grid + slot details), auto-select <code>mode/changed</code> re-render, wish-list
+capture, the AI-credentials preflight, cropped-frame preview, Serial-page
+disconnect/init-settings push, and the PyTorch install dialog (deliberately
+routed to the Tk UI; <code>dialog_install_torch</code>'s <code>after()</code>-from-worker pattern
+must not be copied anyway).</p>
+<p><strong>Demo caveat:</strong> the emulator removes the <em>hardware</em> dependency, not the
+classifier one. On a fresh DB the app is in AI-config mode and Start will
+fail at classify time against an unconfigured endpoint — demo with a
+configured AI endpoint or a local model (checkpoint + torch). Manual feed
+demos fine with the emulator alone.</p>
+<p><strong>Increment-3 findings (54 qtui tests, full suite 849, ruff/ty clean):</strong></p>
+<ul>
+<li>Verified <code>run/*</code> payload shapes worth pinning for the port: <code>run/result</code>
+  carries <code>ok</code> and a <code>slot</code> even for a failed cycle — counts must key off
+  <code>ok</code>; <code>run/stopped</code> fires from the loop's <code>finally</code> (also on error and
+  package-halt), so button state must derive from <code>run/started</code>/<code>run/stopped</code>
+  and never from the click handlers; <code>run/error</code> does not imply the run
+  stopped.</li>
+<li>The transparent-children rule is now a rule, not a gotcha: every container
+  with a QSS background (<code>#header</code>, <code>#sidebar</code>, now <code>#slotCard</code>) needs a
+  <code>... QLabel { background: transparent; }</code> companion.</li>
+<li>New-widget color roles belong in objectNames (<code>#slotCount</code>, <code>#slotNames</code>),
+  which the single <code>setStyleSheet</code> repaints on theme switch; only colors
+  baked into rich text (the feed's confidence spans, the status dots) need
+  hand re-rendering.</li>
+<li>The emulator path is a genuine end-to-end test: <code>Emulated</code> →
+  <code>EmulatorBroker</code> → <code>RunController.cycle_once</code> → timer-delayed <code>done</code> →
+  <code>run/result</code> → card count, driven headless in 0.12 s by pumping
+  <code>bus.drain()</code> in a bounded poll (<code>drain_until</code> in the qtui conftest) — the
+  pattern for every future qtui test involving a worker.</li>
+<li>qtui tests now run against a real <code>Database</code> + <code>Config</code> on <code>tmp_path</code>
+  (shared conftest), not a stub — removed defensive code from the widgets.</li>
+</ul>
+<h3 id="current-state-2026-08-14">Current state (2026-08-14)<a class="headerlink" href="#current-state-2026-08-14" title="Permanent link">&para;</a></h3>
+<p>Past the spikes: every capability of the Tk UI has a Qt surface, and the
+shape below is what live-testing rounds with JL and Seth converged on. What
+changed since increment 3, by surface:</p>
+<ul>
+<li><strong>Panels, not docks.</strong> Four QtAds panels — Serial Monitor (bottom, open),
+  Classification History, User Guide and Themes (right, closed) — with
+  drop-indicator overlays, tabbing onto an occupied area, <code>View</code> toggles,
+  per-tab drag hints, and <strong>View → Re-dock panels</strong> as the escape hatch
+  (Seth floated a panel and couldn't get it back; dragging one home takes
+  dexterity, a menu action doesn't). Layout persists as the manager's own
+  XML in <code>ui.window_state</code>.</li>
+<li><strong>Sort is grounded.</strong> The crop the classifier saw is the primary panel
+  with the live camera an off-by-default toggle beneath it (Seth: the
+  Windows app's layout — the operator watches the <em>crop</em> and the call made
+  on it); the current headstamp/confidence sits under it. The grid header
+  row carries "Sorted this run" + Reset + the template picker (they belong
+  with what they count), and one foot strip carries Manual feed / Run
+  options / <strong>Start green at the far right</strong>. Moderator notes and the
+  community model-update prompt ride the same strip and status bar.</li>
+<li><strong>Train reads as its loop.</strong> One capture column — image → centered Feed →
+  Label + Save → readouts — with the image counts beside it behind a 50/50
+  splitter (they reflow into columns as it widens, which is what makes a
+  150-class model readable) and a Training strip at the foot pairing "Sort
+  while training" with Training settings… / Start training. Behind a stack:
+  when the active model isn't trainable here, the page is a guidance panel
+  saying which case it is and jumping to Models.</li>
+<li><strong>Models and Community share one idiom.</strong> Sortable columns above, one
+  selection-scoped action bar below — destructive far left, the primary far
+  right. Models: Delete … Activate, with the Active column left as a
+  "● ACTIVE" marker, inked in the palette's action colour so activity reads
+  by colour as well as text. Community: Remove plus one state-driven primary
+  (Download / Update / "Already installed"), which carries the whole
+  lifecycle — install → update → remove — and queues a second download
+  behind a running one. Row-embedded controls were tried on both and
+  reverted (see the decision rows).</li>
+<li><strong>Sidebar.</strong> Sort / Train / Models / Community with Settings pinned below,
+  now inked from hand-authored SVGs by the live palette (the emoji wishlist
+  item, done), plus an <strong>AI Config</strong> activity beside a muted Train in AI
+  Config mode (Seth: "it takes the place of the training screen; it is
+  analogous to training for an LLM") — a page of its own, like Train's, not
+  a Settings section. Neither of the pair is ever hidden — JL didn't
+  discover Train existed — only inked <code>text_subtle</code>, with the page behind it
+  saying why.</li>
+<li><strong>Image processing follows the active model.</strong> The primer-mask and crop
+  (Hough) settings have lived on the model row since the WinForms port;
+  nothing read them. The page now reads/writes the active
+  model and mirrors into <code>config.image_proc</code> (the live copy the run reads),
+  with a pristine model row inheriting the global rather than resetting it.</li>
+<li><strong>Support package</strong> (Help → Export support package…): the redacted
+  configuration as report text to paste on Discord, or a ZIP with a
+  machine-readable <code>config.json</code> beside it. API key reported as set/not set,
+  paths relative to the data root, auth cache never read.</li>
+<li><strong>In-app guide.</strong> <code>docs/guide/GUIDE.md</code>, one file rendered by GitHub and by
+  <code>QTextBrowser</code> alike, opened at the topic for wherever the user is (F1 /
+  Help → User Guide) in the guide panel. <code>topic_for</code> covers every activity
+  and every Settings section; a test pins each answer to a real heading.
+  AI Config is a top-level section of the guide, not a Settings subsection.</li>
+<li><strong>Conventions settled:</strong> sentence case for controls, Title Case for
+  titles; zoom sliders (50–200%, persisted) on the two log-like panels; the
+  notify/confirm seam on every surface that could open a modal.</li>
+</ul>
+<h2 id="cost-to-complete-calibration-in-progress">Cost to complete (calibration in progress)<a class="headerlink" href="#cost-to-complete-calibration-in-progress" title="Permanent link">&para;</a></h2>
+<p>Unit of measure: one <em>increment</em> = spec → Opus agent implements → review,
+verify (pytest/ruff/ty), commit. Measured so far: spike 1 ≈ 8 min agent time
+/ ~30 min wall clock (~660 lines); spike 2 ≈ 9 min / ~30 min (~460 lines);
+user-found fixes ≈ 5–10 min each (2 so far). The remaining parity work is
+~17–25 increments (per-chunk table in the session notes; Sort and Models are
+the dense ones).</p>
+<p>First estimate ranged <strong>15–25 h</strong> on the assumption that dense,
+behavior-pinned chunks run well above spike velocity. JL disputed that as too
+high, and spike 3 — the deliberate calibration point, ~3× the size of the
+earlier increments and wired into the real run path — measured <strong>~10.5 min
+agent time, ~880 changed lines, 2 implementation passes, ~30 min wall
+clock</strong>: triple the scope at the <em>same</em> wall-clock cost. The assumption was
+wrong; density is absorbed by the agent, and the wall-clock floor is the
+spec/review/verify cycle (~20 min) rather than the code volume.</p>
+<p><strong>Re-baselined estimate: ~8–12 h of session wall clock</strong> — the remaining
+parity work is roughly 10–14 spike-3-sized increments at ~30–45 min each.
+Residual risk sits in the deferred-items list above (package mode, template
+UI, assignment editing, the community/auth surfaces that need the real
+backend) and in increments that need look-and-feel rounds. The user-paced
+parts (bench validation against the physical machine) still sit outside
+these hours and set the calendar time regardless.</p>
+<h2 id="what-retiring-ui-would-remove-beyond-the-directory-itself">What retiring <code>ui/</code> would remove (beyond the directory itself)<a class="headerlink" href="#what-retiring-ui-would-remove-beyond-the-directory-itself" title="Permanent link">&para;</a></h2>
+<p>Audited 2026-08-12: outside <code>src/sorter/ui/</code> and <code>tests/unit/ui/</code>, nothing in
+<code>src/</code> imports tkinter or <code>sorter.ui</code> except the one launch line in
+<code>__main__.py</code> — the layering is genuinely clean. Dropping <code>ui/</code> at the end of
+a full port also retires:</p>
+<ul>
+<li><strong><code>tests/unit/ui/</code></strong> (~4,000 lines) — replaced by offscreen Qt tests.</li>
+<li><strong>The <code>--qt</code> switch itself</strong> — Qt becomes the only path in <code>__main__.py</code>.</li>
+<li><strong>Xvfb everywhere.</strong> <code>build.yml</code>'s <code>xvfb-run -a pytest</code> and the xvfb
+  apt-installs go; Qt tests run on <code>QT_QPA_PLATFORM=offscreen</code> with no
+  display server. The launcher-smoke's <code>import tkinter</code> check becomes an
+  <code>import PySide6</code> check.</li>
+<li><strong>The Tcl/Tk constraint on the Python runtime.</strong> uv-provisioned Python was
+  chosen partly because its builds bundle Tcl/Tk (bootstrap.py, CLAUDE.md §2,
+  build.yml comments); that requirement — and re-verifying it on every
+  <code>.python-version</code> bump — disappears.</li>
+<li><strong>Tk-compensation infrastructure</strong> that exists only because Tk lacks the
+  feature: <code>ScrollableFrame</code>, <code>ImagePanel</code>, canvas gradient/halftone painting,
+  <code>retheme_widgets</code> (re-colouring widgets that baked colors in),
+  <code>markdown_render.py</code> (252-line hand-rolled markdown→Tk-Text renderer — Qt
+  renders markdown natively), and the <code>widget.after()</code> threading gotchas.</li>
+<li><strong>Pillow from the core dependencies, probably.</strong> Outside <code>ui/</code> it's used
+  only by <code>train_convnext.py</code> and <code>eval_report.py</code>, both of which run under
+  the <code>[ml]</code> extra where torchvision already requires Pillow. Qt renders
+  numpy frames directly (<code>QImage</code>), so the core-dep slot ships ~10 MB lighter.
+  (Verify the transitive guarantee before actually dropping it.)</li>
+</ul>
+<p><strong>One prerequisite before <code>ui/</code> can be deleted:</strong> the palette data
+(<code>THEMES</code>, <code>BUILTIN_THEMES</code>, <code>normalize_palette</code>, custom-theme persistence)
+lives in <code>sorter/ui/theme.py</code>, and the Qt spike deliberately imports it from
+there (single source of truth during co-existence). It must move to a
+toolkit-neutral module first; only the Tk-rendering half of <code>theme.py</code> (ttk
+styles, fonts, canvas painting) dies with <code>ui/</code>.</p>
+<p>What stays despite feeling UI-adjacent: <code>pygrabber</code> (Windows camera names),
+opencv, and the <code>EventBus</code> (still the UI seam; migrating to signals/slots is
+a separate, optional step).</p>
+<h3 id="the-hardware-layer-stays-toolkit-neutral-pyserial-cv2">The hardware layer stays toolkit-neutral: pyserial + cv2<a class="headerlink" href="#the-hardware-layer-stays-toolkit-neutral-pyserial-cv2" title="Permanent link">&para;</a></h3>
+<p>Qt ships its own serial (QtSerialPort) and camera (QtMultimedia) stacks;
+decided against both:</p>
+<ul>
+<li><strong>pyserial stays.</strong> The serial consumer isn't the UI — it's the sort loop,
+  a daemon thread making <em>blocking</em> calls (<code>sort_and_move</code> waits on the
+  board's <code>done</code>/<code>ok</code> with a timeout). QSerialPort is async,
+  event-loop-driven, and not usable across threads without its own
+  <code>QThread</code>+loop, so adopting it means rebuilding the run loop's synchronous
+  waits as state machines — real work, no functional gain. Its enumeration
+  perks (VID/PID, friendly names) pyserial already has. It also lives in
+  <code>pyside6-addons</code>, which we deliberately don't install.</li>
+<li><strong>cv2 stays.</strong> The classifier needs raw numpy BGR frames — exactly what
+  cv2 produces and QtMultimedia doesn't want to hand out.</li>
+<li>Keeping <code>hardware/</code> Qt-free is also what lets both UIs share it during
+  co-existence, along with the emulator and the firmware-pinned protocol
+  tests.</li>
+</ul>
+<h2 id="proposed-layout-clean-slate">Proposed layout (clean-slate)<a class="headerlink" href="#proposed-layout-clean-slate" title="Permanent link">&para;</a></h2>
+<p>Per the port principle above, the Qt UI does not clone the Tk screens. The
+Tk UI's flat row of eight equal tabs treats daily activities and one-time
+setup as siblings; actual usage is that <strong>Run is where an operator lives</strong>,
+Train/Models/Community are occasional, and Camera/Serial/Image Proc/AI
+Config are setup surfaces visited rarely. The proposed shape follows what
+mature Qt apps converge on (Qt Creator, OBS, Telegram Desktop, Arduino
+IDE 2):</p>
+<div class="highlight"><pre><span></span><code>┌──────────────────────────────────────────────────────────────┐
+│ File  View  Tools  Help                                      │
+├────┬─────────────────────────────────────┬───────────────────┤
+│ ▶  │  [▶ Start]  [Feed 1]   Template ▾   │  Serial Monitor   │
+│Sort│ ┌───────────────┐ ┌───────────────┐ │  (dock, optional) │
+│ 🎓 │ │ live preview  │ │ slot cards    │ │ &lt;- ok             │
+│Train│ │ (camera)     │ │ w/ counts     │ │ -&gt; xf:0           │
+│ 📦 │ └───────────────┘ └───────────────┘ │ &lt;- done           │
+│Mdls│  recent: 9mm ✓ .223 ✓ 9mm ✓ 45acp ?│                   │
+│ 🌐 │                                     │                   │
+│Comm│                                     │                   │
+│ ⚙️ │                                     │                   │
+├────┴─────────────────────────────────────┴───────────────────┤
+│ Idle.                    ● Camera: OK   ● Serial: COM3  ⟳ 👤 │
+└──────────────────────────────────────────────────────────────┘
+</code></pre></div>
+<ol>
+<li><strong>Left activity sidebar → <code>QStackedWidget</code></strong>, not a top tab row. Four
+   activities — Sort, Train, Models, Community — plus a Settings entry
+   pinned at the bottom (the Qt Creator mode-selector / Telegram pattern).
+   Mode-driven state (Community shown only when signed in; Train muted
+   rather than hidden when the active model isn't the user's) rides the same
+   <code>mode/changed</code> event as today.</li>
+<li><strong>Sort is a dashboard, not a form.</strong> Live camera preview <em>in</em> the Sort
+   view (operators want to see what the machine sees while it runs), a
+   prominent Start/Stop, the slot-card grid with live counts, and the
+   recent-classification feed integrated — an OBS-style monitoring surface.
+   A <code>QSplitter</code> trades preview size against grid size.</li>
+<li><strong>All configuration becomes one Settings view</strong>: Camera, Serial, Image
+   Proc, AI Config, Theme as a searchable section list (Qt Creator
+   Options / OBS Settings pattern). Removes four top-level tabs in one move.
+   Updates are <em>not</em> settings: they live under <strong>Help → "Check for
+   updates…"</strong> per desktop convention (JL), with the status bar only
+   surfacing a staged update ("Restart to update").</li>
+<li><strong><code>QDockWidget</code> for utility panels.</strong> Serial monitor and classification
+   history become dockable/floatable panels — beside Sort on a wide screen,
+   floated to a second monitor, closed when irrelevant. Native Qt strength;
+   the Tk app grew detached toplevels precisely because Tk lacks this.</li>
+<li><strong>A real <code>QMenuBar</code> + shortcuts</strong> (File/View/Tools/Help): Check for
+   Updates, Open Data Folder, Sign In, About. Free discoverability and
+   accessibility; absent in Tk because Tk menus fight the theming.</li>
+<li><strong>Empty states instead of assumptions.</strong> No camera/board/model on first
+   run → guided panels with action buttons where the dashboard will be,
+   not tabs that presume a configured machine.</li>
+</ol>
+<p>Function parity per capability is unaffected — this changes where things
+live, not what exists. <strong>Spike 2 on this branch implements the shell of
+this layout</strong> (sidebar, dashboard skeleton, Settings view, serial-monitor
+dock, menu bar) with placeholders where real tab logic would go.</p>
+<h2 id="open-questions">Open questions<a class="headerlink" href="#open-questions" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Is the pain mostly <em>visual</em> (option 2 fixes it) or <em>structural</em> — DPI,
+  widget quality, testability (only option 1 fixes those)?</li>
+<li>Keep the <code>EventBus</code> as-is under Qt, or migrate to signals/slots? (Bus keeps
+  the non-UI layers untouched; signals are the idiomatic end state.)</li>
+<li>~~Wheel-size impact on first-run sync~~ — answered: end users never get
+  the extra; devs pay 36 s once. The extra now pins <code>PySide6-Essentials</code>
+  (~80 MB; venv 594 MB vs 1.0 GB with the meta-package). Anything from
+  <code>pyside6-addons</code> a future feature wants (e.g. QtWebEngine for in-app HTML
+  reports) gets added to the extra explicitly at that point.</li>
+<li>Halftone &amp; ink-outline themes: accept flat rendering under Qt, or invest
+  in a <code>paintEvent</code>/tiled-pixmap port? (Spike showed QSS alone can't do it;
+  everything else themes 1:1.)</li>
+<li>~~CI: add a <code>--extra qt</code> job~~ — answered: its own <code>qtui</code> job (Linux +
+  Windows, offscreen, no Xvfb), deliberately not a matrix leg, since
+  PySide6-Essentials is one abi3 wheel every leg would re-download.</li>
+<li><strong>For Seth — Image Proc settings persistence.</strong> The Qt page currently
+  saves each parameter as it changes (no Save button); the Tk/WinForms flow
+  is edit-then-explicit-Save. Options: (a) keep save-on-change — fewer
+  clicks, no "forgot to save" losses, but no way to abandon an experiment;
+  (b) explicit <strong>Save/Revert</strong> pair like the legacy apps — familiar to
+  existing users and gives tuning sessions an undo; (c) save-on-change plus
+  a "Restore defaults / last-saved" escape hatch. Applies to the other
+  settings pages as they land, so worth deciding once.</li>
+</ul>
+<h2 id="judgment-call-register-revisit-before-the-upstream-pr">Judgment-call register (revisit before the upstream PR)<a class="headerlink" href="#judgment-call-register-revisit-before-the-upstream-pr" title="Permanent link">&para;</a></h2>
+<p>Every flagged behavior call from the port, in one place (JL asked
+2026-08-13). "Kept Tk" = parity preserved; "Changed" = deliberate deviation,
+revisitable; "Open" = needs a decision.</p>
+<table>
+<thead>
+<tr>
+<th>Call</th>
+<th>State</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Slot-assign editor moves a headstamp off its old slot in one step (Tk greys it out and needs an untick first)</td>
+<td>Changed — same reachable states, one step fewer; "in slot #N" hint shown</td>
+<td>#1, <code>dialog_slot_assign.py</code></td>
+</tr>
+<tr>
+<td>Settings persistence: Camera/Image Proc/Serial save-on-change vs Tk's explicit Save (AI Config kept Tk's Save button)</td>
+<td><strong>Open — for Seth</strong> (options a/b/c in "Open questions")</td>
+<td>#2/#4 vs #3</td>
+</tr>
+<tr>
+<td>Import ZIP offers three-way Update / Copy / Cancel (Tk: update-or-cancel only)</td>
+<td>Changed — capability <code>model_io</code> always had; adds the "keep both" path</td>
+<td>#5, <code>models_page.py</code></td>
+</tr>
+<tr>
+<td><code>Images…</code> disabled for foreign/community models (Tk disables nothing on the Models tab; refusal happened later in Train)</td>
+<td>Changed — surfacing the ownership rule earlier</td>
+<td>#5, <code>models_page.py</code></td>
+</tr>
+<tr>
+<td>Image preview gains prev/next navigation; reclassify/delete keep it open (Tk: one-shot view, closes)</td>
+<td>Changed — capability unchanged</td>
+<td>#8, <code>dialog_image_preview.py</code></td>
+</tr>
+<tr>
+<td>Headstamp rename renames files in <code>images/</code> only — not <code>run_images/</code> or <code>feedback_images/</code></td>
+<td><strong>Kept Tk — flagged</strong>: feedback queue keeps the old label, which is what gets uploaded; widening is a small follow-up</td>
+<td>#17, <code>dialog_headstamps.py</code></td>
+</tr>
+<tr>
+<td><code>Headstamps…</code> enabled for every model incl. foreign (renaming a community model's headstamps can break its checkpoint's label mapping)</td>
+<td><strong>Kept Tk — flagged</strong>: alternative is slot-only editing for foreign models</td>
+<td>#17</td>
+</tr>
+<tr>
+<td>Rename re-syncs the active sorting template (Tk leaves the stale name and drops the slot on next apply)</td>
+<td>Changed — fixes a Tk bug</td>
+<td>#17</td>
+</tr>
+<tr>
+<td>Package-mode slot map (names in a settings key) not rewritten on rename</td>
+<td>Kept Tk — same latent issue both UIs</td>
+<td>#17</td>
+</tr>
+<tr>
+<td>Counters survive Stop/Start; package-halt dialog restored; Clear-all confirm restored</td>
+<td>Kept Tk — orchestrator overrides of agent modernizations</td>
+<td>#1/#3 overrides</td>
+</tr>
+<tr>
+<td>History view: fixed 40-entry cap (Tk: window-size-derived), 3-step recency fade (Tk: 6)</td>
+<td>Changed — cosmetic</td>
+<td>#13, <code>history_view.py</code></td>
+</tr>
+<tr>
+<td>Camera page probes devices on button click, not on page open; device/resolution apply on Apply, not instantly</td>
+<td>Changed — no surprise hardware grabs</td>
+<td>#2, <code>settings_camera.py</code></td>
+</tr>
+<tr>
+<td>Evaluator: Evaluate enabled on checkpoint presence, not ownership (community models evaluable)</td>
+<td>Kept Tk</td>
+<td>#9</td>
+</tr>
+<tr>
+<td>Train Feed button disabled without a board (Tk allows camera-only Feed; the method still works board-less)</td>
+<td>Changed — Feed follows the connection like Start</td>
+<td>#6, <code>train_page.py</code></td>
+</tr>
+<tr>
+<td>Train counts list: single click saves-and-feeds (same click-intending-selection hazard as Tk's cards)</td>
+<td><strong>Kept Tk — flagged</strong> for a rethink</td>
+<td>#6</td>
+</tr>
+<tr>
+<td>Training-console close mid-run asks and cancels (Tk closes silently, stranding the subprocess)</td>
+<td>Changed — fixes a Tk hazard</td>
+<td>#6</td>
+</tr>
+<tr>
+<td>Crop + prediction are the Sort page's primary panel; the live camera is an off-by-default toggle (Tk shows the feed)</td>
+<td>Changed — Seth, the Windows app's layout; no frame fetched/painted while off</td>
+<td><code>app.py</code></td>
+</tr>
+<tr>
+<td>Image-processing settings are per active model, mirrored into the global <code>config.image_proc</code> (both UIs previously tuned the global only)</td>
+<td>Changed — Seth; a pristine model row inherits the global, so nothing is lost</td>
+<td><code>settings_imageproc.py</code></td>
+</tr>
+<tr>
+<td>Community's bar removes the local copy when installed and current (Tk: download only)</td>
+<td>Changed — closes the install→update→remove loop. <em>Was a per-row icon button; the behavior stayed when the trigger moved to the bar</em></td>
+<td><code>community_page.py</code></td>
+</tr>
+<tr>
+<td>A second download click queues rather than being ignored</td>
+<td>Changed — JL; queue position shown as "(2 of N)"</td>
+<td><code>community_page.py</code></td>
+</tr>
+<tr>
+<td>AI Config is a sidebar activity that navigates to Settings → AI Config (it has no page of its own)</td>
+<td>Changed — Seth; mirrors Train's slot in the other mode</td>
+<td><code>app.py</code></td>
+</tr>
+<tr>
+<td>The sidebar is two groups: Sort/Models/Community, a hairline, then the Train / AI Config pair (Settings still pinned)</td>
+<td>Changed — JL; the pair is one choice, and the line says so</td>
+<td><code>app.py</code>, <code>theme.py</code></td>
+</tr>
+<tr>
+<td>Train and AI Config are both always in the sidebar, muted (not disabled) when not the live mode; the muted one explains itself (Tk hides both)</td>
+<td>Changed — JL never discovered Train existed while it was hidden; the mirror is symmetric</td>
+<td><code>app.py</code>, <code>train_page.py</code>, <code>settings_ai.py</code></td>
+</tr>
+<tr>
+<td>~~Models activation is the Active column's radio, not a per-row ✓ button plus "● ACTIVE" text~~</td>
+<td><strong>Reverted 2026-08-14</strong> — JL lived with the row controls and chose the bar; activation is Activate on the selection-scoped bar again (Tk's own idiom), with "● ACTIVE" back as the column's marker</td>
+<td><code>models_page.py</code></td>
+</tr>
+<tr>
+<td>~~Both tables carry row-scoped controls (Models ✎/×, Community ↓/↻/×)~~</td>
+<td><strong>Reverted 2026-08-14</strong> — JL, after living with them: one bar per table, scoped to the selection. Everything the experiment brought that isn't the trigger surface stayed (download queue, <code>installed_state</code> sync on <code>models/changed</code>, the Includes column, full sorting)</td>
+<td><code>models_page.py</code>, <code>community_page.py</code></td>
+</tr>
+<tr>
+<td>Themes are also a panel, applying on click, alongside Settings → Theme</td>
+<td>Changed — trying a theme and configuring one are different activities</td>
+<td><code>app.py</code></td>
+</tr>
+<tr>
+<td>Panels are QtAds, with "Re-dock panels" as a guaranteed escape hatch</td>
+<td>Changed — stock <code>QDockWidget</code> drag-docking was unusable on JL's box</td>
+<td><code>app.py</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="free-hands-wishlist">Free-hands wishlist<a class="headerlink" href="#free-hands-wishlist" title="Permanent link">&para;</a></h2>
+<p>Things the orchestrator would change given a free hand — parked here (JL
+2026-08-12) so the port stays conservative. None are commitments; each would
+be its own proposal:</p>
+<ul>
+<li><strong>Signals/slots over the polled EventBus.</strong> The 50 ms drain timer is a Tk
+  inheritance; Qt's queued signal connections deliver cross-thread events
+  with no polling, no <code>max_items</code> tuning, and type-checked payloads. Big
+  refactor of the seam both UIs share — only sensible after <code>ui/</code> retires.</li>
+<li>~~<strong>Toolkit-neutral palette module.</strong>~~ Done 2026-08-13, but as a
+  drift-pinned <em>copy</em> (<code>qtui/palettes.py</code>) rather than a shared module, since
+  the real thing means editing <code>ui/</code>. Retiring <code>ui/</code> collapses the copy back
+  into one module.</li>
+<li><strong>Typed run events.</strong> <code>run/*</code> payloads are ad-hoc dicts ("counts must key
+  off <code>ok</code>" is tribal knowledge pinned only by tests); dataclasses would make
+  the contracts self-documenting.</li>
+<li><strong>A real async classify pipeline.</strong> <code>RunController</code> blocks per case
+  (capture → classify → sort serially); overlapping the next capture with
+  the current classify could raise throughput on slow backends. Hardware
+  timing risk — needs Seth.</li>
+<li><strong>First-run wizard.</strong> A fresh install now lands on a guided empty state
+  (connect a board / connect a camera) instead of an empty grid; a real
+  multi-step wizard through picking a model is still open.</li>
+<li>~~<strong>SVG icons over emoji glyphs</strong> in the sidebar~~ — done 2026-08-13
+  (<code>qtui/icons.py</code>: one stroke-only SVG per motif, inked from the live
+  palette at render time).</li>
+<li><strong>Settings search box</strong> (the Qt Creator pattern) once the section count
+  grows past six.</li>
+<li><strong>Live save-state indicator</strong> on settings pages ("Saved ✓" flash) if the
+  save-on-change model wins with Seth — makes the invisible persistence
+  visible.</li>
+<li><strong>qtui subpackages, maybe, at the end.</strong> Flat-with-prefixes (<code>settings_*</code>,
+  <code>dialog_*</code>, <code>*_page</code>) matches the Tk <code>ui/</code> convention and reads fine at
+  ~27 modules; revisit at increment 16 only if a genuinely cohesive cluster
+  (e.g. community/auth) emerges — group by feature if so, never by widget
+  kind. Not worth the import/blame churn mid-port (JL asked 2026-08-13).</li>
+<li><strong>Drop the <code>-100.00%</code> class of sentinel plumbing</strong>: <code>api_client</code> returns
+  <code>-1</code> confidence for "server sent none"; an <code>Optional[float]</code> would kill a
+  whole family of display guards.</li>
+</ul>
+<h2 id="windows-app-gap-analysis-guide-v1153-for-the-pr">Windows-app gap analysis (guide v1.1.53) — for the PR<a class="headerlink" href="#windows-app-gap-analysis-guide-v1153-for-the-pr" title="Permanent link">&para;</a></h2>
+<p>Functionality inventory from the official Application Guide compared against
+this branch (verified against the Tk source, not assumed). Three buckets:</p>
+<h3 id="a-missing-in-the-whole-python-port-tk-and-qt-pre-existing-gaps">A. Missing in the whole Python port (Tk AND Qt) — pre-existing gaps<a class="headerlink" href="#a-missing-in-the-whole-python-port-tk-and-qt-pre-existing-gaps" title="Permanent link">&para;</a></h3>
+<p>Not qtui regressions: none of these exist in <code>sorter/ui/</code> either. Each is a
+candidate work item; per-item agent tasks in a future increment.</p>
+<ul>
+<li>[ ] <strong>Run modes</strong> (Single/Multi Image Highest Confidence, Highest Average,
+  Popular Highest Average) with <strong>Sample Rotations</strong> count and Serial/Parallel
+  prediction — the multi-rotation ensemble prediction pipeline. The Python
+  port always classifies one image once. (Guide pp. 30–31)</li>
+<li>[ ] <strong>Run speed control</strong> — slider slowing the sort loop.</li>
+<li>[ ] <strong>Model Enhancer</strong> — clone-to-new-model with center images, add primer
+  masks, add rotations, <strong>balance model</strong>, processing-mode conversion, and
+  <strong>binary model creation</strong> (one-vs-rest). (pp. 21–24)</li>
+<li>[ ] <strong>Model Statistics</strong> — confusion matrix on a held-out slice, precision/
+  recall per headstamp, training time/date/count. The evaluator overlaps but
+  is folder-based; no confusion view exists. (pp. 27–28)</li>
+<li>[ ] <strong>Train screen: Feed Batch</strong> — auto-feed a hopper of same-headstamp
+  brass with a speed slider. (p. 25)</li>
+<li>[ ] <strong>Train screen: UNDO</strong> last added image set. (p. 26)</li>
+<li>[ ] <strong>Train screen: Button Mode automation</strong> chains ([Add]→Feed,
+  [Save]→Add→Feed, …). (p. 26)</li>
+<li>[ ] <strong>Evaluator: "Improve Training for Anomalies"</strong> (adds rotations for
+  flagged images). (p. 28)</li>
+<li>[ ] <strong>Capture-time rotations</strong> (Use Rotations + rotation count + preview
+  panel) — the port trains ConvNeXt with runtime augmentation instead;
+  functionally overlapping but the guide's explicit-rotations workflow (and
+  Balance-by-rotations) has no equivalent. Decide: adopt or document the
+  difference.</li>
+<li>[ ] <strong>Image-processing detection modes</strong> Manual (click-to-crop X/Y/R) and
+  Hybrid (manual region + auto inside) — the port has Hough only (line-scan
+  ported but hidden). Manual crop is the guide's escape hatch for difficult
+  lighting. (pp. 12–14)</li>
+<li>[ ] <strong>Processing modes</strong> beyond Color (BlackAndWhite, Grayscale, EdgesOnly,
+  Blur, GSBlur) as capture/model settings with their parameter sets. Verify
+  what <code>model_mode</code> actually covers in the port; the guide's six modes are
+  richer. (pp. 14–15, 17–18)</li>
+<li>[ ] <strong>Home Feed</strong> button (feed-wheel homing; the port has Home Sorter only).</li>
+<li>[ ] <strong>Advanced Settings free-form key/value grid</strong> for custom firmware
+  parameters (the port has the fixed 14-field list; custom keys can't be
+  sent). (p. 10)</li>
+<li>[ ] <strong>Run screen: Clear Slots</strong> one-click unbind-all (templates partially
+  cover; no explicit clear).</li>
+<li>[ ] <strong>Per-headstamp counters inside each slot</strong> (the port counts per slot
+  total only). (p. 29 #2)</li>
+<li>[ ] <strong>Package-mode alarm parity</strong>: guide beeps 3× and pauses before moving
+  to the next slot; port beeps once. (p. 31)</li>
+<li>[ ] <strong>Config-DB automatic backups</strong> (last 10 retained; corrupted-DB restore
+  prompt). SQLite+WAL is more robust than the JSON store this guarded, but
+  an automatic backup/restore story is still absent. (p. 6)</li>
+<li>[ ] <strong>Serial logging to file</strong> as a launch setting (the Qt monitor's Save…
+  covers manual export; continuous logging doesn't exist).</li>
+</ul>
+<h3 id="b-qt-polish-gaps-small-from-jls-testing-guide-details">B. Qt polish gaps (small, from JL's testing + guide details)<a class="headerlink" href="#b-qt-polish-gaps-small-from-jls-testing-guide-details" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Image Processing page: label the two previews <strong>Original</strong> /
+  <strong>Processed</strong> and show <strong>processing time in ms</strong> (guide p. 12; JL).</li>
+<li>[ ] Serial monitor keyboard shortcut (guide: Ctrl+K).</li>
+<li>[ ] Emulation-mode capture parity: guide's emulator serves random sample
+  images so camera-less demo works end to end; port's emulator covers serial
+  only. Consider bundling a handful of sample frames.</li>
+</ul>
+<h3 id="c-equivalent-by-design-no-action-explain-in-pr">C. Equivalent by design (no action; explain in PR)<a class="headerlink" href="#c-equivalent-by-design-no-action-explain-in-pr" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Deep-learning toggle (Inception vs ML.Net) ↔ ConvNeXt size choice in
+  training config. Different engines, same knob.</li>
+<li>Sign-in/licensing (guide pp. 3–6) ↔ deliberately absent: OSS build has no
+  license gate; community sign-in is optional.</li>
+<li>Serial monitor, updater, themes, community sharing, sorting templates,
+  wish-list capture: port-side features that exceed the guide.</li>
+</ul>
+<h2 id="findings-for-the-pr-description">Findings for the PR description<a class="headerlink" href="#findings-for-the-pr-description" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>opencv-python → opencv-python-headless.</strong> The standard wheel bundles its
+  own Qt for <code>cv2.imshow</code> (which nothing here calls) and registers its plugin
+  dir on import; those plugins loading against PySide6's Qt libraries caused
+  real rendering corruption (dock float→re-dock artifacts, JL-reproduced).
+  Headless is API-identical, ships no Qt, registers nothing. A launch-site
+  scrub of <code>QT_QPA_PLATFORM_PLUGIN_PATH</code> stays as defense for environments
+  with another cv2 on the path.</p>
+</li>
+<li>
+<p><strong><code>libxcb-cursor0</code> becomes a soft Linux dependency.</strong> Qt ≥ 6.5 needs it to
+  load the xcb platform plugin; with the <code>xcb;wayland</code> default (floating
+  docks are frozen under native Wayland — upstream Qt), machines without it
+  silently fall back to Wayland and lose dock floating.
+  <strong>Fragmentation policy (JL):</strong> feature-detection with graceful degradation,
+  never distro-detection with hard requirements — the app must launch on any
+  Linux with no new system packages. Plan: (1) runtime check of
+  <code>QApplication.platformName()</code>; when Wayland loaded where xcb was
+  preferred, a one-time package-manager-neutral hint (<code>libxcb-cursor0</code> on
+  Debian/Ubuntu, <code>xcb-util-cursor</code> on Fedora/Arch) pointing at the guide;
+  (2) <code>bootstrap.py</code>'s existing probe already handles apt/dnf/pacman with a
+  per-manager package map — adding the cursor lib is one row per manager,
+  ask-first and never blocking; (3) the guide's Linux notes carry the
+  per-family package table (#18 scope). Also verify whether headless opencv
+  still dlopens libGL at all — if not, the probe may shrink instead of grow
+  (#16).</p>
+</li>
+</ul>
+<h2 id="decision-log">Decision log<a class="headerlink" href="#decision-log" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Date</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-08-12</td>
+<td>Ruled out web-rendered (NiceGUI/Flet), Kivy, Dear PyGui, wxPython against the four requirements. PySide6 identified as the only full-fit; skin-refresh kept as fallback. No go/no-go yet.</td>
+</tr>
+<tr>
+<td>2026-08-12</td>
+<td>Spike built as a <strong>co-existing</strong> UI: <code>sorter/qtui/</code> beside <code>ui/</code>, <code>--qt</code>/<code>CASESORTER_QT=1</code> opt-in, PySide6 as a <code>[qt]</code> extra, palettes shared from <code>sorter.ui.theme</code>. Lets Qt work proceed in parallel while tracking upstream Tk changes.</td>
+</tr>
+<tr>
+<td>2026-08-12</td>
+<td>Port principle set: <strong>function parity, not UI parity</strong> — the Qt UI redesigns the UX freely as long as every capability of the Tk UI survives.</td>
+</tr>
+<tr>
+<td>2026-08-12</td>
+<td>Spike implemented and verified (17 offscreen tests, full suite green, ruff/ty clean). Headless story confirmed; wheel estimate corrected to 256 MB (meta) vs ~80 MB (<code>PySide6-Essentials</code> — recommended); halftone/ink themes flagged as the one theming gap.</td>
+</tr>
+<tr>
+<td>2026-08-12</td>
+<td><code>[qt]</code> extra swapped to <code>PySide6-Essentials==6.11.1</code> — pixel-identical (spike uses only QtCore/QtGui/QtWidgets, all in essentials; the meta-package adds only unused addons + stubs). Gotcha for existing dev venvs: the wheels overlap, so uninstalling the meta clobbers <code>PySide6/__init__.py</code> and the stubs — fix with <code>uv sync --extra qt --reinstall-package pyside6-essentials</code>.</td>
+</tr>
+<tr>
+<td>2026-08-12</td>
+<td>Hardware layer stays toolkit-neutral (pyserial + cv2); QtSerialPort/QtMultimedia rejected — see "The hardware layer stays toolkit-neutral".</td>
+</tr>
+<tr>
+<td>2026-08-12</td>
+<td>Clean-slate layout proposed (activity sidebar + Sort dashboard + unified Settings + docks + menu bar — see "Proposed layout"); spike 2 implements its shell.</td>
+</tr>
+<tr>
+<td>2026-08-12</td>
+<td>Spike 3 (showcase) implemented: Sort dashboard sorts for real — slot cards with live counts, RunController wired, recent feed, Settings→Serial with the Emulated port. 54 headless tests.</td>
+</tr>
+<tr>
+<td>2026-08-12</td>
+<td>Cost estimate re-baselined from spike 3's measurement: ~8–12 h session time to parity (was 15–25 h; the "dense chunks are slower" assumption measured false).</td>
+</tr>
+<tr>
+<td>2026-08-12</td>
+<td><strong>Windows validated</strong>: the showcase build runs on a real Windows machine from a plain <code>uv sync --extra qt</code> — sidebar, dashboard and all; only runtime noise is OpenCV's DSHOW "no camera" warning. Requirement 2 now confirmed empirically on Linux + Windows.</td>
+</tr>
+<tr>
+<td>2026-08-12</td>
+<td>Spike 2 built and verified (28 offscreen tests, full unit suite green, ruff/ty clean). New gotchas: <code>QAction.menu()</code> deletes the menu it returns; dock title-bar buttons aren't themable without icons. Sidebar glyphs stay emoji until real <code>QIcon</code>s exist.</td>
+</tr>
+<tr>
+<td>2026-08-13</td>
+<td><strong>Palettes copied, not imported</strong> (<code>qtui/palettes.py</code>, drift-pinned by <code>test_qt_drift_pins.py</code>): <code>ui/theme.py</code> imports tkinter at module level, so importing it made a PySide6-only install unlaunchable. Custom themes register into the running UI's registry; the shared <code>ui.custom_themes</code> row is what still crosses between them.</td>
+</tr>
+<tr>
+<td>2026-08-13</td>
+<td><strong>Sort page grounded on the crop, not the feed</strong> (Seth, the Windows app's layout): the cropped headstamp and the call made on it are the primary panel, the live camera an off-by-default toggle (no frame is fetched or painted while off; the grab thread keeps running). History moved wholly into its panel.</td>
+</tr>
+<tr>
+<td>2026-08-13</td>
+<td><strong>Vector icons replace the emoji glyphs</strong> — one stroke-only SVG per motif, inked from the live palette at render time (Seth's concept art; Sort/Train carry the machine's own identity). The app/taskbar mark is the one fixed-neutral exception.</td>
+</tr>
+<tr>
+<td>2026-08-13</td>
+<td><strong>Model-scoped image processing</strong> (Seth): crop and primer settings follow the active model — the model row has carried them since the WinForms port and nothing read them. Mirrored into <code>config.image_proc</code>, which stays the live copy the run reads; a pristine model row inherits the global rather than resetting it. LED brightness stays global (it is a board setting).</td>
+</tr>
+<tr>
+<td>2026-08-13</td>
+<td><strong>Support package</strong> (Seth): Help → Export support package… — the configuration as a pasteable report plus a ZIP with a machine-readable <code>config.json</code>. Redaction happens at collection time (API key as set/not set, paths relative to the data root, auth cache never read).</td>
+</tr>
+<tr>
+<td>2026-08-13</td>
+<td>Casing convention: <strong>sentence case for controls, Title Case for window/panel titles</strong> (JL). Zoom sliders (50–200%, persisted per panel) on the classification history and serial monitor.</td>
+</tr>
+<tr>
+<td>2026-08-14</td>
+<td><strong>Docks moved from <code>QDockWidget</code> to Qt Advanced Docking System</strong> (<code>pyside6-qtads</code>, LGPL-2.1+, ~600 KB wheel that pins the same <code>PySide6-Essentials==6.11.1</code>). Two rounds of stock-Qt fixes still left drag-docking unusable on JL's Linux box; QtAds brings VS Code-style drop-indicator overlays and lays out in its own splitters. Net <em>removal</em>: the whole QMainWindowLayout workaround stack (transition repaint, collapsed-dock floor, 1px resize nudge) is gone — those failure modes don't exist here. API differences that leak: <code>isClosed()</code> not <code>isHidden()</code>, <code>setFloating()</code> takes no argument (re-dock is <code>addDockWidget</code>), and <code>addDockWidget</code> re-opens a closed panel. Theming is <code>ads--*</code> QSS with QtAds's own sheet off (<code>DisableStylesheet</code>), which also means re-declaring its button-icon rules. No new system deps (<code>ldd</code>: libGL/libxkbcommon/libxcb, all already installed by the qtui CI job).</td>
+</tr>
+<tr>
+<td>2026-08-14</td>
+<td><strong>Row actions on the Models table</strong> (JL), matching Community's: ✓/✎/× as fixed-size icon buttons in the row, the AI Config row getting ✓ alone; the bottom bar keeps only the selection-scoped Images…/Headstamps…/Evaluate…/Export…. Community's button carries the full install → update → remove lifecycle, and a second click queues behind the running download. <strong>Superseded the same day — see the revert below.</strong></td>
+</tr>
+<tr>
+<td>2026-08-14</td>
+<td><strong>Foot strips, green primary far right</strong> (JL) on both Sort and Train, with the run counters and the template picker moved onto the slot grid's own header row. Train's capture reads as one column under the image; its counts sit behind a 50/50 splitter and reflow into columns.</td>
+</tr>
+<tr>
+<td>2026-08-14</td>
+<td><strong>Themes panel + AI Config activity</strong> (Seth via JL): a panel listing every theme, applying on click and synced with Settings → Theme; an AI Config sidebar entry that takes Train's place in AI Config mode and navigates to its Settings section (it has no page of its own — a second mount would double-parent the widget). <strong>The routing was superseded the same day — see the promotion to a page below.</strong></td>
+</tr>
+<tr>
+<td>2026-08-14</td>
+<td><strong>In-app guide is one file</strong> (<code>docs/guide/GUIDE.md</code>), rendered by GitHub and by the guide panel alike, opened at the topic for wherever the user is. <code>topic_for</code> covers every activity and Settings section, and a test pins each answer to a real heading so the two can't drift.</td>
+</tr>
+<tr>
+<td>2026-08-14</td>
+<td><strong>Sidebar in two groups</strong> (JL): Sort/Models/Community, a palette-driven hairline, then Train and AI Config — both always visible, exactly one live (trainable local model → Train; no active model → AI Config; a community model → neither), tooltips saying which. The muted AI Config now mirrors Train's explainer instead of dumping the user in Settings: it names the active model and jumps to Models. (First as a notice above a greyed form; the page below completes the mirror.)</td>
+</tr>
+<tr>
+<td>2026-08-14</td>
+<td><strong>AI Config leaves Settings and becomes an activity page</strong> (JL, live-testing): it was a Settings section that <code>open_activity</code> special-cased, so a sidebar click landed the user on <em>Settings</em> with the entry unchecked. It is now <code>qtui/ai_page.py</code> — a <code>QStackedWidget</code> mirroring Train's exactly: the server form when it is the backend, otherwise a full-page explainer naming the model classifying instead plus a jump to Models (the greyed-form-with-a-notice is gone; a form you can't use is noise). <code>SETTINGS_SECTIONS</code> no longer lists AI Config, <code>open_activity</code> has no special case left, and the guide's AI Config section moved out from under Settings.</td>
+</tr>
+<tr>
+<td>2026-08-14</td>
+<td><strong>The Models table's "● ACTIVE" marker is inked in the action colour</strong> (JL, live-testing): activity should read by colour, not only by text. An item foreground brush is baked in and no stylesheet reaches it, so <code>models_page.apply_palette()</code> joins the serial log and history cards in <code>_apply_theme</code>'s hand re-render list.</td>
+</tr>
+<tr>
+<td>2026-08-14</td>
+<td><strong>Row actions reverted; both tables act from a selection-scoped bar</strong> (JL, after living with the experiment above). Models is Delete … Activate with "● ACTIVE" back as the Active column's marker; Community is Remove plus one state-driven primary whose label and role follow the selected row's <code>installed_state</code> and the download queue. Only the trigger surface moved: the queue, the <code>models/changed</code> state sync, the Includes column and full column sorting all stayed. Net simplification — no item widgets in either table, so nothing has to be rebuilt after a sort or <code>_pin_ai_row</code>.</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      GPL-3.0-or-later
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/sjseth/AI-Case-Sorter-Py" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.top", "navigation.tracking", "content.action.edit", "toc.follow", "search.suggest"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
