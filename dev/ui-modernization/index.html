@@ -576,15 +576,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-retiring-ui-would-remove-beyond-the-directory-itself" class="md-nav__link">
+  <a href="#what-retiring-ui-removed-beyond-the-directory-itself" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What retiring ui/ would remove (beyond the directory itself)
+        What retiring ui/ removed (beyond the directory itself)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="What retiring ui/ would remove (beyond the directory itself)">
+    <nav class="md-nav" aria-label="What retiring ui/ removed (beyond the directory itself)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -942,15 +942,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-retiring-ui-would-remove-beyond-the-directory-itself" class="md-nav__link">
+  <a href="#what-retiring-ui-removed-beyond-the-directory-itself" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What retiring ui/ would remove (beyond the directory itself)
+        What retiring ui/ removed (beyond the directory itself)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="What retiring ui/ would remove (beyond the directory itself)">
+    <nav class="md-nav" aria-label="What retiring ui/ removed (beyond the directory itself)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1112,10 +1112,13 @@
 
 <h1 id="ui-modernization-research-decisions">UI modernization — research &amp; decisions<a class="headerlink" href="#ui-modernization-research-decisions" title="Permanent link">&para;</a></h1>
 <p>Working document tracking the investigation into replacing or refreshing the
-Tkinter UI. Audience: Seth + contributors. Status: <strong>research plus a built,
-opt-in Qt UI</strong> — the branch carries a full-parity <code>sorter/qtui/</code> behind
-<code>--qt</code> (see "Current state" below); whether it <em>replaces</em> <code>sorter/ui/</code> is
-still Seth's call, and nothing here retires the Tk UI.</p>
+Tkinter UI, and the port that came out of it. Audience: Seth + contributors.
+Status: <strong>decided and done</strong> — as of 2026-08-14 the Tk UI is deleted, the Qt
+package has taken the <code>sorter/ui/</code> name, and PySide6 is a core dependency
+(see the decision log's last two entries). Everything below the "Current
+state" section is the record of how that was reached, written while the Qt
+package was still called <code>qtui</code>; it is deliberately not rewritten to match
+the outcome.</p>
 <h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">&para;</a></h2>
 <p>The current Tkinter/ttk UI looks dated and has structural ceilings we can't
 theme our way out of:</p>
@@ -1235,7 +1238,7 @@ ceilings remain.</p>
   <code>SerialBroker</code>/<code>EmulatorBroker</code>, <code>Config</code>/<code>SettingsRepo</code>.</li>
 <li><strong>One source of truth for colors:</strong> the palettes and the custom-theme
   registry live in <code>qtui/palettes.py</code> — a copy of <code>ui/theme.py</code>'s palette
-  half, byte-compared by <code>test_qt_drift_pins.py</code> — rendered as QSS by
+  half, byte-compared by <code>test_drift_pins.py</code> — rendered as QSS by
   <code>qtui/theme.py::build_stylesheet</code>. (It <em>imported</em> <code>sorter.ui.theme</code> until
   2026-08-13; <code>ui/theme.py</code> imports tkinter at module level, so a
   PySide6-only install couldn't launch. Both UIs still read the same
@@ -1485,7 +1488,8 @@ UI, assignment editing, the community/auth surfaces that need the real
 backend) and in increments that need look-and-feel rounds. The user-paced
 parts (bench validation against the physical machine) still sit outside
 these hours and set the calendar time regardless.</p>
-<h2 id="what-retiring-ui-would-remove-beyond-the-directory-itself">What retiring <code>ui/</code> would remove (beyond the directory itself)<a class="headerlink" href="#what-retiring-ui-would-remove-beyond-the-directory-itself" title="Permanent link">&para;</a></h2>
+<h2 id="what-retiring-ui-removed-beyond-the-directory-itself">What retiring <code>ui/</code> removed (beyond the directory itself)<a class="headerlink" href="#what-retiring-ui-removed-beyond-the-directory-itself" title="Permanent link">&para;</a></h2>
+<p><strong>Done 2026-08-14</strong> — the list below was the plan, and it is what happened.</p>
 <p>Audited 2026-08-12: outside <code>src/sorter/ui/</code> and <code>tests/unit/ui/</code>, nothing in
 <code>src/</code> imports tkinter or <code>sorter.ui</code> except the one launch line in
 <code>__main__.py</code> — the layering is genuinely clean. Dropping <code>ui/</code> at the end of
@@ -1969,7 +1973,7 @@ candidate work item; per-item agent tasks in a future increment.</p>
 </tr>
 <tr>
 <td>2026-08-13</td>
-<td><strong>Palettes copied, not imported</strong> (<code>qtui/palettes.py</code>, drift-pinned by <code>test_qt_drift_pins.py</code>): <code>ui/theme.py</code> imports tkinter at module level, so importing it made a PySide6-only install unlaunchable. Custom themes register into the running UI's registry; the shared <code>ui.custom_themes</code> row is what still crosses between them.</td>
+<td><strong>Palettes copied, not imported</strong> (<code>qtui/palettes.py</code>, drift-pinned by <code>test_drift_pins.py</code>): <code>ui/theme.py</code> imports tkinter at module level, so importing it made a PySide6-only install unlaunchable. Custom themes register into the running UI's registry; the shared <code>ui.custom_themes</code> row is what still crosses between them.</td>
 </tr>
 <tr>
 <td>2026-08-13</td>
@@ -2026,6 +2030,14 @@ candidate work item; per-item agent tasks in a future increment.</p>
 <tr>
 <td>2026-08-14</td>
 <td><strong>Row actions reverted; both tables act from a selection-scoped bar</strong> (JL, after living with the experiment above). Models is Delete … Activate with "● ACTIVE" back as the Active column's marker; Community is Remove plus one state-driven primary whose label and role follow the selected row's <code>installed_state</code> and the download queue. Only the trigger surface moved: the queue, the <code>models/changed</code> state sync, the Includes column and full column sorting all stayed. Net simplification — no item widgets in either table, so nothing has to be rebuilt after a sort or <code>_pin_ai_row</code>.</td>
+</tr>
+<tr>
+<td>2026-08-14</td>
+<td><strong>The Tk UI is retired.</strong> <code>src/sorter/ui/</code> (30 modules) and <code>tests/unit/ui/</code> (21) are deleted, <code>--qt</code>/<code>CASESORTER_QT</code> are gone, and <code>python -m sorter</code> launches <code>qtui</code> unconditionally. PySide6-Essentials + pyside6-qtads move from the <code>[qt]</code> extra into the core <code>dependencies</code>; the extra is removed. Why now: JL live-tested the Qt UI to parity and Seth approved, and carrying two UIs was costing a drift-pin test, a duplicated palette module, a second CI job and a per-file ty override, none of which buy anything once one of the two is the only one anyone launches. Consequences worth knowing: ty now really type-checks <code>sorter/qtui/</code> (it could not resolve PySide6 while the extra was absent from CI — the tree came out at <strong>zero</strong> new diagnostics), the UI tests fold into the normal matrix on <code>QT_QPA_PLATFORM=offscreen</code> with <strong>no Xvfb anywhere</strong>, and every matrix leg now downloads the ~80 MB abi3 PySide6 wheel. The <code>qtui</code> package is <strong>not</strong> renamed to <code>ui</code> in this step; that lands separately so the rename stays reviewable as pure churn.</td>
+</tr>
+<tr>
+<td>2026-08-14</td>
+<td><strong><code>sorter/qtui/</code> → <code>sorter/ui/</code>, <code>tests/unit/qtui/</code> → <code>tests/unit/ui/</code></strong> — a separate commit from the retirement above, so the rename reads as pure churn and the substantive change reads on its own. <code>git mv</code> for both, so it records as a rename. Two follow-ons were not mechanical: <code>tests/unit/ui/conftest.py</code>'s <code>no_cover</code> filter matched a hardcoded <code>"tests/unit/qtui"</code> and now derives the directory from <code>__file__</code> (a stale literal there puts the whole UI suite back under the tracer that segfaults it, silently); and the debugging skill's advice to "confirm with <code>--no-cov</code>" turned out to be wrong — that flag leaves pytest-cov loaded with no session and every marked test dies on <code>AttributeError: 'NoneType' object has no attribute 'pause'</code>. <code>pytest -p no:cov -o addopts=-ra</code> is the working form.</td>
 </tr>
 </tbody>
 </table>
