@@ -1,6 +1,6 @@
 """File-operation logic shared by the model image manager and the evaluator.
 
-Pure pathlib — no tkinter/cv2/PyTorch — so it runs under every interpreter.
+Pure pathlib — no Qt/cv2/PyTorch — so it runs under every interpreter.
 """
 
 from __future__ import annotations

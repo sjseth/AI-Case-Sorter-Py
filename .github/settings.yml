@@ -95,7 +95,7 @@ labels:
   # Subsystem labels, mapped to CLAUDE.md's architecture boundaries.
   - name: ui
     color: "1d76db"
-    description: "Tkinter UI: tabs, dialogs, theme"
+    description: "PySide6 UI: pages, dialogs, theme"
   - name: training
     color: "6f42c1"
     description: "Model training, local inference, evaluation"

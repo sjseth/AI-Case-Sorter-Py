@@ -1,19 +1,16 @@
 """AI Config activity — server settings, headstamp manager, single-shot test.
 
-Behavior reference: ``sorter/ui/tab_ai.py`` (config keys, defaults and the
-explicit-Save trigger come from there) and ``sorter/ml/api_client.py`` for the
-request itself.
+Request reference: ``sorter/ml/api_client.py``.
 
-Three deliberate differences from the Tk tab, all noted where they happen:
+Two things worth knowing, both noted where they happen:
 
 * The test shot captures straight off the camera instead of feeding a case
   through the board — a config surface should be testable without hardware.
-* Headstamp mutations post ``run/assignment_changed`` so the Sort grid follows
-  along; the Tk tab has no slot editor here, so it posts nothing.
 * Rename is assembled from ``remove`` + ``add`` — ``Config`` has no rename API
   and AI Config-mode headstamps carry nothing but a name and a slot.
 
-Save is on the **Save** button, as in Tk — this page does not save on edit.
+Unlike the settings pages, this one saves on the **Save** button, not on edit:
+a half-typed endpoint must not become the live one.
 
 The page is a two-card stack, exactly as Train's is: the form when this is the
 backend that classifies (no active model), or — when a local model is doing it
@@ -28,9 +25,9 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
-from PySide6.QtCore import Qt  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QPixmap  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,

@@ -1,14 +1,10 @@
 """Zoomed single-image preview with prev/next navigation, reclassify and delete.
 
-Qt form of ``sorter.ui.dialog_image_preview``, which had no navigation at all
-(one image, then closed) — prev/next across the caller's current page is an
-explicit ask for this increment (docs/ui-modernization.md's "conservative UX"
-rule allows layout/idiom modernization; this is that, not a workflow change).
-Reclassify/delete keep the Tk dialog open afterward so browsing continues
-instead of forcing a reopen from the grid.
+Prev/next walks the caller's current page. Reclassify and delete keep the
+dialog open afterward so browsing continues instead of forcing a reopen from
+the grid.
 
-``on_changed`` fires after every mutation so the caller (the grid) can resync;
-payload shape matches the Tk dialog's:
+``on_changed`` fires after every mutation so the caller (the grid) can resync:
     {"action": "reclassified", "old_path", "new_path", "new_headstamp"}
     {"action": "deleted", "old_path"}
 
@@ -23,9 +19,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PySide6.QtCore import Qt  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QImage, QPixmap  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,

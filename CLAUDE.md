@@ -3,7 +3,7 @@
 Guidance for AI assistants (and humans) working in this repository. It maps the
 architecture, the moving parts, and the conventions so a new contributor can be
 productive without reverse-engineering the whole tree. **Keep this file current:
-when you add a tab, change the data model, or alter a subsystem boundary, update
+when you add a page, change the data model, or alter a subsystem boundary, update
 the relevant section here in the same change.**
 
 **Docs are part of every functionality change, visible or not.** A change that
@@ -11,7 +11,7 @@ alters behavior ships with its documentation in the same change: this file's
 relevant section, the module docstring it invalidates, `docs/guide/GUIDE.md`
 for anything an operator can see or do (its headings are load-bearing — the F1
 help maps to them; `tests/unit/qtui/test_qt_help.py` pins the anchors), and
-`docs/ui-modernization.md` for Qt-UI design decisions. Stale docs are bugs:
+`docs/ui-modernization.md` for UI design decisions. Stale docs are bugs:
 they were the direct cause of a full retroactive documentation sweep on
 2026-08-14, and the guide misdirecting an operator is a user-facing defect.
 
@@ -25,7 +25,7 @@ casings by **headstamp** (the stamp on the base of the case). A camera
 photographs each case, an image classifier predicts the headstamp, and a
 serial-connected sorting machine drops the case into the correct bin.
 
-It is the **full-parity Python/Tkinter version of the existing Windows-only
+It is the **full-parity Python/Qt version of the existing Windows-only
 WinForms application** and is intended to eventually replace it. Much of the
 code deliberately mirrors the WinForms behavior.
 
@@ -38,7 +38,7 @@ Two ways to classify:
 - **AI Config mode** (no local model active): send the cropped image to an
   OpenAI-compatible HTTP server (`/v1/chat/completions`).
 - **Local model mode**: run a PyTorch **ConvNeXt** model locally. The model can
-  be one the user trained in the Train tab, a pretrained model downloaded from
+  be one the user trained on the Train page, a pretrained model downloaded from
   the community, or one imported from a ZIP — running locally does **not** require
   the user to have trained it. PyTorch is an **optional** dependency
   (`pip install .[ml]`) installed on demand.
@@ -49,15 +49,15 @@ Two ways to classify:
 
 **Entry point:** `src/sorter/__main__.py` → initializes paths, opens the
 SQLite DB (migrating from a legacy `data/config.json` if present), loads
-`Config`, and launches `sorter.ui.app.MainWindow`. Launched as
+`Config`, and launches `sorter.qtui.app.run_app`. Launched as
 `python -m sorter` with `PYTHONPATH=src`, which `bootstrap.py` sets on the
 child process — the package is deliberately **never installed** into the venv
 (`uv sync --no-install-project`), so the environment is what makes `-m`
 resolve. **No module in `src/sorter/` may rewrite `sys.path`**
 (`tests/unit/test_entry_point.py` enforces it): the launcher owns the path,
 and a hand-rolled shim that inserts `src/sorter` instead of `src/` puts every
-subpackage on the path as a top-level name, where `ui`, `data` and `update`
-shadow same-named third-party packages.
+subpackage on the path as a top-level name, where `data` and `update` shadow
+same-named third-party packages.
 
 **One exception, and it is never run from this tree:**
 `src/sorter/_legacy_entry.py` is copied into the sdist as a root `main.py` by
@@ -79,11 +79,11 @@ automatically):**
 - Either just hands off to `bootstrap.py`, which does the actual work via
   [uv](https://docs.astral.sh/uv/): installs uv itself if it isn't already
   present (into a project-local `.uv/`, not system-wide), provisions the
-  pinned Python version from `.python-version` (uv's own build, bundling
-  Tcl/Tk — the app's *system* Python only has to be new enough to run
-  `bootstrap.py` itself, not to run the app), syncs dependencies from the
-  committed `uv.lock`, then launches. See `bootstrap.py`'s module docstring
-  for the full ordering and why it has to stay stdlib-only.
+  pinned Python version from `.python-version` (the app's *system* Python only
+  has to be new enough to run `bootstrap.py` itself, not to run the app),
+  syncs dependencies from the committed `uv.lock`, then launches. See
+  `bootstrap.py`'s module docstring for the full ordering and why it has to
+  stay stdlib-only.
 - Directly (once synced), same as `bootstrap.py` does it — this is the form to
   use under a debugger (insert `-m debugpy --listen 5678 --wait-for-client`
   before `-m sorter`; see CONTRIBUTING.md) or for a tight edit-run loop, since
@@ -98,12 +98,6 @@ automatically):**
   no `.git` present that overwrites a correct `src/sorter/_version.py` with
   `fallback-version = "0.0.0"`, and `0.0.0+unknown` parses as a pre-release,
   so every launch then sees the current release as newer and re-prompts.
-- **PySide6 UI** (opt-in; Tk is still what a launch gives you): append `--qt`
-  (or set `CASESORTER_QT=1`) to the direct launch above to get the Qt UI in
-  `sorter/qtui/` instead. Needs a one-time
-  `uv sync --no-install-project --extra qt` first — PySide6 is the optional
-  `[qt]` extra and bootstrap never installs it. See §5 and
-  `docs/ui-modernization.md`.
 
 **Tests:** `pytest` from the repo root (`tests/conftest.py` puts `src/` on
 `sys.path`; it lives at `tests/` top-level so it applies to both
@@ -116,11 +110,9 @@ fixtures only; `tests/integration/` stays flat — the files that exercise a
 real external tool or service (`uv build`, `git-cliff`, the PyTorch wheel
 index) instead, each self-skipping if that tool — or, for the wheel index,
 the network — is missing; `pytest -m "not integration"` skips them outright.
-`tests/unit/qtui/` is the exception to "mirrors a subpackage one-for-one" only
-in that it needs the `[qt]` extra: without PySide6 every module there skips
-itself, which is what a plain `pytest` on a normal install does. With the
-extra, `QT_QPA_PLATFORM=offscreen` (its `conftest.py` sets it) runs the whole
-UI headless — **no Xvfb, no display** (§5, §8).
+`tests/unit/qtui/` mirrors `sorter/qtui/` like the rest, and runs the whole
+UI headless on `QT_QPA_PLATFORM=offscreen` (its `conftest.py` sets it) —
+**no Xvfb, no display** (§5, §8).
 CI (`.github/workflows/build.yml`) runs the full matrix on every push/PR —
 run `pytest` locally before pushing regardless, since CI turnaround is slower
 than your own machine. The suite is threading-fragile by design (see
@@ -129,8 +121,8 @@ than your own machine. The suite is threading-fragile by design (see
 **Python:** 3.12+ floor (`pyproject.toml`); `.python-version` pins the actual
 version uv provisions for the app itself, independent of that floor. **Core
 deps:** pyserial, opencv-python, numpy, Pillow, requests, msal, platformdirs,
-sqlite-utils (+ `pygrabber` on Windows). **Optional ML deps:** torch,
-torchvision.
+sqlite-utils, PySide6-Essentials + pyside6-qtads (+ `pygrabber` on Windows).
+**Optional ML deps:** torch, torchvision.
 
 ```
 AI-Case-Sorter-Py/
@@ -151,8 +143,7 @@ AI-Case-Sorter-Py/
 │       ├── community/           # auth, community backend client, feedback loop
 │       ├── update/              # self-update: check/stage + pre-launch apply
 │       ├── training/            # out-of-process ConvNeXt trainer
-│       ├── ui/                  # Tkinter UI (tabs + dialogs + theme)
-│       └── qtui/                # PySide6 UI (`--qt`; §5, docs/ui-modernization.md)
+│       └── qtui/                # PySide6 UI — the only UI (§5)
 ├── installer/               # Windows bootstrapper (see §7)
 └── tests/                   # pytest suite, mirrors src/sorter/'s subpackages
 ```
@@ -167,14 +158,14 @@ The app separates **hardware I/O**, **control logic**, **persistence**, and
 **UI** into independent, testable layers, glued by a thread-safe event bus.
 Since #58's `src/` layout, that sentence is literally the top level of
 `src/sorter/`: `hardware/` ↔ hardware I/O, `control/` ↔ control logic
-(the event bus and the sort loop), `data/` ↔ persistence, `ui/` ↔ UI — plus
+(the event bus and the sort loop), `data/` ↔ persistence, `qtui/` ↔ UI — plus
 `ml/` (classification/inference/evaluation), `community/` (auth + the
 community backend client + the feedback loop), `update/` (self-update), and
 `training/` (the out-of-process trainer), each its own subpackage.
 
 ```mermaid
 flowchart TB
-    UI["UI — Tkinter, main thread<br/>app.MainWindow · ttk.Notebook tabs · modal dialogs · theme"]
+    UI["UI — PySide6, main thread<br/>qtui.QtMainWindow · sidebar pages · docks · dialogs · theme"]
     Bus["control.events.EventBus<br/>Queue-backed pub/sub"]
 
     UI -- "subscribes (drained on main thread)" --> Bus
@@ -204,9 +195,9 @@ flowchart TB
 
 ### The event bus (`sorter/control/events.py`)
 A single `EventBus` with a thread-safe `Queue`. Workers call `bus.post(topic,
-payload)` from any thread; the Tk main loop calls `bus.drain()` on a 50 ms
-`root.after` timer to dispatch queued events to subscribers **on the main
-thread**, so handlers can safely touch widgets. Handler exceptions are
+payload)` from any thread; the Qt main loop calls `bus.drain()` on a 50 ms
+`QTimer` to dispatch queued events to subscribers **on the main thread**, so
+handlers can safely touch widgets. Handler exceptions are
 swallowed. Topics are slash-namespaced strings: `run/*`, `test/*`, `serial/*`,
 `training/*`, `mode/changed`, `feedback/*`, `community/*`. This is the **only**
 sanctioned way for worker threads to update the UI.
@@ -276,14 +267,14 @@ sanctioned way for worker threads to update the UI.
 ### Active-model concept
 "Active model" = `settings.default_model_id`. When **absent**, the app is in
 **AI Config mode** (cloud HTTP classification, headstamps in a settings key).
-When **set**, that local model is active (Train tab visible, local inference
-used, headstamps in the `headstamps` table). Activating a model posts
-`mode/changed`, which toggles tab visibility.
+When **set**, that local model is active (Train live, local inference used,
+headstamps in the `headstamps` table). Activating a model posts
+`mode/changed`, which is what re-evaluates the mode pair (§5).
 
 ### Sorting templates
-A **sorting template** is a named snapshot of the Run tab's slot assignments, so
+A **sorting template** is a named snapshot of the Sort page's slot assignments, so
 one model can carry several bin layouts ("Range brass", "Match prep") and switch
-between them from the Run tab's template dropdown.
+between them from the Sort page's template dropdown.
 
 - **Scope:** per model (`model_id NULL` = AI Config mode) **and** per run mode.
   Standard and package mode keep separate lists — package assignments are
@@ -338,7 +329,7 @@ between them from the Run tab's template dropdown.
 - **`camera.py`** — `Camera`: `cv2.VideoCapture` with a background **grab thread**
   keeping the latest frame; platform backends (CAP_DSHOW on Windows w/ optional
   pygrabber for friendly names + resolution probing, CAP_V4L2 on Linux, MJPG for
-  ≥1080p). `list_cameras_with_metadata` enumerates for the Camera tab.
+  ≥1080p). `list_cameras_with_metadata` enumerates for Settings → Camera.
   Enumeration is deliberately noisy about what it *rejects*: only real V4L2
   capture nodes are probed (a UVC camera also exposes a metadata node, which
   OpenCV can only fail to open, loudly), and a device that overruns
@@ -352,7 +343,7 @@ between them from the Run tab's template dropdown.
   `broker.sort_and_move(slot)`. Handles the 5-position wheel pipeline
   (`_last_classified_slot`), the **confidence floor** (below → catch-all slot 0),
   a `NoLocalCheckpointError` from `classify_active` (stops the run with the
-  reason; the Run tab also pre-flights this at Start so no case is fed),
+  reason; the Sort page also pre-flights this at Start so no case is fed),
   **auto-select trays**, **package/batch mode** (`_package_counts` under a lock),
   optional run-image storage, and feedback capture. Also `cycle_once()` (manual
   feed) and `test_once()` (feed+classify, no sort). Posts `run/*` and `test/*`.
@@ -364,9 +355,9 @@ between them from the Run tab's template dropdown.
   checkpoint is missing raises `NoLocalCheckpointError` — it does **not**
   degrade to HTTP. That fallback existed and was a trap: a renamed data folder
   or an images-only community share left `model_path` unusable and the app
-  quietly POSTed case images to whatever the AI Config tab last pointed at,
+  quietly POSTed case images to whatever AI Config last pointed at,
   surfacing only as a connection error naming a host the user wasn't knowingly
-  using. Switching backends is the user's call, on the Models tab. `active_model`
+  using. Switching backends is the user's call, on the Models page. `active_model`
   / `uses_local_inference` / `has_local_checkpoint` / `checkpoint_problem`
   expose the decision alone, so the UI can ask "does this need PyTorch?" and
   "can this model actually classify?" before starting a run — keep them in
@@ -454,7 +445,7 @@ between them from the Run tab's template dropdown.
   B2C (hardcoded tenant/client/authority/redirect, mirroring WinForms). Token
   cache is a single file, chmod 0600 on POSIX. Decodes ID-token claims **for
   display only** (signature not verified — never used for authz). Auth is
-  optional; the only gated surface is the Community tab.
+  optional; the only gated surface is the Community page.
 - **`community_api.py`** — `CommunityApi`: HTTPS client for
   `reloadingrecipes.com/api` (cartridges, model search, download via Azure-blob
   SAS URL, feedback-image upload, wish-list fetch, model-settings fetch, model
@@ -472,7 +463,7 @@ between them from the Run tab's template dropdown.
   failure. Debug tracing to stderr is **off by default** — enable with
   `CASESORTER_FEEDBACK_DEBUG=1`.
   Also owns the **wish list** (model balancing): `GET /Models/FetchWishList`
-  returns the classifications a model is short of images for. The Run tab fetches
+  returns the classifications a model is short of images for. The Sort page fetches
   it on a worker thread at Start (gated on `is_feedback_model`, so an opted-out
   user's auth path is untouched) and clears it at Stop; `should_capture` then
   captures on *below floor **or** wanted label*. Wish-list capture applies to
@@ -503,38 +494,45 @@ between them from the Run tab's template dropdown.
 
 ---
 
-## 5. The UI (`sorter/ui/`)
+## 5. The UI (`sorter/qtui/`)
 
-This section is the **Tk** UI, which is what a launch still gives you. A
-second, opt-in **PySide6 UI** lives in `sorter/qtui/` (launch with `--qt` or
-`CASESORTER_QT=1`; PySide6 is the optional `[qt]` extra). It reuses the event
-bus and hardware layers, renders the same theme palettes as QSS (from a
-drift-pinned copy in `qtui/palettes.py` — it imports **nothing** from
-`sorter/ui` at runtime), and must
-never require changes inside `sorter/ui/` — the two UIs evolve in parallel.
-Its own conventions are at the end of this section (*The Qt UI*); scope,
-findings and the port plan are in `docs/ui-modernization.md`.
+The PySide6 UI is **the** UI — `python -m sorter` lands in `qtui/app.py`, and
+PySide6 is an ordinary core dependency. A Tk UI lived beside it in
+`sorter/ui/` until 2026-08-14; it is gone, and comments across this package
+still reference it where a behaviour was inherited from it deliberately.
+`docs/ui-modernization.md` is the decision record for the port and the
+retirement.
 
-`MainWindow` (`app.py`) is the shell: gradient title bar (with the theme picker
-parked at its right edge), a `ttk.Notebook` of tabs (each wrapped in a
-`ScrollableFrame` for small displays, and hosted on a backdrop canvas that owns
-the margin around it), and a status bar with connection indicators + sign-in.
-Both indicators are links (hand cursor, underline on hover): serial opens the
-serial monitor, camera selects the Camera tab. The transient message shares
-that bar and is packed **last**, so a crowded bar truncates it rather than the
-standing connection state. It owns the `EventBus`, `SerialBroker`,
-`Camera`, `RunController`, and `AuthManager`, auto-connects serial/camera on
-startup, and runs the bus drain loop. `run_worker(fn, on_done, on_error)` is the
-standard helper for offloading blocking work to a thread and marshaling the
-result back through the bus.
+`QtMainWindow` (`app.py`) is the shell: an **activity sidebar** in two groups —
+the always-live surfaces (`ACTIVITIES`: Sort, Models, Community), a hairline
+(`sidebar_separator`, objectName `sidebarSeparator`, coloured from the
+palette's `border` role by `qtui/theme.py` alone, so a theme switch needs no
+hook), then the mode pair (`MODE_ACTIVITIES`: Train, AI Config); Settings
+stays pinned below the stretch — driving a `QStackedWidget` of pages, plus
+four **docks** — serial monitor (bottom), classification history, the user
+guide and the theme picker (right, all three closed until asked for) — a
+status bar (camera/serial indicators, update affordance, identity + sign-in)
+and File/View/Help menus. It owns the `EventBus`, `Camera`, `SerialBroker`,
+`RunController` and `AuthManager`, auto-connects serial/camera on startup, and
+runs the bus drain loop. `run_worker(fn, on_done, on_error)` is the standard
+helper for offloading blocking work to a thread and marshaling the result back
+through the bus.
 
-**Tab visibility is mode-driven:** Train shows for a local active model **that
-this user owns** (`models.is_trainable` — see *Model ownership* below); AI
-Config shows in AI Config mode; Community is mounted only while signed in. The
-`mode/changed` event re-evaluates this.
+**Neither of the mode pair is ever hidden**, and exactly one is *live*:
+Train ⟺ `models.is_trainable(active model)`, AI Config ⟺ no active model —
+so a community model leaves neither live. The other gets
+`_set_activity_unavailable`, which sets the dynamic property `unavailable`
+on the button — restyled `text_subtle` by `qtui/theme.py` and re-inked by
+`_paint_sidebar_icon`, since a stylesheet can't reach a QIcon — and leaves
+it **enabled**: the click must still work, because the explainer behind it
+is what answers it. Both halves are the same stacked panel: `train_page`'s,
+and `ai_page`'s — which replaces the server form with a panel naming the
+model that classifies instead and a jump to Models. A tooltip on both entries
+states liveness in one line. Hiding an activity was how JL came not to know
+Train existed.
 
 ### Model ownership
-A model installed from the **Community tab** is stamped `model_type =
+A model installed from the **Community** page is stamped `model_type =
 "CommunityManaged"` by `import_model(..., community_download=True)`, and
 `models.is_trainable()` is False for it: the local checkpoint is the
 publisher's, retraining forks it from the version they keep updating, and the
@@ -553,12 +551,13 @@ to be a user restoring their own model onto a new machine.
 ### The PyTorch install gate
 PyTorch is the optional `[ml]` extra, so a fresh install has none. **The rule:
 torch is installed the first time something actually needs it, and never
-before** — an AI Config user must never be prompted. `ui/torch_gate.py` is the
-single entry point; it opens `dialog_install_torch` and re-enters the caller on
-success:
+before** — an AI Config user must never be prompted. `qtui/torch_gate.py` is
+the single entry point: `TorchGate` is bound once as `win.ensure_torch`
+(`__call__` = hard gate, `offer` = once-per-session soft gate), opens
+`dialog_install_torch` and re-enters the caller on success:
 
 ```python
-if not ensure_torch(self, self._start, reason="Sorting needs PyTorch"):
+if not self.ensure_torch(self._start, reason="Sorting needs PyTorch"):
     return
 ```
 
@@ -566,7 +565,7 @@ if not ensure_torch(self, self._start, reason="Sorting needs PyTorch"):
 `local_inference.MIN_TORCH_VERSION` (2.10.0) is the oldest torch allowed to
 load a checkpoint this app did not produce: CVE-2026-24747 lets a crafted
 `.pth` defeat the `weights_only=True` unpickler that `_load` relies on, and
-the Community tab and ZIP import are exactly that delivery path. So
+the Community page and ZIP import are exactly that delivery path. So
 `ensure_torch` takes the `model` the action will load and picks the policy
 from `models.is_foreign_model`: a **foreign** model **blocks** until the user
 upgrades; the user's **own** model gets an **offer** that proceeds on decline,
@@ -584,194 +583,30 @@ override (#67), and since it sits above the 2.3.0 floor where
 is likelier than an exploit, and bricking those installs would trade a real
 breakage for a speculative one.
 
-Gated: Run tab Start + Manual feed (only when `classifier.uses_local_inference`
-is True), the evaluator, and training. The Train tab's Feed *offers* rather
-than gates — capturing and labelling images is exactly the workflow that
-doesn't need torch, so declining costs only the predicted-label convenience and
-is remembered for the session. Call it on the **main thread only** (it opens a
+Gated: Sort's Start + Manual feed (only when `classifier.uses_local_inference`
+is True), the evaluator, and training. Train's Feed *offers* rather than gates
+— capturing and labelling images is exactly the workflow that doesn't need
+torch, so declining costs only the predicted-label convenience and is
+remembered for the session. Call it on the **main thread only** (it opens a
 modal), and never gate on `is_available()`.
 
-### Tabs (`tab_*.py`)
-| Tab | File | Purpose |
+### Surfaces
+| Activity | File | Purpose |
 |-----|------|---------|
-| **Run** | `tab_run.py` | Production sorting. Sorting-template bar; flow-grid of slot cards + per-slot headstamp checkboxes with live counts; Start/Stop/Manual-feed; package-mode counters. The largest UI module. |
-| **Models** | `tab_models.py` | Model library: browse/filter, create, edit, **activate**, import/export, delete. Synthetic "Use AI Config" row. |
-| **Train** | `tab_train.py` | Feed→capture→classify→label→save loop; "Sort While Training"; launches training (Install-PyTorch dialog if needed → progress dialog). |
-| **AI Config** | `tab_ai.py` | HTTP server config (endpoint/key/model/prompt/encoding), headstamp manager, single-shot test. Visible only in AI Config mode. |
-| **Camera** | `tab_camera.py` | Device + resolution detection and live preview. |
-| **Serial** | `tab_serial.py` | Connection, 14 board init settings, sort-arm test, airdrop config, and a `SerialConsole` + "Open monitor ↗" (see `serial_console.py`). |
-| **Image Proc** | `tab_imageproc.py` | Tune Hough params + primer mask + LED brightness against a captured frame (before/after preview). |
-| **Community** | `tab_community.py` | Browse/search/download community models; share entry point. Auth-gated. |
+| **Sort** | `app.py` (+ `slot_grid.py`, `dialog_slot_assign.py`) | Production sorting: the crop the classifier saw, the slot cards with live counts, sorting templates, Start/Stop/Manual feed, package-mode counters. |
+| **Models** | `models_page.py` | Model library: browse/filter/sort, create, edit, **activate**, import/export, delete. Synthetic "Use AI Config" row. |
+| **Train** | `train_page.py` | Feed→capture→classify→label→save loop; "Sort While Training"; launches training. |
+| **AI Config** | `ai_page.py` | HTTP server config (endpoint/key/model/prompt/encoding), headstamp manager, single-shot test. |
+| **Community** | `community_page.py` | Browse/search/download community models; share entry point. Auth-gated. |
+| **Settings** | `settings_{camera,serial,imageproc}.py` + `app.py`'s Theme section | Camera, Serial, Image Processing, Theme — listed in `SETTINGS_SECTIONS`, reached by name. |
 
-### Dialogs (`dialog_*.py`)
-`dialog_training_progress` (live training console), `dialog_training_config`
-(hyperparameters), `dialog_model_editor` (create/edit model + feedback-loop
-opt-in), `dialog_install_torch` (installs the torch/torchvision pinned by
-pyproject.toml's `[ml]` extra — read at install time; the extra is the pins'
-single source of truth — into the venv via uv, falling back to pip),
-`dialog_login` (MSAL interactive sign-in), `dialog_model_evaluator` (run eval +
-HTML report + history), `dialog_model_images` + `dialog_image_preview` (training
-image browser/reclassify/delete), `dialog_share_model` (publish to community),
-`dialog_slot_template` (new / rename / delete a sorting template),
-`dialog_theme_editor` (build a theme from the active one: a color picker per
-palette role, a canvas preview of a miniature app, and JSON export/import —
-reached from the gear beside the title-bar theme picker; "Save & apply"
-writes back to a saved theme, rename included, and "Create new…" always makes
-a separate one, so a built-in is never the thing being written to),
-`dialog_update` (release notes → download progress → "Restart to update"; §7).
+Docks: `serial_monitor.py`, `history_view.py`, `help_viewer.py`, and the
+Themes panel in `app.py`. Dialogs are `dialog_*.py`.
 
-### Shared UI infrastructure
-- **`theme.py`** — `THEMES`, the live `PALETTE`, `apply_theme(root, theme=…)`
-  (fonts + ttk styles, single source of truth), `retheme_widgets`,
-  `paint_gradient`. **Every color in the app comes from here.**
-  - **Themes.** `THEMES` maps a display name to a full palette; the user picks
-    one from the dropdown in the title bar and it's stored in the `ui.theme`
-    setting (`theme.SETTING_THEME`). Ships with Dark (the original), Light,
-    Sepia, Midnight Blue, Gothic, and Comic Book. **The role of each key is
-    fixed; only its color changes per theme** — a new theme is a copy of
-    `_DARK` with new values, and it must define exactly the same keys.
-    `success` mirrors `action` and `error` mirrors `danger`, so a theme with
-    no green (Comic Book, where blue is "go") has a blue "connected"
-    indicator, not a green one.
-  - **Halftone screens.** `HALFTONE_INK` names the themes that print a
-    ben-day dot field, and the ink to print it in; `paint_halftone` prints
-    one over any box of a canvas, fading in from whichever edge you name.
-    Only canvases can carry it — ttk widgets always fill their own
-    background, so nothing shows through them. Two places screen themselves,
-    both app chrome: the title bar (`app._repaint_header`) and the margin
-    around the notebook (`app._layout_page` — the notebook rides on a
-    backdrop canvas for exactly this reason). Keep it to the chrome: a screen
-    behind the working area of a tab is noise, not decoration.
-  - **Ink outlines.** `INK_OUTLINE` names the themes that draw comic-book
-    borders and how many pixels wide; everything else stays flat and
-    borderless. `apply_theme` reads it for panels, cards, buttons and fields.
-    A card's outline belongs to the card, not to the layout rows inside it —
-    those use `row_style(card_style)` (`Card.TFrame` → `CardRow.TFrame`),
-    which shares the fill but never the border. Cards that restyle their
-    children on hover/selection must map through `row_style` too.
-  - **Switching is live**, so it must stay that way: `apply_theme` reloads the
-    ttk styles (which every ttk widget follows on its own) and
-    `retheme_widgets` walks the widget tree translating the colors baked into
-    classic Tk widgets (`tk.Label`, `tk.Canvas`, `tk.Text`) at construction.
-    That translation is by color value, which is why no two roles inside one
-    theme may share a color — except `success`/`error`, which must equal
-    `action`/`danger` (`tests/unit/test_theme.py` enforces both rules).
-  - **`PALETTE` is mutated in place** on a switch. Read it at call time
-    (`PALETTE["bg_card"]`); never copy a color into a module-level constant.
-  - **User-made themes.** `BUILTIN_THEMES` is what ships; `THEMES` is the live
-    registry — built-ins plus whatever the theme editor has saved.
-    `register_custom_theme` adds one (and its halftone/outline options),
-    `rename_custom_theme` moves one (a rename is not copy-and-delete — the
-    theme keeps its place and options), `custom_themes_payload` is what the
-    app persists to the `ui.custom_themes` setting, and `load_custom_themes`
-    re-registers them at startup, before the saved theme name is resolved.
-    Names are capped at `MAX_THEME_NAME` because the picker is sized to the
-    longest of them. From then on a user
-    palette is an ordinary entry in `THEMES` — nothing downstream knows the
-    difference. `normalize_palette` is the gate: it fills gaps from a base
-    theme, drops unknown keys and non-colors, and forces `success`/`error`
-    back onto `action`/`danger`, so neither a hand-edited settings row nor an
-    imported file can produce a broken palette..
-  - **Hue is meaning.** Dark keeps its chrome (window, panels, cards, inputs,
-    borders, text, focus/selection tints) **neutral grayscale**, reserving hue
-    for action buttons (`action*` green = primary/go, `update*` blue = refresh
-    something installed, `danger*` red = stop/destructive) and status text.
-    The tinted themes keep the same discipline internally: their surfaces are
-    one low-saturation family so the action buttons stay the most saturated
-    thing on screen. Don't add a saturated surface to any theme.
-- **`widgets.py`** — `ScrollableFrame` (pass `viewport=(w, h)` to fix how much
-  is visible and let the rest scroll), `ImagePanel` (shows BGR numpy frames),
-  `NumericField`, labeled-entry/button-row helpers.
-- **`monitor.py`** — detachable history window: ring buffer of recent
-  classifications with a color "snake" trailing the latest. Subscribes `run/history`.
-- **`serial_console.py`** — `SerialConsole`, the Arduino-IDE-style traffic log.
-  **The Serial Config tab's "Serial monitor / debug" panel and the detached
-  monitor window are the same widget**, embedded twice, so neither can grow a
-  feature the other lacks — which is exactly how they had already drifted (the
-  tab log was one colour, uncoloured, unfilterable and capped at 500 lines).
-  Autoscroll / timestamps / pause (held lines flush on resume, they are not
-  dropped), Clear, Save…, a line-ending selector that sends through
-  `broker.send_raw`, and command history. A case-insensitive substring filter
-  and per-direction (RX/TX/notes) toggles narrow the view: `matches()` is the
-  single predicate, applied by `_render` as lines arrive, by `_rerender` when
-  the filter changes, and by `dump()` so Save… writes what's on screen. It
-  matches the board's text, **not** the rendered line, so the `<-`/`->`
-  prefixes and timestamps can't be filtered against. `_lines` always keeps
-  everything — the filter hides, never deletes. **The log is never re-ordered**
-  (no column sort): serial traffic only reads correctly in the order it
-  happened, since a command and its reply are one exchange. Subscribes
-  `serial/rx`, `serial/tx` and `serial/note` (probe commentary) itself, and
-  **replays `MainWindow.serial_backlog`** on construction — the rolling deque
-  `app._log_serial` fills — because the traffic worth reading (a failed
-  auto-connect probe) happens seconds before anyone can open a window.
-  The **speed picker is part of the component**, not something a host bolts
-  on, and it is the *only* baud control in the app — the Serial tab's
-  Connection panel deliberately has none, so one widget owns
-  `config.serial["baud"]`, persisting and reconnecting as it is picked (which
-  is also why `SerialTab.save()` does not write that key). `BAUD_RATES` is
-  what a 16 MHz AVR can generate inside 8N1's ±2% tolerance — **not** the
-  Arduino IDE's ladder, so don't re-add 230400. Two consoles can still be
-  live at once (the tab's and an open window's), so `_sync_baud` re-reads the
-  setting on `serial/state` and they can't drift apart; `on_baud_changed`
-  tells a host that wants to react (the window repaints its header). The one
-  host-specific option is `detach_command` (the tab's "Open monitor ↗", on
-  the control row rather than a row of its own). Text tags bake their colours
-  in and `retheme_widgets` can't reach them, so `set_theme` calls
-  `apply_palette()` on every live console.
-- **`serial_monitor.py`** — `SerialMonitorWindow`: a `SerialConsole` in its own
-  window, under a connection header (port, baud, firmware behind a dot
-  mirroring the status bar's — it subscribes `serial/state` for that). Opened
-  by clicking the status bar's `● Serial: …` indicator or the Serial tab's
-  button; `app.open_serial_monitor()` keeps it to one instance.
-- **`torch_gate.py`** — `ensure_torch(parent, proceed, reason=…)`: the only
-  sanctioned way to front a local-model action with the PyTorch install dialog.
-  See *The PyTorch install gate* above.
-- **`sysutil.py`** — `open_path` (os.startfile / open / xdg-open).
+### Conventions, each one load-bearing
 
-### The Qt UI (`sorter/qtui/`)
-
-The second UI, opt-in behind `--qt` (§2). It reuses every non-UI layer as-is
-and **must never require a change inside `sorter/ui/`** — nor import anything
-from it at runtime, so a PySide6-only install with no tkinter can run it. The
-two things it used to import are copies now, kept in lock-step by
-`tests/unit/qtui/test_qt_drift_pins.py`: `ui/theme.py`'s palette half is
-`qtui/palettes.py`, and `ui/serial_console.py`'s wire constants sit at the top
-of `qtui/serial_monitor.py`. Custom themes therefore register into the Qt
-registry, not Tk's — one process runs one UI, and the `ui.custom_themes`
-settings row is what the two actually share.
-
-- **Shell (`app.py`).** `QtMainWindow` = an **activity sidebar** in two groups —
-  the always-live surfaces (`ACTIVITIES`: Sort, Models, Community), a hairline
-  (`sidebar_separator`, objectName `sidebarSeparator`, coloured from the
-  palette's `border` role by `qtui/theme.py` alone, so a theme switch needs no
-  hook), then the mode pair (`MODE_ACTIVITIES`: Train, AI Config); Settings
-  stays pinned below the stretch — driving a `QStackedWidget` of pages, plus
-  four **docks** — serial monitor (bottom),
-  classification history, the user guide and the theme picker (right, all
-  three closed until asked for) — a status bar (camera/serial indicators,
-  update affordance, identity + sign-in) and File/View/Help menus. It owns the
-  `EventBus`, `Camera`, broker, `RunController` and `AuthManager`, exactly as
-  Tk's `MainWindow` does.
-  **Neither of the mode pair is ever hidden**, and exactly one is *live*:
-  Train ⟺ `models.is_trainable(active model)`, AI Config ⟺ no active model —
-  so a community model leaves neither live. The other gets
-  `_set_activity_unavailable`, which sets the dynamic property `unavailable`
-  on the button — restyled `text_subtle` by `qtui/theme.py` and re-inked by
-  `_paint_sidebar_icon`, since a stylesheet can't reach a QIcon — and leaves
-  it **enabled**: the click must still work, because the explainer behind it
-  is what answers it. Both halves are the same stacked panel now:
-  `train_page`'s, and `ai_page`'s — which replaces the server form with a
-  panel naming the model that classifies instead and a jump to Models (JL,
-  2026-08-14: AI Config was a Settings section reached by a special case in
-  `open_activity`; it is a page like any other, and `SETTINGS_SECTIONS` no
-  longer lists it). A tooltip on both entries states liveness in one line.
-  Hiding an activity was how JL came not to know Train existed.
-  The **Themes dock** is a second face on Settings → Theme, not a second
-  implementation: both pickers drive `set_theme`, `refresh_theme_picker`
-  (the hook `dialog_theme_editor` already looks for) re-reads the registry
-  into both, and the sync blocks signals so a switch applies exactly once.
-- **Docking is Qt Advanced Docking System** (`pyside6-qtads`, the `[qt]`
-  extra), not `QDockWidget` — stock Qt's drag-docking was unusable on Linux.
+- **Docking is Qt Advanced Docking System** (`pyside6-qtads`), not
+  `QDockWidget` — stock Qt's drag-docking was unusable on Linux.
   One `CDockManager` is the window's central widget; the sidebar+pages are
   *its* central area, a fixed anchor the panels arrange around. Its semantics
   differ from `QDockWidget`'s in three places that reach call sites and tests:
@@ -781,13 +616,10 @@ settings row is what the two actually share.
   does — and `addDockWidget` **re-opens a closed panel**, so anything walking
   the docks must skip closed ones. `reveal_dock` is the show/raise pair
   (`toggleView(True)` + `setAsCurrentTab`). Panel layout persists as the
-  manager's own XML (`ui.window_state`); a pre-QtAds blob simply fails to
-  restore, so there was nothing to migrate. QtAds obviates the
+  manager's own XML (`ui.window_state`). QtAds obviates the
   `QMainWindowLayout` workarounds this UI used to carry — don't reintroduce
   repaint/collapse/resize-nudge handling for docks.
-- **One module per surface.** Activity pages (`models_page.py`,
-  `train_page.py`, `community_page.py`, `ai_page.py`), Settings sections
-  (`settings_{camera,serial,imageproc}.py`) and dialogs (`dialog_*.py`)
+- **One module per surface.** Activity pages, Settings sections and dialogs
   each own their widgets and expose a `build_*(win)` factory taking the
   window; `app.py` only wires them together. Settings sections are listed in
   `SETTINGS_SECTIONS` and reached by name (`_open_settings_section`);
@@ -809,9 +641,9 @@ settings row is what the two actually share.
   the click again. The Active column is a **marker** (`ACTIVE_MARK`, inked in
   the palette's `action` role by `models_page.apply_palette`, which
   `_apply_theme` calls — an item brush is baked in, out of the stylesheet's
-  reach), not a control. Row-embedded controls (a radio in Active, ✎/× icon buttons in an
-  Actions column, the catalogue's ↓/↻/× button) were built, shipped behind
-  `--qt` and then reverted: JL lived with them and chose the bar. Don't
+  reach), not a control. Row-embedded controls (a radio in Active, ✎/× icon
+  buttons in an Actions column, the catalogue's ↓/↻/× button) were built,
+  shipped and then reverted: JL lived with them and chose the bar. Don't
   reintroduce item widgets in these tables — `_pin_ai_row` and every sort
   destroy them, which is machinery the bar simply doesn't need.
 - **The notify/confirm seam.** Anything that would open a native modal —
@@ -820,10 +652,11 @@ settings row is what the two actually share.
   method, so a test replaces it and nothing blocks. Keep it that way: a
   `QMessageBox` called directly from a handler is untestable offscreen.
 - **Bus drain.** A 50 ms `QTimer` calls `bus.drain(max_items=128)`; workers go
-  through `run_worker(fn, on_done, on_error)` and post back. Same threading
-  rule as Tk (§8): no widget touch off the main thread, and `QTimer.singleShot`
-  is a main-thread-only deferral, not an escape hatch. A modal raised *from* a
-  bus handler is queued with `singleShot(0, …)` so it can't re-enter the drain.
+  through `run_worker(fn, on_done, on_error)` and post back. See §8's
+  threading rule: no widget touch off the main thread, and
+  `QTimer.singleShot` is a main-thread-only deferral, not an escape hatch. A
+  modal raised *from* a bus handler is queued with `singleShot(0, …)` so it
+  can't re-enter the drain.
 - **Palette-only QSS.** `qtui/theme.py`'s `build_stylesheet(palette)` renders
   one `qtui/palettes.py` palette into a stylesheet keyed on **objectNames**
   (`action`, `danger`, `update`, `slotCard`, `serialLog`, …) — set the
@@ -831,22 +664,54 @@ settings row is what the two actually share.
   flat here. The dock panels are the one block keyed on class instead
   (`ads--CDockWidgetTab`, `ads--CDockAreaTitleBar`, …) — QtAds's own
   stylesheet is disabled so these are what paint them, which also means
-  theme.py has to re-declare QtAds's button-icon rules or every
-  close/undock button renders blank. The few places a stylesheet can't reach (rich text in the feed
-  and indicators, `QPlainTextEdit` line colors, painted history cards) bake
-  their colors in and are re-rendered by an explicit `apply_palette()` on
-  every switch.
-- **Gates and help.** `qtui/torch_gate.TorchGate` is bound once as
-  `win.ensure_torch` (`__call__` = hard gate, `offer` = once-per-session
-  soft gate) and is the only sanctioned front door for a local-model action.
-  `qtui/dialog_install_torch.py` carries its own `ml_pin_targets()` — same
-  reader, same None-on-failure contract as the Tk dialog's (§8), copied
-  because qtui may not import from `ui/`; `test_qt_torch_gate.py` pins the two
-  readers and the resulting argv together.
-  `help_viewer.topic_for(page, section)` maps "where the user is" to an anchor
-  in `docs/guide/GUIDE.md`, which `QTextBrowser` renders directly; F1 and
-  Help → User Guide open the dock at that topic, falling back to the top of
-  the guide for an anchor it can't resolve. Every activity and Settings
+  theme.py has to re-declare QtAds's button-icon rules or every close/undock
+  button renders blank. The few places a stylesheet can't reach (rich text in
+  the feed and indicators, `QPlainTextEdit` line colors, painted history
+  cards) bake their colors in and are re-rendered by an explicit
+  `apply_palette()` on every switch.
+- **Themes live in `qtui/palettes.py`**, which is toolkit-neutral and imports
+  nothing. `BUILTIN_THEMES` is what ships — Dark (the original), Light, Sepia,
+  Midnight Blue, Gothic and Comic Book; `THEMES` is the live registry,
+  built-ins plus whatever the theme editor has saved. **The role of each key
+  is fixed; only its color changes per theme** — a new theme is a copy of
+  `_DARK` with new values and must define exactly the same keys, which
+  `test_qt_theme.py` exercises by rendering every builtin. `success` mirrors
+  `action` and `error` mirrors `danger` (`DERIVED_ROLES`), so a theme with no
+  green (Comic Book, where blue is "go") has a blue "connected" indicator.
+  The user's choice is the `ui.theme` setting (`palettes.SETTING_THEME`);
+  switching is live and applies a freshly built stylesheet plus the
+  `apply_palette()` hand re-render list above.
+  - **User-made themes.** `register_custom_theme` adds one (and its
+    halftone/outline options), `rename_custom_theme` moves one (a rename is
+    not copy-and-delete — the theme keeps its place and options),
+    `custom_themes_payload` is what the app persists to the
+    `ui.custom_themes` setting, and `load_custom_themes` re-registers them at
+    startup, before the saved theme name is resolved. Names are capped at
+    `MAX_THEME_NAME` because the picker is sized to the longest of them. From
+    then on a user palette is an ordinary entry in `THEMES` — nothing
+    downstream knows the difference. `normalize_palette` is the gate: it
+    fills gaps from a base theme, drops unknown keys and non-colors, and
+    forces `success`/`error` back onto `action`/`danger`, so neither a
+    hand-edited settings row nor an imported file can produce a broken
+    palette.
+  - **Halftone screens and ink outlines** (`HALFTONE_INK`, `INK_OUTLINE`) are
+    stored and edited faithfully but **render flat** — nothing paints them
+    yet. Keep them in the payload; they are what a Comic Book theme means.
+  - **Hue is meaning.** Dark keeps its chrome (window, panels, cards, inputs,
+    borders, text, focus/selection tints) **neutral grayscale**, reserving hue
+    for action buttons (`action*` green = primary/go, `update*` blue = refresh
+    something installed, `danger*` red = stop/destructive) and status text.
+    The tinted themes keep the same discipline internally: their surfaces are
+    one low-saturation family so the action buttons stay the most saturated
+    thing on screen. Don't add a saturated surface to any theme.
+  - The **Themes dock** is a second face on Settings → Theme, not a second
+    implementation: both pickers drive `set_theme`, `refresh_theme_picker`
+    (the hook `dialog_theme_editor` looks for) re-reads the registry into
+    both, and the sync blocks signals so a switch applies exactly once.
+- **Help.** `help_viewer.topic_for(page, section)` maps "where the user is" to
+  an anchor in `docs/guide/GUIDE.md`, which `QTextBrowser` renders directly;
+  F1 and Help → User Guide open the dock at that topic, falling back to the
+  top of the guide for an anchor it can't resolve. Every activity and Settings
   section has a topic, and `test_qt_help.py` pins each one to a real
   heading — rename a heading and that test is what tells you.
 - **Model-scoped image processing.** `settings_imageproc.py` reads and writes
@@ -876,28 +741,34 @@ settings row is what the two actually share.
   to QtAds didn't change (its floating containers are the same kind of
   frameless top-level) — and always yields to an explicit `QT_QPA_PLATFORM`,
   which is what lets the tests run offscreen.
-- **Tests** live in `tests/unit/qtui/` and run **offscreen, with no Xvfb**
-  (§8). `conftest.py` supplies `qapp`, a real SQLite-backed `config`,
-  `window_factory`/`window`, plus `seed_model` and `drain_until` (pump the bus
-  until a predicate holds — never a sleep). `test_qt_e2e.py` is the
-  cross-cutting layer: whole demo journeys (connect → assign → sort → counts,
-  a settings round-trip across a restart, a model's life from cartridge to
-  activation, F1 following the page) through the real bus, controller and
-  serial emulator, with only the camera and `classify_active` stubbed.
+- **Tests** live in `tests/unit/qtui/` and run **offscreen, with no display
+  server and no Xvfb** (§8). `conftest.py` supplies `qapp`, a real
+  SQLite-backed `config`, `window_factory`/`window`, plus `seed_model` and
+  `drain_until` (pump the bus until a predicate holds — never a sleep).
+  `test_qt_e2e.py` is the cross-cutting layer: whole demo journeys (connect →
+  assign → sort → counts, a settings round-trip across a restart, a model's
+  life from cartridge to activation, F1 following the page) through the real
+  bus, controller and serial emulator, with only the camera and
+  `classify_active` stubbed.
 - **Hard rules, each one paid for with a CI crash saga** (full post-mortems
   and the debugging playbook: `.claude/skills/qt-ui-debugging/SKILL.md`):
   - Every `QTimer.singleShot` passes its owner as the context argument —
     `singleShot(ms, self, callback)` — so a dying widget drops the callback
     instead of firing into freed C++.
   - qtui tests run outside coverage (`no_cover`, applied by their conftest);
-    pytest-cov's tracer segfaults the full suite non-deterministically. Never
-    re-enable it, never chase "the crashing test" under coverage.
+    pytest-cov's tracer segfaults them non-deterministically. Never re-enable
+    it, never chase "the crashing test" under coverage — and never pass
+    `--no-cov`, which turns the marker into an error.
   - Test teardown: DeferredDelete-only flush, no forced gc, no generic
     `processEvents()`; `closeEvent` stops the window's timers.
   - Geometry tests derive every threshold from measured metrics
     (`sizeHintForColumn`, cell rects, `fontMetrics`) — a pixel constant that
     passes on Linux fails on Windows fonts. Set sizes before the first
     `show()`; item-rect caches don't refresh on later resizes offscreen.
+  - CI runs one pytest process per test module (`build.yml`): a runner-only
+    crash then names a module instead of killing the suite. Locally the whole
+    directory runs in one process, which is what keeps cross-module
+    interaction covered.
 
 ---
 
@@ -1152,14 +1023,14 @@ flowchart TD
   - Each changelog line also carries `by @user` and, for a **squash-merged**
     PR only, `in #N` — see `RELEASING.md` for why the two resolve
     independently.
-- **Threading rule:** never touch Tk widgets off the main thread. Do blocking
-  work in `run_worker`/daemon threads and `bus.post(...)`; the drain loop
-  delivers handlers on the main thread. **`widget.after()` is not an escape
-  hatch** — it registers a Tcl command and is itself unsafe off the main
-  thread. A worker must hand results to a `Queue` (the bus, or a dialog-local
-  one as in `dialog_update.py`) that a main-thread poller drains.
-  `dialog_install_torch.py` predates this note and still calls `after()` from
-  its pip-pump thread; don't copy that pattern.
+- **Threading rule:** never touch a Qt widget off the main thread. Do blocking
+  work in `run_worker`/daemon threads and `bus.post(...)`; the 50 ms drain
+  `QTimer` delivers handlers on the main thread. **`QTimer.singleShot` is a
+  main-thread deferral, not an escape hatch** — a worker must hand results to
+  a `Queue` (the bus, or a dialog-local one as in `dialog_update.py` and
+  `dialog_install_torch.py`) that a main-thread timer drains. Every
+  `singleShot` passes its owner as the context argument, so a dying widget
+  drops the callback instead of firing into freed C++ (§5).
 - **Legacy-app interop is intentional.** Many odd choices (PascalCase manifest
   keys, .NET ticks filenames, ConvNeXt-mode integer mapping, the exact serial
   command strings, the verbatim HTML report) exist so this app round-trips with
@@ -1168,20 +1039,19 @@ flowchart TD
   friendly "install PyTorch" path rather than letting an `ImportError` escape.
   Don't add torch to the core `dependencies` in `pyproject.toml` — it's the
   `[ml]` extra. Any **new** entry point that runs a model locally must go
-  through `ui/torch_gate.ensure_torch` (§5) — a bare `LocalInferenceError`
-  reaching the user is the bug that gate exists to prevent.
+  through `win.ensure_torch` / `qtui/torch_gate.py` (§5) — a bare
+  `LocalInferenceError` reaching the user is the bug that gate exists to
+  prevent.
 - **The `[ml]` extra is the only place the torch version lives.**
-  Both `dialog_install_torch` modules (Tk and Qt) read the pins out of
-  `pyproject.toml` at install time — never re-declare them as a constant,
-  which is how the runtime
+  `qtui/dialog_install_torch.py` reads the pins out of `pyproject.toml` at
+  install time — never re-declare them as a constant, which is how the runtime
   install once drifted from the lockfile and went invisible to dependency
   scanning (#67). The one coupling to keep by hand: the GPU build installs
-  from a per-OS CUDA wheel index (`_CUDA_INDEX_BY_OS`, in each of them —
-  Linux and Windows differ because upstream never builds Windows cu129
-  wheels), and each index only carries the torch versions built for it, so
-  a torch bump must check every index still serves the new pin for its
-  platform — `tests/integration/test_torch_wheel_index.py` verifies
-  exactly that.
+  from a per-OS CUDA wheel index (`_CUDA_INDEX_BY_OS` — Linux and Windows
+  differ because upstream never builds Windows cu129 wheels), and each index
+  only carries the torch versions built for it, so a torch bump must check
+  every index still serves the new pin for its platform —
+  `tests/integration/test_torch_wheel_index.py` verifies exactly that.
 - **DB access is shared across threads** via one connection + RLock. Wrap
   multi-statement work in `db.transaction()` (reentrant via SAVEPOINT).
 - **Headstamps are read fresh, not cached** — don't reintroduce a cached
@@ -1206,20 +1076,19 @@ flowchart TD
   [3.12, 3.13, 3.14] × [Linux, Windows] matrix on every push and PR, plus a
   `launcher-smoke` job that actually runs `start.sh`/`start.bat` end to end.
   Still run `pytest` locally before pushing — faster feedback than waiting on
-  CI. Most UI modules need a display — `xvfb-run -a pytest` covers them on a
-  headless box; without tkinter installed those modules skip rather than
-  fail.
-  The Qt UI gets its **own job** (`qtui`), Linux + Windows on one Python:
-  `uv sync --locked --extra qt` and `QT_QPA_PLATFORM=offscreen`, running
-  `tests/unit/qtui` only — and **no Xvfb**, which is the point (Qt's offscreen
-  platform plugin needs no display server at all; the Tk jobs keep theirs).
-  It is deliberately not folded into the matrix: PySide6-Essentials is an
-  ~80 MB wheel, and it's an **abi3** wheel, so all six legs would download and
-  exercise the identical Qt binary. Leaving the extra out of the matrix also
-  keeps the no-PySide6 path — what a normal install has, and what makes those
-  tests `importorskip`-skip — covered. Its only Linux system deps are what
-  `ldd` reports for the offscreen plugin itself; `libxcb-cursor0` is
-  **not** among them (that belongs to the xcb plugin the desktop app uses).
+  CI. **There is no Xvfb anywhere:** every leg sets
+  `QT_QPA_PLATFORM=offscreen`, and Qt's offscreen platform plugin needs no
+  display server at all. The UI tests are part of the matrix, in a second
+  step that runs **one pytest process per test module** — the whole-directory
+  run crashes on the runners for reasons that have never reproduced locally
+  (see §5's hard rules), and per-module isolation turns that into a named
+  failure instead of a suite kill. The Linux system deps are what opencv
+  dlopens plus exactly what `ldd` reports for PySide6's own offscreen plugin;
+  `libxcb-cursor0` is **not** among them (that belongs to the xcb plugin the
+  desktop app picks, which CI never loads). The cost of PySide6 being a core
+  dependency is that its ~80 MB abi3 wheel now downloads on all six legs
+  rather than two — uv's cache absorbs most of it, and the alternative was
+  keeping a dependency out of the environment the matrix is meant to test.
   `lint.yml` also runs the [ty](https://docs.astral.sh/ty/) type checker
   (`uv run ty check`), and it is **blocking** — the tree is at zero
   diagnostics, so anything it reports is something the PR introduced. Run it
@@ -1230,20 +1099,15 @@ flowchart TD
   extra, pygrabber/comtypes are Windows-only) or gaps in opencv's bundled
   stubs. Note the job does a **full** `uv sync` rather than `--only-group dev`:
   ty resolves third-party imports from the environment, so without the runtime
-  deps the output drowns in unresolved-import noise. That sync is
-  deliberately **without `--extra qt`**, which has a consequence worth knowing:
-  ty can't resolve PySide6 there, so every Qt type is unknown and
-  `sorter/qtui/` is effectively unchecked in CI — installing the extra *would*
-  type-check it, at the cost of the same ~80 MB download in a lint job and a
-  batch of new (real) diagnostics to clear first. Both `[[tool.ty.overrides]]`
-  blocks in `pyproject.toml` exist for the same two-states reason: a file whose
-  imports resolve for some contributors and not others, where a bare
-  `# ty: ignore` would flip to an *unused* ignore and fail the build for
-  exactly one of the two. `src/sorter/__init__.py` is one (`_version.py` is
-  generated and gitignored, §7 — absent in CI, present after a `uv build`);
-  `src/sorter/qtui/*` is the other (PySide6 absent in CI, present for anyone
-  who installed the `[qt]` extra). Each silences `unused-ignore-comment` for
-  those paths and nowhere else.
+  deps the output drowns in unresolved-import noise. That sync now brings
+  PySide6 with it, so `sorter/qtui/` is genuinely type-checked against the
+  wheel's stubs — it was effectively unchecked while PySide6 was an optional
+  extra CI didn't install. The one remaining `[[tool.ty.overrides]]` block
+  covers `src/sorter/__init__.py`, whose `_version.py` import is generated and
+  gitignored (§7 — absent in CI, present after a `uv build`): a bare
+  `# ty: ignore` there would flip to an *unused* ignore and fail the build for
+  exactly the contributors who have built the tree. It silences
+  `unused-ignore-comment` for that one file and nowhere else.
   `install-windows.ps1` gets its own workflow
   (`.github/workflows/installer-smoke.yml`), not `build.yml`'s blanket
   trigger: it needs a real published release to exercise its interesting

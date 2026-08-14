@@ -1,15 +1,14 @@
 """Serial monitor: the content of the bottom panel (View → Serial Monitor).
 
-Behavior reference: ``sorter/ui/serial_console.py`` (the Tk widget the Serial
-tab and the detachable ``ui/serial_monitor.py`` window both embed) — read that
-file's module docstring for the feature rationale; this is the same feature set
-on ``QPlainTextEdit`` instead of ``tk.Text``.
+An Arduino-IDE-style traffic log: autoscroll, timestamps, pause (held lines
+flush on resume, they are not dropped), Clear, Save…, a line-ending selector
+that sends through ``broker.send_raw``, command history, and a baud picker
+that persists to ``config.serial["baud"]`` and reconnects.
 
-One deliberate difference: the Tk window is opened lazily from the status bar,
-long after the app started, so it replays ``app.serial_backlog`` on open to
-show what happened before it existed. This widget is dock content built at
-startup (``QtMainWindow._build_serial_dock``), so there is no gap to backfill
-— its own ``_lines`` already *is* the whole session's history.
+It is dock content built at startup (``QtMainWindow._build_serial_dock``), so
+there is no backlog to replay — its own ``_lines`` already *is* the whole
+session's history, including the auto-connect probe that runs before anyone
+could have opened a window.
 
 Everything arrives over the ``EventBus`` (``serial/rx``, ``serial/tx``,
 ``serial/note``, ``serial/state``), delivered on the Qt main thread by the
@@ -36,9 +35,9 @@ import time
 from collections import deque
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
+from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -51,10 +50,6 @@ from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
     QVBoxLayout,
     QWidget,
 )
-
-# Copied verbatim from ``ui/serial_console.py`` rather than imported — qtui
-# imports nothing from the Tk package, which needs tkinter to load at all.
-# ``tests/unit/qtui/test_qt_drift_pins.py`` pins the two copies together.
 
 # What a 16 MHz AVR's U2X divisor can actually hit inside 8N1's ±2% tolerance:
 # 230400 misses by -3.55%, and 250000 (16 MHz / 64) is exact despite looking odd.
@@ -70,7 +65,7 @@ LINE_ENDINGS: dict[str, str] = {
 }
 DEFAULT_LINE_ENDING = "New Line"
 
-MAX_LINES = 4000  # scrollback cap; the oldest are dropped, not the newest — matches Tk
+MAX_LINES = 4000  # scrollback cap; the oldest are dropped, not the newest
 MAX_HISTORY = 100
 # GNOME's file-chooser portal strips the parenthesized "(*.txt)" from the
 # label it shows, leaving no visible pattern (JL live-testing). The
@@ -176,8 +171,7 @@ class SerialMonitorWidget(QWidget):
         self.output.setObjectName("serialLog")
         self.output.setReadOnly(True)
         self.output.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        # Ring-buffer semantics, the Qt way — mirrors the `_lines` deque cap,
-        # so there's no need for Tk's manual `_trim`.
+        # Mirrors the `_lines` deque cap, so the widget trims itself.
         self.output.setMaximumBlockCount(MAX_LINES)
         layout.addWidget(self.output, 1)
 
@@ -278,8 +272,7 @@ class SerialMonitorWidget(QWidget):
         self.baud_combo = QComboBox(self)
         self.baud_combo.addItems([str(b) for b in BAUD_RATES])
         self.baud_combo.setCurrentText(str(self._configured_baud()))
-        # `activated` fires only on a user pick, never on the setCurrentText
-        # above — the Qt analogue of Tk's `<<ComboboxSelected>>`.
+        # `activated` fires only on a user pick, never on the setCurrentText above.
         self.baud_combo.activated.connect(self._on_baud_activated)
         row.addWidget(self.baud_combo)
         return row
@@ -296,7 +289,7 @@ class SerialMonitorWidget(QWidget):
         Nothing here is driven by the stylesheet (the tags baked into each
         rendered line, the connection dot), so a theme switch has to
         explicitly ask for this — the host's theme-apply path should call it,
-        the same way the Tk monitor's `apply_palette` is called by name.
+        the same way the painted history cards are.
         """
         self.count_label.setStyleSheet(f"color: {self._role_color('text_muted')};")
         self.refresh_connection()

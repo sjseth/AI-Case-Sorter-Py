@@ -41,12 +41,13 @@ passes every time, it's this.
 
 ### Windows-only access violation (0xc0000374) between tests
 Forced `gc.collect()` between tests finalizes shiboken wrappers over
-half-torn-down C++ trees. The repo-wide forced-gc fixture is overridden to
-a no-op in qtui's conftest; what runs instead is a **DeferredDelete-only
-flush** (`sendPostedEvents(None, QEvent.DeferredDelete)`) — never a
-generic `processEvents()` in teardown (delivering arbitrary events into
-half-torn windows segfaulted Linux when tried). Windows CI additionally
-runs one pytest process per test module (build.yml) as a bulkhead; keep it.
+half-torn-down C++ trees. There is no forced-gc fixture anywhere (the
+repo-wide one went with the Tk UI); what qtui's conftest runs in teardown is
+a **DeferredDelete-only flush** (`sendPostedEvents(None,
+QEvent.DeferredDelete)`) — never a generic `processEvents()` (delivering
+arbitrary events into half-torn windows segfaulted Linux when tried). CI
+additionally runs one pytest process per test module (build.yml) as a
+bulkhead, on both platforms; keep it.
 
 ### Zombie timers from closed windows
 `closeEvent` must stop every timer the window owns (`_bus_timer`,

@@ -9,7 +9,7 @@ A cross-platform (Windows + Linux) desktop app that drives a machine which
 case, an image classifier predicts the headstamp stamped on its base, and a
 serial-connected sorting machine drops the case into the correct bin.
 
-This is the **full-parity Python/Tkinter version** of the original Windows-only
+This is the **full-parity Python/Qt version** of the original Windows-only
 WinForms application, intended to eventually replace it. It runs fully offline —
 signing in to the community is optional and only unlocks model sharing/downloads.
 
@@ -20,7 +20,7 @@ signing in to the community is optional and only unlocks model sharing/downloads
 > hardware at your own risk and keep hands clear during operation. Provided
 > **as-is, with no warranty** (see [LICENSE](LICENSE)).
 
-<!-- TODO: add a screenshot or short GIF of the Run tab here. -->
+<!-- TODO: add a screenshot or short GIF of the Sort dashboard here. -->
 
 ---
 
@@ -51,7 +51,7 @@ The app can predict a headstamp in one of two modes:
   (default `http://localhost:8000`) to run inference against your own trained
   models with no GPU drivers on the client.
 - **Local model mode** *(a model is active)* — run a **PyTorch ConvNeXt** model
-  directly on this machine. The model can be one you trained in the **Train** tab,
+  directly on this machine. The model can be one you trained on the **Train** page,
   one **downloaded from the community**, or one **imported from a ZIP** — running
   locally does not require you to have trained it yourself. PyTorch is an optional
   dependency installed on demand (see [Optional: PyTorch](#optional-pytorch)).
@@ -60,22 +60,29 @@ The app can predict a headstamp in one of two modes:
 
 ## Features
 
-- **Run** tab — production sorting: live slot grid, per-headstamp counts,
-  confidence floor, auto-select trays, and package/batch mode.
-- **Models** tab — model library: create, activate, import/export (ZIP),
-  evaluate, and manage training images.
-- **Train** tab — feed → capture → classify → label → save, then launch a local
+The window is an activity sidebar down the left, a working area, and movable
+panels you open when you want them.
+
+- **Sort** — production sorting: the cropped headstamp the classifier saw, a
+  live slot grid with per-headstamp counts, confidence floor, auto-select
+  trays, and package/batch mode.
+- **Models** — model library: create, activate, import/export (ZIP), evaluate,
+  and manage training images.
+- **Train** — feed → capture → classify → label → save, then launch a local
   ConvNeXt training run.
-- **AI Config** tab — configure the HTTP classification server and headstamps.
-- **Camera / Serial / Image Proc** tabs — device selection, board settings and
-  sort-arm testing, and headstamp-crop tuning (Hough circles + primer mask).
-- **Community** tab *(sign-in required)* — browse, search, and download
+- **AI Config** — configure the HTTP classification server and headstamps.
+- **Community** *(sign-in required)* — browse, search, and download
   community-published models.
-- **Themes** — pick Dark, Light, Sepia, Midnight Blue, Gothic, or Comic Book
-  from the dropdown in the title bar. The change applies immediately and is
-  remembered. The **gear** beside it opens a theme editor: start from the theme
-  you're on, set any color you like with a live preview, then save, rename, or
-  export it as JSON to share (and import someone else's).
+- **Settings** — Camera, Serial, Image Processing and Theme: device selection,
+  board settings and sort-arm testing, headstamp-crop tuning (Hough circles +
+  primer mask).
+- **Panels** — a serial monitor, a classification history, this project's user
+  guide (`F1`, and it follows you between screens), and a theme picker. Drag
+  them where you want; **View → Re-dock panels** puts them back.
+- **Themes** — Dark, Light, Sepia, Midnight Blue, Gothic, or Comic Book,
+  applied immediately and remembered. The theme editor starts from the theme
+  you're on, sets any color you like with a live preview, and saves, renames or
+  exports it as JSON to share (and imports someone else's).
 - A **serial emulator** so you can run and explore the app with no hardware
   attached.
 
@@ -88,8 +95,8 @@ The app can predict a headstamp in one of two modes:
   separately by [uv](https://docs.astral.sh/uv/), which the launch scripts
   install automatically on first run if it isn't already present.
 - Core Python dependencies (installed automatically by the launch scripts):
-  pyserial, opencv-python, numpy, Pillow, requests, msal, platformdirs
-  (+ pygrabber on Windows for friendly camera names).
+  PySide6, pyserial, opencv-python, numpy, Pillow, requests, msal,
+  platformdirs (+ pygrabber on Windows for friendly camera names).
 - **A webcam** for image capture, and the **CS7.2 sorter hardware** on a serial
   port for actual sorting (the emulator covers everything else).
 - **Optional:** PyTorch + torchvision for local training/inference — see below.
@@ -147,7 +154,7 @@ getting them wrong makes the app misreport its own version.
 
 ### Running without hardware
 
-No sorter attached? In the **Serial** tab choose the **`Emulated`** port. The
+No sorter attached? In **Settings → Serial** choose the **`Emulated`** port. The
 emulator mirrors the real board's protocol so you can exercise the run loop, the
 UI, and most workflows without any hardware.
 
@@ -261,67 +268,68 @@ and point `CASESORTER_API_CA_BUNDLE` at it.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to set up, run the tests, and submit
   changes.
 - [`CLAUDE.md`](CLAUDE.md) — architecture map for contributors and AI coding
-  assistants (layers, event bus, module reference, UI tabs, data layout).
+  assistants (layers, event bus, module reference, UI surfaces, data layout).
 - [`RELEASING.md`](RELEASING.md) — how a release gets cut, for maintainers.
 
 ---
 
 ## Using the app
 
-A first run, start to finish — every tab referenced here is described in
-[Features](#features) above.
+A first run, start to finish — every screen referenced here is described in
+[Features](#features) above, and the full operator guide is
+[`docs/guide/GUIDE.md`](docs/guide/GUIDE.md) (also `F1` inside the app).
 
 1. **Launch it.** `./start.sh` / `start.bat` / the Windows installer's Start
    Menu entry — see [Install & run](#install--run). First launch takes a
    couple of minutes while dependencies sync; every launch after that is
    fast.
 
-2. **No hardware yet? Skip straight to the emulator.** In the **Serial**
-   tab, set the port to **`Emulated`**. It mirrors the real board's protocol,
+2. **No hardware yet? Skip straight to the emulator.** In **Settings →
+   Serial**, set the port to **`Emulated`**. It mirrors the real board's protocol,
    so everything below — camera, classification, sorting — works the same
    with no sorter or camera attached, aside from what the camera itself
    would show.
 
-3. **Connect a camera.** The **Camera** tab lists detected devices; pick
+3. **Connect a camera.** **Settings → Camera** lists detected devices; pick
    one and confirm you get a live preview. If casings aren't cropping
-   cleanly, the **Image Proc** tab tunes the Hough-circle detection and
-   primer mask against a captured frame, with a before/after preview.
+   cleanly, **Settings → Image Processing** tunes the Hough-circle detection
+   and primer mask against a captured frame, with a before/after preview.
 
-4. **Connect the sorter** (skip if using the emulator). The **Serial** tab
+4. **Connect the sorter** (skip if using the emulator). **Settings → Serial**
    connects to the board, exposes its init settings, and has a **sort-arm
    test** to confirm slots move correctly before you feed it real cases.
 
 5. **Choose how to classify.** Two modes — see
    [Two ways to classify](#two-ways-to-classify) for the tradeoffs:
-   - **AI Config** — point the **AI Config** tab at an OpenAI-compatible
+   - **AI Config** — point the **AI Config** screen at an OpenAI-compatible
      server (e.g. a local [CaseSorter AI Server](https://github.com/sjseth/AI-Case-Sorter-Server)).
      No local model, no PyTorch, works immediately.
-   - **Local model** — activate one in the **Models** tab: create your own,
-     download one from the **Community** tab (sign-in required), or import
+   - **Local model** — activate one on the **Models** screen: create your own,
+     download one from **Community** (sign-in required), or import
      one from a ZIP. Local inference needs PyTorch — the app offers to
      install it the first time you need it (see
      [Optional: PyTorch](#optional-pytorch)).
 
-6. **Assign headstamps to slots.** In the **Run** tab, each slot card lists
+6. **Assign headstamps to slots.** On the **Sort** screen, each slot card lists
    the headstamps that route to it — check the ones you want, per slot.
    Assignments are saved automatically as **sorting templates**, so you can
    switch between different bin layouts (e.g. "range brass" vs. "match
    prep") for the same model from the template dropdown, without
    re-checking boxes each time.
 
-7. **Test before you commit hardware to it.** **Test once** in the Run tab
-   feeds and classifies a single case without moving the sort arm or motors
+7. **Test before you commit hardware to it.** **Test once** on the Sort
+   screen feeds and classifies a single case without moving the sort arm or motors
    — confirms the whole pipeline (camera → crop → classify) end to end.
    **Manual feed** does one real feed-and-sort cycle. **Start** runs the
    full continuous loop.
 
-8. **Watch it work.** The Run tab's live slot grid updates per-headstamp
-   counts as cases are sorted; the **Monitor** button opens a detachable
-   history window showing a running log of recent classifications with a
-   color trail. Anything below your confidence floor routes to the
-   catch-all slot instead of guessing.
+8. **Watch it work.** The Sort screen's live slot grid updates per-headstamp
+   counts as cases are sorted; the **Classification History** panel shows a
+   running tile grid of recent classifications with a colour trail. Anything
+   below your confidence floor routes to the catch-all slot instead of
+   guessing.
 
-9. **Improve the model over time.** The **Train** tab is feed → capture →
+9. **Improve the model over time.** The **Train** screen is feed → capture →
    classify → label → save, building a labeled image set you can use to
    train a local ConvNeXt model whenever you're ready — or just keep
    collecting images while sorting normally ("Sort While Training").

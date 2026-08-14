@@ -1,11 +1,9 @@
 """Theme editor — build your own palette from one of the shipped themes.
 
-Qt port of ``ui/dialog_theme_editor.py``; same registry code and the same
-``ui.custom_themes`` settings row, so a theme built here shows up in the Tk
-picker on its next launch and vice versa. It starts from the
-theme the window is currently showing, because a theme is always a *full*
-palette (``theme.normalize_palette``) and a user only wants to change a few
-roles.
+Themes persist to the ``ui.custom_themes`` settings row. The editor starts
+from the theme the window is currently showing, because a theme is always a
+*full* palette (``palettes.normalize_palette``) and a user only wants to
+change a few roles.
 
 On a saved theme, **Save & apply** writes back to it — renaming included, which
 moves the theme rather than copying it — and leaves the dialog open (Seth):
@@ -13,8 +11,7 @@ saving is the iteration step, not the exit. **Create new…** always makes a
 separate theme, so a built-in is never the thing being written to.
 
 The comic-ink and halftone options are edited and stored faithfully but render
-flat under Qt (known gap): they are drawn by the Tk canvases. Keeping them in
-the payload is what lets a theme built here still look right in the classic UI.
+flat (known gap): nothing paints them yet.
 """
 
 from __future__ import annotations
@@ -24,9 +21,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QColor, QFont  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont
+from PySide6.QtWidgets import (
     QCheckBox,
     QColorDialog,
     QDialog,
@@ -68,8 +65,7 @@ from .palettes import (
 from .theme import build_stylesheet
 
 # Role → the words a user thinks in, grouped the way the UI reads: surfaces
-# first, then the ink on them, then the things that mean something. Same
-# grouping as the Tk editor.
+# first, then the ink on them, then the things that mean something.
 _GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     (
         "Surfaces",
@@ -660,7 +656,7 @@ class ThemeEditorDialog(QDialog):
         self.accept()
 
     def _persist(self) -> None:
-        """Store every custom theme (Tk reaches this as ``app.save_custom_themes``)."""
+        """Store every custom theme to the settings row."""
         saver = getattr(self._win, "save_custom_themes", None)
         if callable(saver):
             saver()

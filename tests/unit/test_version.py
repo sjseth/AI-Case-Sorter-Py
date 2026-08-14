@@ -79,10 +79,10 @@ def test_window_title_is_not_a_hardcoded_version() -> None:
     while the in-app updater compared a completely different one. Deriving
     the version from git tags is pointless if a string literal in the UI can
     still drift away from it, so this guards the one place that did."""
-    source = (ROOT / "src" / "sorter" / "ui" / "app.py").read_text(encoding="utf-8")
-    title_calls = re.findall(r"self\.root\.title\((.*?)\)", source)
+    source = (ROOT / "src" / "sorter" / "qtui" / "app.py").read_text(encoding="utf-8")
+    title_calls = re.findall(r"self\.setWindowTitle\((.*?)\)", source)
 
-    assert title_calls, "expected a self.root.title(...) call in app.py"
+    assert title_calls, "expected a self.setWindowTitle(...) call in app.py"
     for call in title_calls:
         assert "__version__" in call, (
             f"window title {call!r} does not derive from __version__ -- "

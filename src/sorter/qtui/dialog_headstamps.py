@@ -1,17 +1,15 @@
 """Per-model headstamp manager: headstamps, slots, and parent classifications.
 
-Qt form of the ``HeadstampManagerDialog`` buried in ``sorter/ui/tab_models.py``
-— the only place a *local* model's headstamps can be managed at all (the AI
-Config page manages the other mode's list).
+The only place a *local* model's headstamps can be managed (the AI Config page
+manages the other mode's list).
 
-Three semantics carried over verbatim from Tk, because getting them wrong
-loses data:
+Three semantics to get right, because getting them wrong loses data:
 
 * **Renaming a headstamp renames its training images.** ``{old}__{ticks}.jpg``
   becomes ``{new}__{ticks}.jpg`` — the filename *is* the label (CLAUDE.md §6),
   so a rename that skipped the files would silently re-label the training set.
-  Only ``models/<id>/images/`` is touched, as in Tk; a file whose target name
-  already exists is left alone rather than overwritten.
+  Only ``models/<id>/images/`` is touched; a file whose target name already
+  exists is left alone rather than overwritten.
 * **Parent *assignments* stage until Save**, so an auto-suggest run can be
   reviewed before it is written; parent and headstamp CRUD commit immediately.
   Closing with staged edits asks first.
@@ -19,18 +17,14 @@ loses data:
   overrides an assignment that already exists, and creates the parent rows it
   needs even when every child turns out to be spoken for.
 
-Two deliberate departures:
+Two things about the mechanics:
 
 * **Slots are editable here and write through immediately**, like every other
-  qtui slot surface — Tk has no slot column in this dialog, so this is the
-  addition, not a changed rule. Each write posts ``run/assignment_changed`` and
-  re-syncs the active sorting template (only when this model is the active one:
-  the template API is scoped to the active model).
+  slot surface. Each write posts ``run/assignment_changed`` and re-syncs the
+  active sorting template (only when this model is the active one: the
+  template API is scoped to the active model).
 * **A rename's file work runs on a QThread**, reporting back through a queued
-  signal. Tk renames inline; a well-used model has thousands of images.
-
-Tk's inline parent picker inside the grid becomes a combo box in the
-selection's action row — same operation, no cell-editor plumbing.
+  signal — a well-used model has thousands of images.
 
 ``notify`` / ``confirm`` / ``ask_text`` are instance attributes so tests drive
 every path without a modal.
@@ -43,8 +37,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QThread, Signal  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDialog,
@@ -71,14 +65,13 @@ from ..data.models import Headstamp, HeadstampParent
 from ..data.repository import HeadstampParentRepo, HeadstampRepo, ModelRepo, SettingsRepo
 from ..paths import model_images_dir
 
-# Kept in lock-step with `_INVALID_NAME_CHARS` in ui/tab_models.py: a headstamp
-# name becomes a filename prefix, and `__` is the field separator.
+# A headstamp name becomes a filename prefix, and `__` is the field separator.
 INVALID_NAME_CHARS = re.compile(r"""[#<>:'"/\\|*?,]""")
 
 NONE_LABEL = "(none)"
 UNASSIGNED_SLOT = "—"
-# Tk tints suggested rows green; QSS can't reach a tree item, so the mark is
-# text — it also survives a theme with no spare hue.
+# QSS can't reach a tree item, so the suggestion marker is text — which also
+# survives a theme with no spare hue.
 SUGGESTED_MARK = "  (suggested)"
 
 COLUMNS = ("Headstamp", "Slot", "Parent")
@@ -87,7 +80,7 @@ RENAME_HINT = "Renaming a headstamp also renames its training images on disk."
 
 
 def clean_name(name: str) -> str:
-    """Tk's ``_clean_name``: invalid characters become ``-``, ``__`` collapses."""
+    """Invalid characters become ``-``; ``__`` collapses."""
     cleaned = INVALID_NAME_CHARS.sub("-", name or "")
     return cleaned.replace("__", "_").strip()
 
@@ -95,7 +88,7 @@ def clean_name(name: str) -> str:
 def prefix_groups(names: list[str]) -> dict[str, list[str]]:
     """Group names by leading alpha prefix, keeping groups of two or more.
 
-    The auto-suggest rule, verbatim from Tk: the prefix is the leading
+    The auto-suggest rule: the prefix is the leading
     ``[A-Za-z]+`` run, upper-cased, and it becomes the parent's name. Names
     that don't start with a letter are skipped entirely.
     """
@@ -124,8 +117,8 @@ class _ImageRenameWorker(QThread):
         for path in image_store.list_images(self._dir):
             if image_store.parse_headstamp(path) != self._old:
                 continue
-            # reclassify() skips an existing target and swallows OSError, which
-            # is the best-effort contract Tk's inline loop had.
+            # reclassify() skips an existing target and swallows OSError:
+            # renaming a training set is best-effort, never all-or-nothing.
             if image_store.reclassify(path, self._new) is not None:
                 renamed += 1
         self.done.emit(self._old, self._new, renamed)
@@ -366,7 +359,7 @@ class HeadstampManagerDialog(QDialog):
         self.tree.clear()
         for headstamp in self._rows:
             # Only seed rows we haven't staged an edit for — a refresh must not
-            # discard unsaved assignments (Tk's rule).
+            # discard unsaved assignments.
             self._assignments.setdefault(headstamp.id, headstamp.parent_id)
             item = QTreeWidgetItem(self.tree, self._row_values(headstamp))
             item.setData(0, Qt.ItemDataRole.UserRole, headstamp.id)
@@ -497,8 +490,8 @@ class HeadstampManagerDialog(QDialog):
         with self.db.transaction():
             self.headstamps.rename(headstamp.id, name)
         # The template payload is name-keyed, so a rename has to re-snapshot it
-        # or the layout still points at a name nothing answers to. (Tk skips
-        # this; the assignment silently drops next time the template applies.)
+        # or the layout still points at a name nothing answers to, and the
+        # assignment silently drops next time the template applies.
         self._sync_template()
         self._announce()
         self._refresh_headstamps()
@@ -698,8 +691,8 @@ class HeadstampManagerDialog(QDialog):
         for worker in list(self._workers):
             worker.wait(2000)
         if self._mutated:
-            # What Tk's `on_saved` does at close: the Train tab's label list and
-            # the Models row counts follow the headstamp set.
+            # The Train page's label list and the Models row counts follow the
+            # headstamp set.
             if self.bus is not None:
                 self.bus.post("mode/changed", {"reason": "headstamps", "model_id": self.model_id})
             self.changed.emit()

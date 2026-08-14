@@ -141,9 +141,8 @@ uv run --group docs mkdocs build --strict       # what CI would fail on
 anchors into warnings, and `--strict` turns warnings into errors. The guide's table of contents
 is 22 same-page links; a broken one there breaks the in-app navigation identically.
 
-Note that either command syncs the venv to *exactly* the default groups plus `docs` -- so it
-uninstalls the `qt` extra if you had it, and `tests/unit/qtui/` then skips instead of failing.
-`uv sync --extra qt` puts it back.
+Note that either command syncs the venv to *exactly* the default groups plus `docs`, so it
+uninstalls the `ml` extra if you had it. `uv sync --extra ml` puts it back.
 
 **Re-publishing by hand** is Actions -> Docs -> Run workflow, with the tag as `version`. Doing
 it from a laptop is the same thing the workflow runs, and needs push rights to `gh-pages`:

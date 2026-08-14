@@ -1,15 +1,15 @@
-"""Classification history — Qt port of ``sorter.ui.monitor`` (CLAUDE.md §5).
+"""Classification history — the right-hand panel (CLAUDE.md §5).
 
 A fixed-position tile grid with a "snake" of border colours trailing the
-newest classification — the same ring-buffer semantics as
-``sorter.ui.monitor.MonitorWindow`` and the Windows app's Monitor, and those
-semantics are **intentional** (Seth, PR #30 feedback): images must never
-scroll or shift position, or the operator can't track a case by where it sits.
+newest classification — the same ring-buffer semantics as the Windows app's
+Monitor, and those semantics are **intentional** (Seth, PR #30 feedback):
+images must never scroll or shift position, or the operator can't track a
+case by where it sits.
 New records overwrite the oldest cell in place; capacity is however many
 tiles fit the space the host gives the widget, reflowing on resize (wider
 window → more columns). The recency trail uses the same neutral (hue-free)
 palette roles the rest of the chrome uses for focus/selection — see
-CLAUDE.md's "Hue is meaning" note in ``ui/theme.py``'s section.
+CLAUDE.md's "Hue is meaning" note.
 
 Subscribes ``run/history`` on ``win.bus`` at construction; payload shape is
 ``{"image": <BGR ndarray>, "label", "parent", "confidence", "slot"}``, the same
@@ -43,9 +43,9 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from PySide6.QtCore import Qt, Signal  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QFont, QImage, QPixmap  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont, QImage, QPixmap
+from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFrame,
@@ -392,7 +392,7 @@ class HistoryView(QWidget):
     def _rebuild_layout(self) -> None:
         """Re-place tiles for the current capacity, keeping the newest records.
 
-        Same rules as the Tk monitor: when the grid shrinks, the oldest
+        When the grid shrinks, the oldest
         records (by recency) are discarded, survivors re-pack into the first
         positions oldest-first so the next overwrite hits the oldest cell,
         and the write cursor resets.

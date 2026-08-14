@@ -1,15 +1,12 @@
-"""One place that decides whether a local-model action can proceed — the Qt
-half of ``ui/torch_gate.py``.
+"""One place that decides whether a local-model action can proceed.
 
-The rule is unchanged: **torch is installed the first time something actually
+The rule: **torch is installed the first time something actually
 needs it, and never before.** Downloading, importing or activating a model does
 not trigger it; running, feeding, previewing a classification, evaluating and
 training do. An AI Config user must never see this dialog.
 
-The shape differs from Tk in one way. Tk passes the parent widget per call
-because every tab is its own widget; the Qt shell holds one gate on the window
-(``win.ensure_torch = TorchGate(win)``), so the parent is bound once and call
-sites read::
+The shell holds one gate on the window (``win.ensure_torch = TorchGate(win)``),
+so the parent is bound once and call sites read::
 
     if not self.ensure_torch(self._start, reason="Sorting needs PyTorch"):
         return
@@ -137,5 +134,5 @@ def ensure_torch(
     reason: str | None = None,
     on_cancel: Callable[[], None] | None = None,
 ) -> bool:
-    """One-shot form with the Tk signature, for a call site that holds no gate."""
+    """One-shot form, for a call site that holds no gate."""
     return TorchGate(parent)(proceed, reason=reason, on_cancel=on_cancel)

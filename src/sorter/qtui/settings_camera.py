@@ -1,22 +1,20 @@
 """Settings -> Camera page: device/resolution pick, live-preview swap.
 
-Behavior reference: ``sorter/ui/tab_camera.py``. Layout is Qt-native (one
-page, no tab chrome); the two-phase probe survives — a fast, non-blocking
-name-only listing at build time (``camera_names``, matches what the Tk tab
-calls its "quick" population) and a full ``list_cameras_with_metadata`` probe
-only when the user clicks Detect, since that call opens every device and can
-block seconds. Unlike the Tk tab this page never probes or swaps the live
-camera on its own: opening a settings page must not grab hardware out from
-under a run, so Detect and Apply are the only things that touch a device.
+The probe is two-phase: a fast, non-blocking name-only listing at build time
+(``camera_names``) and a full ``list_cameras_with_metadata`` probe only when
+the user clicks Detect, since that call opens every device and can block
+seconds. The page never probes or swaps the live camera on its own — opening
+a settings page must not grab hardware out from under a run, so Detect and
+Apply are the only things that touch a device.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QPixmap  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QHBoxLayout,

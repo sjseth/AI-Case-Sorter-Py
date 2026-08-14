@@ -1,4 +1,4 @@
-"""Shared offscreen fixtures for the Qt spike tests.
+"""Shared offscreen fixtures for the UI tests.
 
 Every window here is built against a REAL SQLite-backed ``Config`` on a temp
 dir — the Sort dashboard reads slot assignments straight out of it, so a stub
@@ -44,34 +44,25 @@ def qapp():
 
 @pytest.fixture(autouse=True)
 def _collect_between_tests():
-    """Override the repo-wide forced gc between tests (tests/conftest.py).
+    """Flush deferred deletions between tests — and nothing else.
 
-    That fixture exists for Tk: Variables only die in the cyclic collector,
-    and one finalized on a worker thread calls into Tcl from the wrong
-    thread. Nothing in this directory makes Tk objects, so the reason does
-    not apply — and forcing the collector over half-torn-down Qt widget
-    trees is actively harmful: shiboken wrappers finalize against C++
-    objects mid-teardown, which reproducibly corrupted the heap on the
-    Windows CI runner (0xc0000374), and flushing deferred deletions first
-    only moved the crash to Linux. Qt test suites (pytest-qt included) run
-    without forced collection; so do these.
-
-    What DOES run here: a DeferredDelete-only flush. Almost no test pumps
-    Qt's event loop (``drain_until`` drains only the bus), so deleteLater
-    work from every test otherwise piles up until the suite's rare
-    ``processEvents()`` call flushes hundreds of tests' worth at once —
-    which is where the Windows runner took a deterministic access
+    Almost no test pumps Qt's event loop (``drain_until`` drains only the
+    bus), so deleteLater work from every test otherwise piles up until the
+    suite's rare ``processEvents()`` call flushes hundreds of tests' worth at
+    once — which is where the Windows runner took a deterministic access
     violation. Flushing per test keeps that backlog at one test's worth.
+
     Deliberately NOT a generic ``processEvents()``: delivering arbitrary
-    queued events into half-torn windows is what segfaulted Linux when
-    that was tried.
+    queued events into half-torn windows is what segfaulted Linux when that
+    was tried. And deliberately no forced ``gc.collect()``: shiboken wrappers
+    finalizing against C++ objects mid-teardown reproducibly corrupted the
+    heap on the Windows CI runner (0xc0000374). Qt test suites (pytest-qt
+    included) run without forced collection; so do these.
     """
     yield
-    try:
-        from PySide6.QtCore import QEvent
-        from PySide6.QtWidgets import QApplication
-    except ImportError:  # no [qt] extra: the test modules all skip anyway
-        return
+    from PySide6.QtCore import QEvent
+    from PySide6.QtWidgets import QApplication
+
     app = QApplication.instance()
     if app is not None:
         app.sendPostedEvents(None, QEvent.Type.DeferredDelete)

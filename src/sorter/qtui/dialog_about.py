@@ -1,8 +1,5 @@
 """Help -> About / Help -> License.
 
-No Tk equivalent exists (the Tk UI has no About dialog at all) — scope is
-increment 14's own (docs/ui-modernization.md), specified directly by JL.
-
 URLs mirror ``pyproject.toml``'s ``[project.urls]`` plus two more JL asked
 for: the CS7.2 hardware/firmware repo and Seth's shop, the latter found by
 grepping ``README.md``'s Acknowledgements section — there is no dedicated
@@ -14,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QLabel,

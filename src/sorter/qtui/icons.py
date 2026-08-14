@@ -19,9 +19,9 @@ in one fixed neutral because a taskbar owns its own background
 
 from __future__ import annotations
 
-from PySide6.QtCore import QByteArray, QRectF, Qt  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPixmap  # ty: ignore[unresolved-import]
-from PySide6.QtSvg import QSvgRenderer  # ty: ignore[unresolved-import]
+from PySide6.QtCore import QByteArray, QRectF, Qt
+from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPixmap
+from PySide6.QtSvg import QSvgRenderer
 
 APP = "app"
 SORT = "sort"

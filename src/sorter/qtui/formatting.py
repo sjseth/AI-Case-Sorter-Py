@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from PySide6.QtCore import QDate, QDateTime, QLocale, QTime  # ty: ignore[unresolved-import]
+from PySide6.QtCore import QDate, QDateTime, QLocale, QTime
 
 EMPTY_VALUE = "—"
 

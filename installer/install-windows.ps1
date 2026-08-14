@@ -96,10 +96,9 @@ try {
 
 function Get-PythonCommand {
     <#
-      Returns the path to a python.exe meeting $PythonMin that also has
-      tkinter, or $null. tkinter matters: the whole UI is Tkinter, and a
-      Python without Tcl/Tk fails at launch with a confusing ImportError
-      rather than here where we can do something about it.
+      Returns the path to a python.exe meeting $PythonMin, or $null. This
+      interpreter only ever runs bootstrap.py; uv provisions the one the app
+      itself runs on, so nothing here needs the app's own dependencies.
     #>
     # Probes are expected to fail, and PowerShell 5.1 turns native stderr into
     # a terminating ErrorRecord under 'Stop'. Function-scoped.
@@ -137,7 +136,7 @@ function Get-PythonCommand {
         # interpreter here to find.
         if ($candidate -like '*\WindowsApps\*') { continue }
         try {
-            $out = & $candidate -c "import sys, tkinter; print('%d.%d' % sys.version_info[:2])" 2>$null
+            $out = & $candidate -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
             if ($LASTEXITCODE -ne 0 -or -not $out) { continue }
             if ([Version]$out.Trim() -ge $PythonMin) { return $candidate }
         } catch { continue }
@@ -199,7 +198,7 @@ function Install-Python {
         Write-Note "winget is not available; using python.org."
     }
 
-    # python.org fallback. Per-user, silent, and explicitly including Tcl/Tk.
+    # python.org fallback. Per-user and silent.
     $arch = if ([Environment]::Is64BitOperatingSystem) { 'amd64' } else { 'win32' }
     $url = "https://www.python.org/ftp/python/$PythonFallback/python-$PythonFallback-$arch.exe"
     $exe = Join-Path $env:TEMP "python-$PythonFallback-$arch.exe"
@@ -214,7 +213,7 @@ function Install-Python {
     Write-Note "Running the installer (per-user, silent). This takes a minute..."
     $proc = Start-Process -FilePath $exe -Wait -PassThru -ArgumentList @(
         '/quiet', 'InstallAllUsers=0', 'PrependPath=1',
-        'Include_tcltk=1', 'Include_pip=1', 'Include_launcher=1'
+        'Include_pip=1', 'Include_launcher=1'
     )
     Remove-Item $exe -Force -ErrorAction SilentlyContinue
     if ($proc.ExitCode -ne 0) {
@@ -604,7 +603,7 @@ try {
         Write-Step "Installing to $InstallDir"
     }
 
-    Write-Step "Checking for Python $PythonMin or newer (with Tcl/Tk)"
+    Write-Step "Checking for Python $PythonMin or newer"
     $python = Get-PythonCommand
     if ($python) {
         Write-Ok "Found $python"

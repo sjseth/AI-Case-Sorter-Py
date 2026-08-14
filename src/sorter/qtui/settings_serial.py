@@ -1,31 +1,28 @@
 """Settings -> Serial page: connect/disconnect, board init settings, sort-arm
 test, airdrop config.
 
-Behavior reference: ``sorter/ui/tab_serial.py`` plus ``hardware/serial_broker.py``.
-Supersedes the minimal port/baud/connect block in ``qtui/app.py``'s
-``_build_serial_section`` (deleted at wiring time) — this module owns the
+The protocol reference is ``hardware/serial_broker.py``. This module owns the
 whole connect/disconnect/refresh flow itself rather than reusing
-``QtMainWindow.connect_serial``/``refresh_ports``, since those read from the
-widgets that block builds and won't exist afterward.
+``QtMainWindow.connect_serial``/``refresh_ports``, since those read from
+widgets that don't exist on this page.
 
-The traffic log itself is NOT ported here — the serial panel
+The traffic log is deliberately not duplicated here — the serial panel
 (``qtui/serial_monitor.py``) already renders ``serial/rx``/``serial/tx``/
 ``serial/note``, and a second log on this page would be an out-of-sync copy
-of its ring buffer. Only Tk's "Open monitor ↗" button survives, revealing
-that panel; the baud picker is kept in step with the panel's own.
+of its ring buffer. "Open monitor ↗" reveals that panel instead; the baud
+picker is kept in step with the panel's own.
 
-Deviation from the Tk tab, deliberate and consistent with the other settings
-pages (``settings_camera.py``, ``settings_imageproc.py``): every field
-persists to ``Config`` on change, no separate Save button. Board-config
-values fetched via "Get config from board" also persist immediately for the
-same reason (Tk leaves them unsaved until the next explicit Save).
+As on the other settings pages (``settings_camera.py``,
+``settings_imageproc.py``): every field persists to ``Config`` on change, no
+separate Save button. Board-config values fetched via "Get config from board"
+persist immediately for the same reason.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,

@@ -1,4 +1,4 @@
-"""Classification history: parity with ``sorter.ui.monitor``'s image tray.
+"""Classification history: the ring-buffer tile grid and its recency trail.
 
 Everything here runs offscreen against a real SQLite-backed ``Config`` and,
 for the end-to-end case, the in-process serial emulator — no display, no

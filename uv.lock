@@ -18,6 +18,8 @@ dependencies = [
     { name = "platformdirs" },
     { name = "pygrabber", marker = "sys_platform == 'win32'" },
     { name = "pyserial" },
+    { name = "pyside6-essentials" },
+    { name = "pyside6-qtads" },
     { name = "requests" },
     { name = "sqlite-utils" },
 ]
@@ -26,10 +28,6 @@ dependencies = [
 ml = [
     { name = "torch" },
     { name = "torchvision" },
-]
-qt = [
-    { name = "pyside6-essentials" },
-    { name = "pyside6-qtads" },
 ]
 
 [package.dev-dependencies]
@@ -56,14 +54,14 @@ requires-dist = [
     { name = "platformdirs", specifier = "==4.11.2" },
     { name = "pygrabber", marker = "sys_platform == 'win32'", specifier = "==0.2" },
     { name = "pyserial", specifier = "==3.5" },
-    { name = "pyside6-essentials", marker = "extra == 'qt'", specifier = "==6.11.1" },
-    { name = "pyside6-qtads", marker = "extra == 'qt'", specifier = "==5.0.0.2" },
+    { name = "pyside6-essentials", specifier = "==6.11.1" },
+    { name = "pyside6-qtads", specifier = "==5.0.0.2" },
     { name = "requests", specifier = "==2.34.2" },
     { name = "sqlite-utils", specifier = "==4.1.1" },
     { name = "torch", marker = "extra == 'ml'", specifier = "==2.13.0" },
     { name = "torchvision", marker = "extra == 'ml'", specifier = "==0.28.0" },
 ]
-provides-extras = ["ml", "qt"]
+provides-extras = ["ml"]
 
 [package.metadata.requires-dev]
 dev = [

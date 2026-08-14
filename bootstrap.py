@@ -15,10 +15,9 @@ serve) and imports nothing beyond the standard library.
 
 What it does, in order:
   1. On Linux, offer to install libGL/glib via the system package manager
-     if the app's dependencies need them and they're missing. uv's
-     provisioned Python bundles Tcl/Tk (verified empirically while building
-     this), but graphics libraries like libGL aren't part of a Python
-     build -- they're system X11/GPU libraries opencv dlopens at runtime.
+     if the app's dependencies need them and they're missing. Graphics
+     libraries like libGL aren't part of a Python build -- they're system
+     X11/GPU libraries opencv dlopens at runtime.
   2. Ensure uv is available, installing it via the official installer
      (pinned to UV_VERSION, not "latest") into a project-local .uv/ if it
      isn't already on PATH. The installer itself verifies a sha256 baked in
@@ -51,8 +50,8 @@ What it does, in order:
      installed into the venv (step 4), so there is otherwise nothing for it
      to resolve. Doing it this way keeps sys.path surgery out of the
      application entirely: `-m` also leaves `src/sorter` itself off the
-     path, where subpackages like `ui` and `data` would shadow same-named
-     third-party ones.
+     path, where subpackages like `data` and `update` would shadow
+     same-named third-party ones.
 """
 
 from __future__ import annotations
@@ -67,10 +66,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
 
-# Bump deliberately, not automatically -- re-verify tkinter/libGL behavior
-# (see the module docstring) after bumping, the same way this version was
-# chosen: by actually running `uv python install` and importing tkinter/cv2,
-# not by assuming.
+# Bump deliberately, not automatically -- re-verify the libGL behavior (see
+# the module docstring) after bumping, the same way this version was chosen:
+# by actually running `uv python install` and importing cv2, not by assuming.
 UV_VERSION = "0.12.1"
 UV_INSTALL_DIR = ROOT / ".uv" / "bin"
 
@@ -278,10 +276,10 @@ def _try_install_system_pkg(feature: str, auto_install: bool) -> bool:
 
 
 def ensure_linux_runtime_libs(uv: str, auto_install: bool) -> None:
-    """opencv dlopens libGL/glib at runtime. uv's Python bundles Tcl/Tk, but
-    not these -- they're system X11/graphics libraries, not part of a Python
-    build. Probed the same way start.sh did: try the import for real, in the
-    app's actual environment, and read the failure instead of guessing.
+    """opencv dlopens libGL/glib at runtime -- system X11/graphics libraries,
+    not part of a Python build. Probed the same way start.sh did: try the
+    import for real, in the app's actual environment, and read the failure
+    instead of guessing.
 
     The probe loops because the import reports only the *first* library it
     fails to find: on a minimal container or a fresh WSL image both libGL and

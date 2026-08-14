@@ -37,9 +37,9 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QByteArray, Qt  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QBrush, QColor  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import QByteArray, Qt
+from PySide6.QtGui import QBrush, QColor
+from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFileDialog,
@@ -407,7 +407,7 @@ class ModelsPage(QWidget):
 
         Nothing is cached: the active model, the rows and the on-disk image
         counts are all read fresh, so an activation from anywhere (this page,
-        the Tk UI, a community download) shows up on the next refresh.
+        a community download) shows up on the next refresh.
         """
         selected = self.selected_id()
         self._refresh_cartridge_filter()
@@ -638,7 +638,7 @@ class ModelsPage(QWidget):
         if model_id == AI_CONFIG_SENTINEL_ID:
             self._activate(None)
             return
-        # Read fresh: the row can be stale (another window, the Tk UI, a
+        # Read fresh: the row can be stale (another window, a
         # community import), in which case redraw rather than act on it.
         model = self.models.get(model_id)
         if model is None:

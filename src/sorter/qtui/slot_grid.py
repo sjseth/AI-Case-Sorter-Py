@@ -15,8 +15,8 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
-from PySide6.QtCore import Qt, Signal  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,

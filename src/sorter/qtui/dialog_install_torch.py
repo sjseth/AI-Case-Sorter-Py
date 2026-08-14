@@ -1,14 +1,9 @@
-"""Install PyTorch + torchvision into the running venv — the Qt half of
-``ui/dialog_install_torch.py``.
+"""Install PyTorch + torchvision into the running venv.
 
-Same install and the same pins; what changes is the threading. The Tk dialog
-marshals its pip output with ``after()`` *from the pump thread*, which
-CLAUDE.md §8 names as the pattern not to copy: ``after()`` registers a Tcl
-command and is itself unsafe off the main thread. Here every worker — the
-output pump and the ``nvidia-smi`` probe — only puts a message on a
-``queue.Queue``, and a main-thread ``QTimer`` drains it into the widgets. Same
-contract the event bus gives the rest of the app, minus the bus (a dialog has
-no access to one).
+Every worker — the output pump and the ``nvidia-smi`` probe — only puts a
+message on a ``queue.Queue``, and a main-thread ``QTimer`` drains it into the
+widgets (CLAUDE.md §8). Same contract the event bus gives the rest of the app,
+minus the bus (a dialog has no access to one).
 
 Callers reach this through ``torch_gate`` rather than constructing it; pass
 ``reason`` to say which action is asking, since "Training needs PyTorch" is the
@@ -30,9 +25,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QTimer  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QFont  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -47,9 +42,9 @@ from ..paths import find_uv
 
 # The torch/torchvision pins live in pyproject.toml's [ml] extra and are read
 # from there at install time, never re-declared here (CLAUDE.md §8). Only the
-# per-OS CUDA index for the GPU build is decided in code; see
-# ui/dialog_install_torch.py's comment for why the two indexes differ.
-# tests/unit/qtui/test_qt_torch_gate.py pins this half against the Tk dialog.
+# per-OS CUDA index for the GPU build is decided in code: upstream never builds
+# Windows cu129 wheels, so the two platforms differ.
+# tests/integration/test_torch_wheel_index.py resolves each pin against each.
 _CUDA_INDEX_BY_OS = {
     "linux": "https://download.pytorch.org/whl/cu129",
     "win32": "https://download.pytorch.org/whl/cu130",
@@ -60,8 +55,9 @@ _CUDA_INDEX = _CUDA_INDEX_BY_OS.get(sys.platform, _CUDA_INDEX_BY_OS["linux"])
 def ml_pin_targets() -> tuple[str, ...] | None:
     """The exact requirement strings pyproject.toml's [ml] extra pins.
 
-    Byte-for-byte the Tk dialog's reader (same resolution rule, same guards,
-    same None on any failure) — see its docstring; qtui may not import it.
+    ``None`` on any failure — an unreadable pyproject installs nothing rather
+    than a guess. The ``project.name`` guard matters: ``parents[3]`` is
+    whatever directory the tree happens to sit in.
     """
     path = Path(__file__).resolve().parents[3] / "pyproject.toml"
     try:
@@ -363,8 +359,8 @@ class TorchInstallDialog(QDialog):
             self._terminate(proc)
         self._installing = False
         self._timer.stop()
-        # Tk parity: a cancel *during* an install is a cancel of the install,
-        # not of the action that asked for it, so the caller isn't re-entered.
+        # A cancel *during* an install is a cancel of the install, not of the
+        # action that asked for it, so the caller isn't re-entered.
         if self._on_cancel is not None and not was_installing:
             self._on_cancel()
         super().reject()

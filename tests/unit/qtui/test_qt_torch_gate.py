@@ -5,11 +5,11 @@ Three properties are pinned here, and each has cost real breakage before:
 
 * an AI Config user is never prompted (the gate short-circuits on
   ``local_inference.is_installed`` — a ``find_spec`` probe, never an import);
-* the argv is the *same* argv the Tk dialog builds, and both read their pins
-  out of pyproject's ``[ml]`` extra at install time (CLAUDE.md §8), so a
-  version bump can't drift the runtime install away from the declared one;
+* every argv the dialog can build is assembled from pyproject's ``[ml]`` extra,
+  read at install time (CLAUDE.md §8), so a version bump can't drift the
+  runtime install away from the declared one;
 * worker output crosses to the widgets through a queue drained by a main-thread
-  timer, never ``after()``-style calls from the thread itself (CLAUDE.md §8).
+  timer, never from the worker thread itself (CLAUDE.md §8).
 
 No real install and no real modal runs here: ``build_command`` points the
 streaming path at a throwaway ``python -c`` process, and nothing is ``exec()``ed.
@@ -23,7 +23,7 @@ import time
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
@@ -167,7 +167,7 @@ def test_offer_is_remembered_per_gate_not_globally(no_torch, fake_dialogs) -> No
 
 
 def test_hard_gate_asks_again_after_a_decline(no_torch, fake_dialogs) -> None:
-    """Tk parity: Start can't run without torch, so it re-asks every press."""
+    """Start can't run without torch, so it re-asks every press."""
     gate = TorchGate(None, dialog_factory=FakeDialog)
     gate(lambda: None)
     fake_dialogs[0].on_cancel = None
@@ -175,7 +175,7 @@ def test_hard_gate_asks_again_after_a_decline(no_torch, fake_dialogs) -> None:
     assert len(fake_dialogs) == 2
 
 
-def test_module_level_ensure_torch_keeps_the_tk_signature(no_torch, monkeypatch, fake_dialogs) -> None:
+def test_module_level_ensure_torch_is_the_documented_front_door(no_torch, monkeypatch, fake_dialogs) -> None:
     monkeypatch.setattr(torch_gate, "TorchInstallDialog", FakeDialog)
     assert torch_gate.ensure_torch("win", lambda: None, reason="Training needs PyTorch") is False
     assert fake_dialogs[0].reason == "Training needs PyTorch"
@@ -197,13 +197,15 @@ def test_the_pin_reader_returns_the_pyproject_ml_extra() -> None:
     assert list(targets) == _pyproject_ml_pins()
 
 
-def test_the_pin_reader_matches_the_tk_dialogs() -> None:
-    pytest.importorskip("tkinter")
-    from sorter.ui import dialog_install_torch as tk_dialog
+def test_the_cuda_index_table_covers_every_platform_the_gpu_flow_reaches() -> None:
+    """The GPU build only ever runs where nvidia-smi does, i.e. these two.
 
-    assert ml_pin_targets() == tk_dialog.ml_pin_targets()
-    assert _CUDA_INDEX_BY_OS == tk_dialog._CUDA_INDEX_BY_OS
-    assert _CUDA_INDEX == tk_dialog._CUDA_INDEX
+    ``tests/integration/test_torch_wheel_index.py`` resolves each pin against
+    each index for real; this is the offline half — that the table has an
+    entry per platform and that the module-level pick comes out of it.
+    """
+    assert set(_CUDA_INDEX_BY_OS) == {"linux", "win32"}
+    assert _CUDA_INDEX in _CUDA_INDEX_BY_OS.values()
 
 
 def test_cpu_command_prefers_uv_over_bare_pip() -> None:
@@ -252,72 +254,6 @@ def test_the_pin_reader_rejects_another_projects_pyproject(monkeypatch, tmp_path
     )
     monkeypatch.setattr(qt_dialog, "__file__", str(tmp_path / "src" / "sorter" / "qtui" / "dialog_install_torch.py"))
     assert qt_dialog.ml_pin_targets() is None
-
-
-class _TkDialogStub:
-    """The attributes ``TorchInstallDialog._start_install`` reaches for.
-
-    Enough of the Tk dialog to run its argv-building method unbound, so this
-    test needs a tkinter *import* but never a display — which is what puts it
-    back under CI (the qt job has no X server; the Tk matrix has no PySide6).
-    Widget refactors on the Tk side will fail here loudly, which is the point.
-    """
-
-    def __init__(self) -> None:
-        self._installing = False
-        self._install_buttons: list[Any] = []
-        self._gpu = None
-        self._proc = None
-        self.gpu_btn = self
-        self.cpu_btn = self
-        self.appended: list[str] = []
-
-    def config(self, **_kwargs: Any) -> None: ...
-
-    def _append(self, text: str) -> None:
-        self.appended.append(text)
-
-    def _pump(self) -> None: ...  # the no-op Thread never calls it
-
-    def _finish(self, success: bool) -> None:
-        raise AssertionError(f"the Tk dialog gave up building a command (success={success})")
-
-
-@pytest.mark.parametrize("use_gpu", [False, True])
-def test_argv_matches_the_tk_dialog_exactly(use_gpu: bool, monkeypatch) -> None:
-    """Same argv, byte for byte — built by the real Tk dialog's own method."""
-    pytest.importorskip("tkinter")
-
-    from sorter.ui import dialog_install_torch as tk_dialog
-
-    monkeypatch.setattr(tk_dialog, "find_uv", lambda: "/fake/.uv/bin/uv")
-    captured: dict[str, list[str]] = {}
-
-    class _FakeProc:
-        stdout = iter([])
-
-        def wait(self) -> int:
-            return 0
-
-    def _fake_popen(cmd, **_kwargs):
-        captured["cmd"] = cmd
-        return _FakeProc()
-
-    class _NoOpThread:
-        def __init__(self, **_kwargs) -> None: ...
-
-        def start(self) -> None: ...
-
-    monkeypatch.setattr(subprocess, "Popen", _fake_popen)
-    # The Tk pump marshals with after() from the thread — the pattern this port
-    # exists to avoid, and there is no main loop here to marshal into.
-    monkeypatch.setattr(tk_dialog.threading, "Thread", _NoOpThread)
-
-    # Unbound, on a stand-in: the method only builds argv, and a real dialog
-    # would need a display.
-    tk_dialog.TorchInstallDialog._start_install(cast(Any, _TkDialogStub()), use_gpu=use_gpu)
-
-    assert build_install_command(use_gpu=use_gpu, uv="/fake/.uv/bin/uv", pip_available=True) == captured["cmd"]
 
 
 # ----- the dialog ------------------------------------------------------------

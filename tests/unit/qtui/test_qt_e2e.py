@@ -541,7 +541,7 @@ def test_demo_d_help_follows_the_page_you_are_on(window) -> None:
     # An anchor the guide doesn't have still opens *something* useful — the
     # top of the guide, never an error.
     window.help_view.show_topic("a-topic-the-guide-does-not-have")
-    assert "Qt UI Guide" in help_block(window)
+    assert "AI Case Sorter — User Guide" in help_block(window)
 
 
 def test_demo_d_the_guide_dock_toggles_from_the_view_menu(window) -> None:

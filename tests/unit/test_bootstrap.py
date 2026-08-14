@@ -100,8 +100,8 @@ SORTER_SUBPACKAGES = (
     "sorter.data",
     "sorter.hardware",
     "sorter.ml",
+    "sorter.qtui",
     "sorter.training",
-    "sorter.ui",
     "sorter.update",
 )
 

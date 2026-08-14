@@ -24,6 +24,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         python-version: ["3.12", "3.13", "3.14"]
+    env:
+      # Qt's own offscreen platform plugin: no display server, no xvfb, on
+      # either OS. tests/unit/qtui/conftest.py setdefault's the same value;
+      # this makes CI's intent legible.
+      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,90 +44,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
 
-      # libgl1/libglib2.0-0 only -- not python3-tk. uv's provisioned Python
-      # bundles Tcl/Tk itself (verified empirically on real runners), so
-      # the system Python running this step no longer needs it either; only
-      # the graphics libraries opencv dlopens at runtime are still a real gap.
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgl1 libglib2.0-0 xvfb
-
-      # --locked (not bootstrap.py's --frozen): CI's job is exactly to catch
-      # a uv.lock that's drifted from pyproject.toml, so it should fail loud
-      # here rather than silently pass with a stale lock.
-      - name: Sync dependencies
-        run: uv sync --locked --python ${{ matrix.python-version }}
-
-      # opencv-python's cp314 wheels aren't reliably published yet; a resolution
-      # failure here is expected until they land, hence continue-on-error above
-      # rather than a hard skip -- the matrix leg still reports what's true today.
-
-      - name: Run tests (Linux, headless display)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a uv run --locked --python ${{ matrix.python-version }} pytest -q --junitxml=build/junit.xml
-
-      - name: Run tests (Windows)
-        if: runner.os == 'Windows'
-        run: uv run --locked --python ${{ matrix.python-version }} pytest -q --junitxml=build/junit.xml
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: junit-${{ matrix.os }}-py${{ matrix.python-version }}
-          path: build/junit.xml
-
-  # The Qt UI's tests, and only those. Deliberately NOT folded into the matrix
-  # above, for three reasons:
-  #
-  #  * PySide6-Essentials is an ~80 MB wheel per job (79.9 MB Linux / 77.5 MB
-  #    Windows, from uv.lock), so the matrix would pay for it six times.
-  #  * That wheel is cp310-**abi3** -- one compiled binary serves 3.10 through
-  #    3.14 -- so running the same suite on three interpreters would exercise
-  #    the identical Qt build three times over. The Python-version question the
-  #    matrix exists to answer is already answered by the suite above, which
-  #    imports every non-Qt module the qtui code sits on.
-  #  * Keeping the qt extra out of the matrix keeps the *absent*-PySide6 path
-  #    honest: that is what a normal install has, and it is what makes the
-  #    qtui tests' `importorskip` skip rather than fail there.
-  #
-  # 3.13 rather than .python-version's 3.14: the 3.14 leg above is
-  # continue-on-error, and a red Qt job should never be ambiguous about which
-  # of the two it is.
-  qtui:
-    name: pytest qtui (offscreen, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        # One entry on purpose (see above) -- kept as a matrix axis so adding
-        # a version later is a one-word change, same shape as the job above.
-        python-version: ["3.13"]
-    env:
-      # The whole point of the Qt port's test story: Qt's own offscreen
-      # platform plugin, so there is no display server and no xvfb anywhere in
-      # this job (the Tk jobs still need theirs). tests/unit/qtui/conftest.py
-      # sets the same value with setdefault; this makes CI's intent legible.
-      QT_QPA_PLATFORM: offscreen
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          python-version: ${{ matrix.python-version }}
-          enable-cache: true
-
-      # Exactly what `ldd` reports for the wheel's own
-      # PySide6/Qt/plugins/platforms/libqoffscreen.so, minus the C/C++ runtime
-      # and what the wheel bundles itself. Most are already on the runner
-      # image; listing them is what keeps this job independent of that.
+      # What opencv dlopens (libgl1/libglib2.0-0) plus exactly what `ldd`
+      # reports for PySide6's own platforms/libqoffscreen.so, minus the C/C++
+      # runtime and what the wheel bundles itself. No xvfb: Qt's offscreen
+      # platform plugin needs no display server at all.
       # NOT libxcb-cursor0: that one belongs to libqxcb.so -- the plugin the
-      # desktop app picks (app.py's default_qpa_platform) and this job never
-      # loads. Verified by ldd on both plugins.
+      # desktop app picks (app.py's default_qpa_platform) and CI never loads.
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -131,10 +58,20 @@ jobs:
             libgl1 libegl1 libglib2.0-0 libxkbcommon0 libdbus-1-3 \
             libfontconfig1 libx11-6 libxcb1
 
-      # --locked for the same reason as the matrix above; --extra qt is what
-      # turns the qtui tests from skipped into run.
-      - name: Sync dependencies (with the qt extra)
-        run: uv sync --locked --extra qt --python ${{ matrix.python-version }}
+      # --locked (not bootstrap.py's --frozen): CI's job is exactly to catch
+      # a uv.lock that's drifted from pyproject.toml, so it should fail loud
+      # here rather than silently pass with a stale lock.
+      - name: Sync dependencies
+        id: sync
+        run: uv sync --locked --python ${{ matrix.python-version }}
+
+      # opencv-python's cp314 wheels aren't reliably published yet; a resolution
+      # failure here is expected until they land, hence continue-on-error above
+      # rather than a hard skip -- the matrix leg still reports what's true today.
+
+      # Everything but the UI: one process, as it has always run.
+      - name: Run tests
+        run: uv run --locked --python ${{ matrix.python-version }} pytest -q --ignore=tests/unit/qtui --junitxml=build/junit.xml
 
       # BOTH platforms run one pytest process per test module. Windows first:
       # its offscreen plugin took an access violation at the first real event
@@ -149,22 +86,27 @@ jobs:
       # suite runs one-process (and has never crashed there), and the e2e
       # module drives whole journeys in one process. pwsh ships on both
       # runner images, so one step serves both. Revisit on PySide6 upgrades.
+      #
+      # Runs even when the step above failed (but not when the sync did, which
+      # would only produce noise): a broken non-UI test must not hide the UI's
+      # results, which is what the separate job it replaces used to guarantee.
       - name: Run the qtui tests (process per module)
+        if: ${{ !cancelled() && steps.sync.conclusion == 'success' }}
         shell: pwsh
         run: |
           $failed = @()
           Get-ChildItem tests/unit/qtui/test_*.py | ForEach-Object {
             $junit = "build/junit-" + $_.BaseName + ".xml"
-            uv run --locked --extra qt --python ${{ matrix.python-version }} pytest $_.FullName -q --junitxml=$junit
+            uv run --locked --python ${{ matrix.python-version }} pytest $_.FullName -q --junitxml=$junit
             if ($LASTEXITCODE -ne 0) { $failed += $_.Name }
           }
           if ($failed.Count -gt 0) { Write-Error ("failing modules: " + ($failed -join ', ')); exit 1 }
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always() && runner.os == 'Linux'
+        if: always()
         with:
-          name: junit-qtui-${{ matrix.os }}
-          path: build/junit-*.xml
+          name: junit-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: build/junit*.xml
 
   launcher-smoke:
     name: verify launcher bootstrap (${{ matrix.os }})
@@ -195,17 +137,13 @@ jobs:
         shell: powershell
         run: .\installer\tests\Test-StartBatProbe.ps1
 
-      # xvfb only -- deliberately NOT libgl1/glib. Pre-installing those would
-      # test a runner that already has them, not bootstrap.py's own
-      # detect-and-offer-to-install logic. xvfb just gives Tk a display to
-      # initialize against; it has nothing to do with that logic.
-      - name: Install xvfb (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
+      # No system packages installed here, deliberately: pre-installing
+      # libgl1/glib would test a runner that already has them, not
+      # bootstrap.py's own detect-and-offer-to-install logic. No xvfb either --
+      # the launch below runs Qt's offscreen platform plugin, so there is no
+      # display server to provide.
 
-      # main.py has no headless flag, so a full run blocks on the Tk main
+      # The app has no headless flag, so a full run blocks on the Qt event
       # loop and the launcher never exits on its own. So wait for the line
       # bootstrap.py prints when it hands off to the app rather than for the
       # process: everything under test (uv install, dependency sync, the
@@ -222,9 +160,9 @@ jobs:
       - name: Launch and wait (Linux)
         if: runner.os == 'Linux'
         shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
-          Xvfb :99 -screen 0 1280x1024x24 &
-          export DISPLAY=:99
           timeout 300 ./start.sh --auto > bootstrap.log 2>&1 &
           LAUNCH_PID=$!
           READY=0
@@ -238,8 +176,8 @@ jobs:
             kill -0 "$LAUNCH_PID" 2>/dev/null || break
             sleep 1
           done
-          # Give Tk a moment to initialize, so an immediate crash still lands
-          # in the log rather than being killed before it can be printed.
+          # Give the app a moment to initialize, so an immediate crash still
+          # lands in the log rather than being killed before it can be printed.
           sleep 10
           kill "$LAUNCH_PID" 2>/dev/null || true
           wait "$LAUNCH_PID" 2>/dev/null || true
@@ -264,6 +202,8 @@ jobs:
       - name: Launch and wait (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
           $job = Start-Job -ScriptBlock {
             Set-Location $using:PWD
@@ -276,7 +216,7 @@ jobs:
             if ($job.State -ne 'Running') { break }
             Start-Sleep -Seconds 1
           }
-          # Let Tk initialize, so an immediate crash still reaches the log.
+          # Let the app initialize, so an immediate crash still reaches the log.
           Start-Sleep -Seconds 10
           Write-Host "----- bootstrap.py output (job state: $($job.State)) -----"
           Receive-Job -Job $job -Keep
@@ -292,15 +232,15 @@ jobs:
       # --frozen and --locked together: --check catches a uv.lock that has
       # drifted from pyproject.toml, and the import proves the environment
       # bootstrap.py actually built -- via `uv sync --frozen`, same as here
-      # -- has the runtime pieces that matter (cv2 needs libGL/glib; tkinter
-      # needs Tcl/Tk). Works identically on both platforms because
+      # -- has the runtime pieces that matter (cv2 needs libGL/glib; PySide6
+      # is the UI toolkit). Works identically on both platforms because
       # bootstrap.py's logic is now the same code either way.
       - name: Verify the resulting environment (Linux)
         if: runner.os == 'Linux'
         run: |
           test -x .uv/bin/uv || { echo "::error::bootstrap.py did not install uv"; exit 1; }
           .uv/bin/uv lock --check
-          .uv/bin/uv run --frozen python -c "import cv2, tkinter; print('cv2 + tkinter import OK')"
+          .uv/bin/uv run --frozen python -c "import cv2, PySide6; print('cv2 + PySide6 import OK')"
 
       - name: Verify the resulting environment (Windows)
         if: runner.os == 'Windows'
@@ -311,4 +251,4 @@ jobs:
             exit 1
           }
           & .uv\bin\uv.exe lock --check
-          & .uv\bin\uv.exe run --frozen python -c "import cv2, tkinter; print('cv2 + tkinter import OK')"
+          & .uv\bin\uv.exe run --frozen python -c "import cv2, PySide6; print('cv2 + PySide6 import OK')"

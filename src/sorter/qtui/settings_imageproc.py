@@ -1,20 +1,16 @@
 """Settings -> Image Proc page: Hough tuning, primer mask, LED, before/after preview.
 
-Behavior + ranges reference: ``sorter/ui/tab_imageproc.py`` (the ``NumericField``
-bounds there are the source of truth for the spin-box ranges below) and
-``sorter/hardware/image_proc.py`` for the processing pipeline itself.
+Pipeline reference: ``sorter/hardware/image_proc.py``.
 
-Deviation from the Tk tab, deliberate: the Tk tab only commits a parameter
-change to ``Config`` when "Save" (or "Capture Image", which calls save() first)
-is clicked. This page persists each control on change instead — no separate
-Save step — and reprocesses the last-captured frame against it. Line-scan
-strategy stays dormant here too, same as Tk (``crop_headstamp`` always picks Hough).
+Every control persists to ``Config`` on change — no separate Save step — and
+reprocesses the last-captured frame against it. The line-scan strategy stays
+dormant and UI-hidden (``crop_headstamp`` always picks Hough).
 
-Second deviation, and the reason this page listens on the bus: crop and primer
+The reason this page listens on the bus: crop and primer
 settings belong to the model (case diameter and primer size are cartridge
 properties), and the model row has carried them since the WinForms port —
 ``Model.use_primer_mask``/``hide_primer``/``primer_mask_size`` and
-``Model.image_processing``. Nothing read them: both UIs tuned the single global
+``Model.image_processing``. Nothing read them — the UI tuned the single global
 ``config.image_proc`` and switching models left it untouched. This page reads
 and writes the active model's values, mirroring them into ``config.image_proc``,
 which stays the live copy ``run_controller`` reads. See the ``ImageProcSection``
@@ -26,9 +22,9 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from PySide6.QtCore import Qt, QTimer  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QPixmap  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,

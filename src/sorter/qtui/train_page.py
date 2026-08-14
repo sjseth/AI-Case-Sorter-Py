@@ -1,14 +1,13 @@
 """Train activity — the feed→capture→classify→label→save loop.
 
-Behavior reference: ``ui/tab_train.py``. The pipeline is identical, step for
-step: the board drops a case (``force_sort_and_move``), the camera grabs a
-frame, ``image_proc`` crops it to the headstamp and applies the primer mask,
-and — only when there is a checkpoint *and* torch is present — the model
-predicts a label to pre-fill the field with. Saving writes the cropped frame
-through ``training.dataset.save_training_image``, so the Qt UI and the Tk one
-produce byte-identical filenames.
+The pipeline, step for step: the board drops a case (``force_sort_and_move``),
+the camera grabs a frame, ``image_proc`` crops it to the headstamp and applies
+the primer mask, and — only when there is a checkpoint *and* torch is present
+— the model predicts a label to pre-fill the field with. Saving writes the
+cropped frame through ``training.dataset.save_training_image``, which owns the
+WinForms-compatible filename convention.
 
-Three rules carried over verbatim, each easy to get wrong:
+Three rules, each easy to get wrong:
 
 * **Torch is offered here, never demanded** (CLAUDE.md §5). Capturing and
   labelling images is exactly the workflow that doesn't need it — it's how a
@@ -28,7 +27,7 @@ top-to-bottom as the loop itself (image → Feed → label+Save → readouts), t
 image counts beside it behind a 50/50 splitter — they reflow into columns as
 that splitter widens, which is what makes a 150-class model readable — and
 the training launcher on its own strip at the foot. Clicking a counts row
-still saves-and-feeds, as Tk's cards do.
+saves-and-feeds.
 
 The page is a two-card stack (Sort's empty-state pattern): the capture
 surface, or — when the active model can't be trained here — a panel saying
@@ -51,9 +50,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PySide6.QtCore import Qt, QTimer  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QPixmap  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
@@ -355,8 +354,8 @@ class TrainPage(QWidget):
         """Re-read the active model, its headstamps and the images on disk.
 
         Called on ``mode/changed`` and whenever the page is shown — headstamps
-        can be edited from the Models page, and images land here from the Tk UI
-        or a community import, so nothing about this is cached.
+        can be edited from the Models page, and images land here from a
+        community import, so nothing about this is cached.
         """
         model = self.active_model()
         self._apply_availability(model)

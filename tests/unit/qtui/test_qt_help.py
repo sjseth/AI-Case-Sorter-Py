@@ -123,7 +123,7 @@ def test_empty_topic_scrolls_to_top(help_window, qapp) -> None:
     help_window.show_topic("")
     _pump(qapp)
     assert help_window.browser.verticalScrollBar().value() < settings_scroll
-    assert "Qt UI Guide" in _block_text(help_window)
+    assert "AI Case Sorter — User Guide" in _block_text(help_window)
 
 
 def test_unknown_topic_falls_back_to_top(help_window, qapp) -> None:
@@ -134,7 +134,7 @@ def test_unknown_topic_falls_back_to_top(help_window, qapp) -> None:
     help_window.show_topic("this-topic-does-not-exist")
     _pump(qapp)
     assert help_window.browser.verticalScrollBar().value() < settings_scroll
-    assert "Qt UI Guide" in _block_text(help_window)
+    assert "AI Case Sorter — User Guide" in _block_text(help_window)
 
 
 def test_toc_link_navigates_within_the_page(help_window, qapp) -> None:
@@ -159,7 +159,7 @@ def test_build_help_window_returns_a_working_viewer(qapp) -> None:
     try:
         window.show()
         _pump(qapp)
-        assert "Qt UI Guide" in window.browser.toPlainText()
+        assert "AI Case Sorter — User Guide" in window.browser.toPlainText()
     finally:
         window.close()
 
@@ -243,7 +243,7 @@ def test_back_button_chains_through_multiple_topics_then_disables(help_window, q
 
     help_window._back_button.click()  # -> "" (the initial topic)
     _pump(qapp)
-    assert "Qt UI Guide" in _block_text(help_window)
+    assert "AI Case Sorter — User Guide" in _block_text(help_window)
     assert not help_window._back_button.isEnabled()
 
 

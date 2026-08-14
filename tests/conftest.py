@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gc
 import sys
 from pathlib import Path
 
@@ -31,31 +30,9 @@ def _clear_dev_env(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _freeze_import_garbage():
-    """Move everything the imports built into gc's permanent generation.
-
-    The per-test collection below then only has to walk objects the tests
-    themselves created, which keeps it off the suite's runtime.
-    """
-    gc.collect()
-    gc.freeze()
-    yield
-    gc.unfreeze()
-
-
-@pytest.fixture(autouse=True)
-def _collect_between_tests():
-    """Finalize each test's garbage on the main thread, before the next one.
-
-    Tk widgets and StringVars reference each other, so they only die in the
-    cyclic collector — and left alone that runs on whichever thread happens to
-    allocate next. Several tests start worker threads, and a `Variable.__del__`
-    that lands on one calls into Tcl from the wrong thread: it hangs there
-    waiting on the interpreter lock, or aborts the process outright. Which
-    tests collide is a matter of allocation timing, so adding an unrelated UI
-    test can surface it anywhere — collecting here keeps Tk garbage from
-    outliving the test that made it.
-    """
-    yield
-    gc.collect()
+# A repo-wide `gc.collect()` between tests lived here for Tk: widgets and
+# StringVars only die in the cyclic collector, and one finalized on a worker
+# thread called into Tcl from the wrong thread. It went with the Tk UI —
+# forcing the collector over half-torn-down Qt widget trees is actively
+# harmful (see tests/unit/qtui/conftest.py), so the fixture is not something to
+# reinstate.

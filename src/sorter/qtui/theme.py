@@ -1,15 +1,14 @@
 """Render a theme palette (``qtui/palettes.py``) as a Qt stylesheet.
 
-This module is the Qt half of what ``ui/theme.py::apply_theme`` does for ttk.
 Every color comes from the palette argument; nothing here is hardcoded, so a
-theme added or edited on either side themes the Qt shell too.
+theme added or edited in the theme editor themes the whole shell.
 
 Key roles are documented in ``qtui/palettes.py``'s ``_DARK`` dict.
 """
 
 from __future__ import annotations
 
-from PySide6.QtGui import QColor  # ty: ignore[unresolved-import]
+from PySide6.QtGui import QColor
 
 # A QGroupBox's frame starts this far below its top edge — the title sits in
 # that margin. A splitter dividing two group boxes offsets its handle by the

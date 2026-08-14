@@ -1,10 +1,12 @@
 # UI modernization — research & decisions
 
 Working document tracking the investigation into replacing or refreshing the
-Tkinter UI. Audience: Seth + contributors. Status: **research plus a built,
-opt-in Qt UI** — the branch carries a full-parity `sorter/qtui/` behind
-`--qt` (see "Current state" below); whether it *replaces* `sorter/ui/` is
-still Seth's call, and nothing here retires the Tk UI.
+Tkinter UI, and the port that came out of it. Audience: Seth + contributors.
+Status: **decided and done** — `sorter/qtui/` is the only UI as of
+2026-08-14, `sorter/ui/` is deleted, and PySide6 is a core dependency (see
+the decision log's last entry). Everything below the "Current state" section
+is the record of how that was reached; it is deliberately not rewritten to
+match the outcome.
 
 ## Problem
 
@@ -403,7 +405,9 @@ backend) and in increments that need look-and-feel rounds. The user-paced
 parts (bench validation against the physical machine) still sit outside
 these hours and set the calendar time regardless.
 
-## What retiring `ui/` would remove (beyond the directory itself)
+## What retiring `ui/` removed (beyond the directory itself)
+
+**Done 2026-08-14** — the list below was the plan, and it is what happened.
 
 Audited 2026-08-12: outside `src/sorter/ui/` and `tests/unit/ui/`, nothing in
 `src/` imports tkinter or `sorter.ui` except the one launch line in
@@ -757,3 +761,4 @@ candidate work item; per-item agent tasks in a future increment.
 | 2026-08-14 | **AI Config leaves Settings and becomes an activity page** (JL, live-testing): it was a Settings section that `open_activity` special-cased, so a sidebar click landed the user on *Settings* with the entry unchecked. It is now `qtui/ai_page.py` — a `QStackedWidget` mirroring Train's exactly: the server form when it is the backend, otherwise a full-page explainer naming the model classifying instead plus a jump to Models (the greyed-form-with-a-notice is gone; a form you can't use is noise). `SETTINGS_SECTIONS` no longer lists AI Config, `open_activity` has no special case left, and the guide's AI Config section moved out from under Settings. |
 | 2026-08-14 | **The Models table's "● ACTIVE" marker is inked in the action colour** (JL, live-testing): activity should read by colour, not only by text. An item foreground brush is baked in and no stylesheet reaches it, so `models_page.apply_palette()` joins the serial log and history cards in `_apply_theme`'s hand re-render list. |
 | 2026-08-14 | **Row actions reverted; both tables act from a selection-scoped bar** (JL, after living with the experiment above). Models is Delete … Activate with "● ACTIVE" back as the Active column's marker; Community is Remove plus one state-driven primary whose label and role follow the selected row's `installed_state` and the download queue. Only the trigger surface moved: the queue, the `models/changed` state sync, the Includes column and full column sorting all stayed. Net simplification — no item widgets in either table, so nothing has to be rebuilt after a sort or `_pin_ai_row`. |
+| 2026-08-14 | **The Tk UI is retired.** `src/sorter/ui/` (30 modules) and `tests/unit/ui/` (21) are deleted, `--qt`/`CASESORTER_QT` are gone, and `python -m sorter` launches `qtui` unconditionally. PySide6-Essentials + pyside6-qtads move from the `[qt]` extra into the core `dependencies`; the extra is removed. Why now: JL live-tested the Qt UI to parity and Seth approved, and carrying two UIs was costing a drift-pin test, a duplicated palette module, a second CI job and a per-file ty override, none of which buy anything once one of the two is the only one anyone launches. Consequences worth knowing: ty now really type-checks `sorter/qtui/` (it could not resolve PySide6 while the extra was absent from CI — the tree came out at **zero** new diagnostics), the UI tests fold into the normal matrix on `QT_QPA_PLATFORM=offscreen` with **no Xvfb anywhere**, and every matrix leg now downloads the ~80 MB abi3 PySide6 wheel. The `qtui` package is **not** renamed to `ui` in this step; that lands separately so the rename stays reviewable as pure churn. |

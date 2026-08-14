@@ -18,8 +18,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Signal  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,

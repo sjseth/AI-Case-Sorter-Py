@@ -37,9 +37,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QUrl  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QTextCursor  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QTextCursor
+from PySide6.QtWidgets import (
     QHBoxLayout,
     QPushButton,
     QTextBrowser,

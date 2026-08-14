@@ -17,8 +17,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtGui import QFontDatabase, QGuiApplication  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtGui import QFontDatabase, QGuiApplication
+from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,

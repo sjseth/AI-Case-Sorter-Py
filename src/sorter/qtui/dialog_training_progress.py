@@ -20,8 +20,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtGui import QFontDatabase  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtGui import QFontDatabase
+from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,

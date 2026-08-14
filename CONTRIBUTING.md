@@ -110,8 +110,8 @@ PyTorch" for installing those builds by hand.
 
 ### No hardware? Use the emulator
 
-In the **Serial** tab, choose the **`Emulated`** port to exercise the run loop
-and the UI without a physical sorter attached.
+In **Settings → Serial**, choose the **`Emulated`** port to exercise the run
+loop and the UI without a physical sorter attached.
 
 ## Running the tests
 
@@ -127,17 +127,21 @@ the wheel index, network access — isn't available. `pytest -m "not
 integration"` skips them outright for a faster inner loop; plain
 `pytest`/CI runs everything.
 
-Around 500 tests cover the non-UI logic; please run them before opening a PR.
-The torch-dependent tests skip automatically when PyTorch isn't installed. A
-handful of tests do exercise real Tk widgets in-process (`test_tab_train_sort.py`,
-`test_feedback_ui.py`, `test_dialog_install_torch.py`) — driving them with direct
-calls and asserting resulting state, not through any external UI-automation tool
-(there isn't a Playwright equivalent for Tkinter; a browser exposes a
-remote-debugging protocol an external driver attaches to, Tkinter doesn't). Most
-of the UI is not covered this way, though, so smoke-test UI changes by running the
-app. CI (`.github/workflows/build.yml`) runs the same suite across
-a Python version matrix on every push and PR — treat a red CI run the same as
-a local test failure, not as something to wait out.
+Please run them before opening a PR. The torch-dependent tests skip
+automatically when PyTorch isn't installed.
+
+`tests/unit/qtui/` builds and drives the real UI **offscreen** — no display
+server, no Xvfb, no UI-automation tool: `QT_QPA_PLATFORM=offscreen`, direct
+calls, and assertions on the resulting widget state. Its `conftest.py` sets
+that platform itself, so a plain `pytest` runs it. Two things about it are
+load-bearing and easy to break: never pass `--no-cov` (those tests carry
+pytest-cov's `no_cover` marker, which the flag turns into an error), and
+teardown deliberately does no forced `gc.collect()` — see the comments in
+`tests/unit/qtui/conftest.py` and `.claude/skills/qt-ui-debugging/SKILL.md`.
+CI (`.github/workflows/build.yml`) runs the same suite across a Python version
+matrix on every push and PR, with the UI tests as a second step that runs one
+pytest process per module — treat a red CI run the same as a local test
+failure, not as something to wait out.
 
 ### The Windows installer's validation tests
 
@@ -160,9 +164,9 @@ else about the installer needs a real Windows machine; see
 ## Coding guidelines
 
 - **Read [`CLAUDE.md`](CLAUDE.md) first** — it maps the architecture (event bus,
-  threading model, persistence, UI tabs). **Keep it current:** if you add a tab,
-  change the data model, or move a subsystem boundary, update `CLAUDE.md` in the
-  same change.
+  threading model, persistence, UI surfaces). **Keep it current:** if you add a
+  page, change the data model, or move a subsystem boundary, update `CLAUDE.md`
+  in the same change.
 - **Lint and format with [ruff](https://docs.astral.sh/ruff/)** before pushing:
   ```bash
   uv run ruff check .            # lint
@@ -183,8 +187,9 @@ else about the installer needs a real Windows machine; see
   optional dependencies that are absent by design (torch/torchvision are the
   `[ml]` extra; pygrabber/comtypes are Windows-only) and gaps in opencv's
   bundled stubs.
-- **Threading rule:** never touch Tk widgets off the main thread. Do blocking
-  work in a worker/daemon thread and post results through the event bus.
+- **Threading rule:** never touch a Qt widget off the main thread. Do blocking
+  work in a worker/daemon thread and post results through the event bus, which
+  a main-thread timer drains.
 - **PyTorch is optional and lazily imported** — guard any torch use and add it
   under `[project.optional-dependencies] ml`, not the base dependency list.
 - Keep SQL **parameterized**; never build SQL by string interpolation.

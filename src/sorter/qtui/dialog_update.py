@@ -51,9 +51,9 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
 
-from PySide6.QtCore import QTimer, QUrl  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QDesktopServices, QFont  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtGui import QDesktopServices, QFont
+from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,

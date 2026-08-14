@@ -23,9 +23,7 @@ from urllib.parse import unquote
 import pytest
 import requests
 
-pytest.importorskip("tkinter")  # dialog_install_torch imports tkinter at module level
-
-from sorter.ui.dialog_install_torch import _CUDA_INDEX_BY_OS, ml_pin_targets
+from sorter.qtui.dialog_install_torch import _CUDA_INDEX_BY_OS, ml_pin_targets
 
 pytestmark = [
     pytest.mark.integration,

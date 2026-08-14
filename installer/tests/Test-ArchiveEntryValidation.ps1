@@ -93,7 +93,7 @@ Assert-Accepted 'ai_case_sorter-1.2.3/src/sorter/_version.py'
 Assert-Accepted 'ai_case_sorter-1.2.3/PKG-INFO'
 Assert-Accepted 'ai_case_sorter-1.2.3/installer/install-windows.ps1'
 Assert-Accepted 'ai_case_sorter-1.2.3/.gitignore'
-Assert-Accepted 'ai_case_sorter-1.2.3/src/sorter/ui/tab_ai.py'
+Assert-Accepted 'ai_case_sorter-1.2.3/src/sorter/qtui/ai_page.py'
 Assert-Accepted 'pkg/a..b.py'           # dots, but no '..' component
 Assert-Accepted 'pkg/sub.dir/x.py'
 Assert-Accepted 'pkg/file with spaces.py'

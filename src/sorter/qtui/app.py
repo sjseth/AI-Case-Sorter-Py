@@ -1,10 +1,7 @@
 """The PySide6 shell: activity sidebar, stacked pages, docked panels, status bar.
 
-Launched with ``python -m sorter --qt`` (or ``CASESORTER_QT=1``); the default
-launch is still Tk. Nothing under ``sorter/ui/`` is touched or imported at
-all: the palettes come from ``qtui/palettes.py``, a drift-pinned copy of
-``ui/theme.py``'s palette half, which ``qtui/theme.py`` renders as QSS — so
-both UIs share one set of colors without the Qt UI needing tkinter installed.
+This is the app's only UI; ``python -m sorter`` lands here. Every colour comes
+from ``qtui/palettes.py``, which ``qtui/theme.py`` renders as QSS.
 
 This module owns the shell and the Sort dashboard itself; every other surface
 is its own module with a ``build_*(win)`` factory that this only wires up.
@@ -36,8 +33,8 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
-import PySide6QtAds as ads  # ty: ignore[unresolved-import]
-from PySide6.QtCore import (  # ty: ignore[unresolved-import]
+import PySide6QtAds as ads
+from PySide6.QtCore import (
     QByteArray,
     QSize,
     Qt,
@@ -45,14 +42,14 @@ from PySide6.QtCore import (  # ty: ignore[unresolved-import]
     QUrl,
     Signal,
 )
-from PySide6.QtGui import (  # ty: ignore[unresolved-import]
+from PySide6.QtGui import (
     QDesktopServices,
     QGuiApplication,
     QImage,
     QKeySequence,
     QPixmap,
 )
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QCheckBox,
@@ -112,7 +109,9 @@ from .train_page import build_train_page
 
 PREVIEW_FPS = 20
 SIDEBAR_WIDTH = 84
-PLACEHOLDER_TEXT = "Not ported to the Qt spike yet — launch without --qt for the full UI."
+# Defensive: every SETTINGS_SECTIONS entry has a builder, so nothing renders
+# this unless a section is added without one.
+PLACEHOLDER_TEXT = "This section has no settings yet."
 
 # Sidebar: (icon name, page name). Settings is pinned to the bottom, below the
 # stretch. The icons are drawn from qtui/icons.py and inked by the live
@@ -228,8 +227,8 @@ class _CropPanel(QLabel):
 CAMERA_DEAD_LINK = "open Camera settings"
 CAMERA_FAILED_STATUS = "Camera failed to start — pick a device in Settings → Camera."
 
-# Run options (Tk reference: tab_run.py's run_opts frame). Same config keys,
-# same semantics — just grouped into one popover instead of three rows.
+# Run options — one popover over what the Tk UI stacked as three rows; the
+# config keys and semantics are unchanged from it.
 STORE_IMAGES_LABELS = {
     "none": "None",
     "above": "Above confidence floor",
@@ -265,7 +264,6 @@ EMPTY_STATE_HINT = "Connect a board and a camera to start sorting."
 SETTING_WINDOW_STATE = "ui.window_state"
 SETTING_MODELS_COLUMNS = "ui.models_columns"
 
-# Tk parity (ui/app.py): minsize(960, 660).
 MIN_WINDOW_SIZE = (960, 660)
 
 # Each panel's home: where it is built, and where View → Re-dock returns it.
@@ -345,7 +343,7 @@ class QtMainWindow(QMainWindow):
         # The one sanctioned front door for anything needing local inference.
         self.ensure_torch = TorchGate(self)
 
-        self.setWindowTitle(f"AI Case Sorter OSS - v{__version__} (Qt) · GPL-3.0")
+        self.setWindowTitle(f"AI Case Sorter OSS - v{__version__} · GPL-3.0")
         # The headstamp mark, in one fixed neutral (see icons.APP_ICON_COLOR):
         # a taskbar owns its own background, so this one must not follow the
         # live palette. Set application-wide as well, so dialogs inherit it.
@@ -764,11 +762,10 @@ class QtMainWindow(QMainWindow):
     def _build_run_options_button(self, page: QWidget) -> QToolButton:
         """Everything that configures how a run behaves, in one popover.
 
-        Tk reference: tab_run.py's run_opts frame plus its separate Package
-        Mode / Batch Size rows — same Config keys and semantics throughout,
-        just grouped compactly instead of stacked as five always-visible
-        rows (JL, increment 14: package mode/batch moved here from the
-        template bar, which now carries only template things).
+        Same Config keys and semantics the Tk UI spread over five
+        always-visible rows, grouped compactly instead (JL, increment 14:
+        package mode/batch moved here from the template bar, which now
+        carries only template things).
         """
         button = QToolButton(page)
         button.setText("⚙ Run options")
@@ -1374,8 +1371,8 @@ class QtMainWindow(QMainWindow):
 
         self.themes_dock = self._build_dock("Themes", panel, ads.RightDockWidgetArea)
         self.themes_dock.toggleView(False)
-        # A theme saved from the Tk UI, or from an editor opened before this
-        # panel was, lands in the registry without passing through here.
+        # A theme saved from an editor opened before this panel was lands in
+        # the registry without passing through here.
         self.themes_dock.viewToggled.connect(self._on_themes_dock_toggled)
 
     def _on_themes_dock_toggled(self, opened: bool) -> None:
@@ -1467,8 +1464,8 @@ class QtMainWindow(QMainWindow):
     def show_page(self, name: str) -> None:
         self.pages.setCurrentWidget(self._pages_by_name[name])
         if name == "Sort":
-            # Assignments can have changed in Settings (or the Tk UI) since the
-            # cards were last drawn; they are cheap to re-read and never cached.
+            # Assignments can have changed in Settings since the cards were
+            # last drawn; they are cheap to re-read and never cached.
             self._refresh_sort_grid()
             self._refresh_notes_button()
             self._fetch_community_settings()
@@ -1477,7 +1474,7 @@ class QtMainWindow(QMainWindow):
         elif name == "Community":
             self.community_page.refresh_auth_state()
         elif name == "Train":
-            # Headstamps and images change from the Models page, the Tk UI and
+            # Headstamps and images change from the Models page and from
             # imports; the counts are read off disk every time, never cached.
             self.train_page.refresh()
         elif name == AI_CONFIG_ACTIVITY:

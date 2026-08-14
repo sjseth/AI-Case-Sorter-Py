@@ -1,11 +1,9 @@
 """Training-image browser: filter/count, thumbnail grid, reclassify/delete.
 
-Qt form of ``sorter.ui.dialog_model_images``. Thumbnails are decoded and
-downscaled on a background ``QThread`` — cv2 decode of a full-size image is
-too slow to do a page of on the UI thread — and handed back as plain BGR
-numpy arrays via a queued signal; ``QPixmap`` construction happens on receipt,
-on the main thread, same division of labor as the Tk dialog's worker-thread
-PIL decode + main-thread ``PhotoImage``.
+Thumbnails are decoded and downscaled on a background ``QThread`` — cv2
+decode of a full-size image is too slow to do a page of on the UI thread —
+and handed back as plain BGR numpy arrays via a queued signal; ``QPixmap``
+construction happens on receipt, on the main thread.
 
 ``notify``/``confirm`` are attributes, not direct ``QMessageBox`` calls, so a
 test can drive Reclassify/Delete without a modal.
@@ -18,9 +16,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PySide6.QtCore import Qt, QThread, QUrl, Signal  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QDesktopServices  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt, QThread, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -47,8 +45,7 @@ _GUTTER = 8
 _PAGE_SIZES = (20, 50, 100, 150, 200)
 _DEFAULT_PAGE_SIZE = 50
 # Approximates the palette's `bg_input` role at decode time (baked into the
-# thumbnail's pixels, so it can't live-retheme) — same limitation the Tk
-# dialog's `_decode_thumb` accepts, for the same reason.
+# thumbnail's pixels, so it can't live-retheme).
 _THUMB_BG = 11
 
 

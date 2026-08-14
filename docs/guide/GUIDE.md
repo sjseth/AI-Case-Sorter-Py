@@ -1,7 +1,6 @@
-# AI Case Sorter — Qt UI Guide
+# AI Case Sorter — User Guide
 
-A guide to the Qt desktop client (launched with `--qt`), written for the
-person running the machine. It covers every screen and panel you use day to
+A guide to the desktop client, written for the person running the machine. It covers every screen and panel you use day to
 day, in the order you meet them.
 
 ## Contents

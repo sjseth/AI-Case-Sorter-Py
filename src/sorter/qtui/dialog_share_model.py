@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,

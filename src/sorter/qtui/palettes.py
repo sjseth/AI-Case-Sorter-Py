@@ -1,25 +1,8 @@
-"""The theme palettes and the custom-theme registry — a copy of ``ui/theme.py``.
+"""The theme palettes and the custom-theme registry — toolkit-neutral.
 
-Everything below the docstring is copied **verbatim** from the palette half of
-``sorter/ui/theme.py`` (the palettes, the registry, and the functions that read
-and write it), and is kept in lock-step with it by
-``tests/unit/qtui/test_qt_drift_pins.py``, which byte-compares the copied data
-and function sources. Re-sync from ``ui/theme.py`` rather than editing here.
-
-**Why a copy and not an import** (JL directive, 2026-08-13): the two UIs share
-one theme system, but ``sorter/qtui`` must not import ``sorter/ui`` at runtime
-— ``ui/theme.py`` imports ``tkinter`` at module level, so a PySide6-only
-environment without Tcl/Tk could not launch the Qt UI at all. Nothing else in
-``ui/theme.py`` (the ttk styles, the Tk canvas painters) has a Qt meaning; only
-these palettes and this registry do.
-
-**Shared state is now per-UI, deliberately.** ``THEMES``, ``HALFTONE_INK`` and
-``INK_OUTLINE`` are mutable registries, and the Qt UI registers user-made
-themes into *this* module's copies rather than ``ui.theme``'s. That is correct:
-one process runs one UI, and both read the same ``ui.custom_themes`` settings
-row, so a theme built in either UI still shows up in the other on its next
-launch. What no longer happens is two registries changing together inside one
-process — nothing does that, since only one UI is ever constructed.
+Every colour in the app comes from here: the shipped palettes, the live
+registry, and the functions that read and write user-made themes into the
+``ui.custom_themes`` settings row. Nothing in this module touches a widget.
 
 The Qt stylesheet renderer that consumes these palettes is ``qtui/theme.py``.
 """

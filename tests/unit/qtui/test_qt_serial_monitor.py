@@ -1,8 +1,6 @@
 """The serial monitor dock: filter, direction toggles, pause/flush, save,
 timestamps, line endings, command history, baud switch — and, at the
 integration level, the real emulator exchange landing in it over the bus.
-
-Behavior reference: ``sorter/ui/serial_monitor.py`` (the Tk original).
 """
 
 from __future__ import annotations

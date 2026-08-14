@@ -38,8 +38,14 @@ dependencies = [
     # Schema migrations: sorter/data/db.py runs its migration steps through
     # sqlite_utils.Migrations (tracking table `_sqlite_migrations`).
     "sqlite-utils==4.1.1",
+    # The UI toolkit. Essentials, not the PySide6 meta-package: the meta adds
+    # pyside6-addons (~175 MB of WebEngine/3D/Charts/Multimedia) that nothing
+    # uses. QtAds (LGPL-2.1+) is the dock system; it pins the same Essentials
+    # build, so the two versions move together.
+    "PySide6-Essentials==6.11.1",
+    "pyside6-qtads==5.0.0.2",
     # Windows-only: enumerates friendly DirectShow camera names so the Camera
-    # tab can show real device names instead of just "Camera N".
+    # settings page can show real device names instead of just "Camera N".
     "pygrabber==0.2; platform_system == 'Windows'",
 ]
 
@@ -50,7 +56,7 @@ Issues = "https://github.com/sjseth/AI-Case-Sorter-Py/issues"
 
 [project.optional-dependencies]
 # Local PyTorch training/inference. Install with `pip install .[ml]`.
-# This is the single authoritative pin: sorter/ui/dialog_install_torch.py
+# This is the single authoritative pin: sorter/qtui/dialog_install_torch.py
 # reads it at runtime (that dialog is how PyTorch actually reaches a user's
 # venv), so bumping it here is the whole bump — and it keeps the versions
 # users really run visible to Renovate and vulnerability scanning, which a
@@ -59,12 +65,6 @@ Issues = "https://github.com/sjseth/AI-Case-Sorter-Py/issues"
 # and each index only carries the torch versions built for it —
 # tests/integration/test_torch_wheel_index.py verifies the pair resolves.
 ml = ["torch==2.13.0", "torchvision==0.28.0"]
-# PySide6 UI (`python -m sorter --qt`); see docs/ui-modernization.md.
-# Essentials, not the PySide6 meta-package: the meta adds pyside6-addons
-# (~175 MB of WebEngine/3D/Charts/Multimedia) that nothing uses.
-# QtAds (LGPL-2.1+) is the dock system; it pins the same Essentials build, so
-# the two versions move together.
-qt = ["PySide6-Essentials==6.11.1", "pyside6-qtads==5.0.0.2"]
 
 [build-system]
 requires = ["hatchling==1.32.0", "hatch-vcs==0.5.0"]
@@ -174,9 +174,8 @@ timeout = 120
 markers = [
     "integration: exercises a real external tool or service (uv build, git-cliff, the PyTorch wheel index) instead of a synthetic fixture",
 ]
-# The suite is threading-fragile by design (see tests/conftest.py): Tk widget
-# garbage collected on a worker thread calls into Tcl from the wrong thread
-# and can hang or abort the process. Do not add pytest-xdist or any plugin
+# The suite is threading-fragile by design: real worker threads, real
+# subprocesses and real Qt widget trees. Do not add pytest-xdist or any plugin
 # that parallelizes or reorders test execution.
 
 [dependency-groups]
@@ -229,25 +228,4 @@ exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
 include = ["src/sorter/__init__.py"]
 
 [tool.ty.overrides.rules]
-unused-ignore-comment = "ignore"
-
-# Same two-states problem for the PySide6 spike: CI syncs without the `qt`
-# extra, so its imports need `# ty: ignore[unresolved-import]` -- which is an
-# *unused* ignore for a dev who installed the extra.
-[[tool.ty.overrides]]
-include = ["src/sorter/qtui/*"]
-
-[tool.ty.overrides.rules]
-unused-ignore-comment = "ignore"
-
-# The qt tests have the same two states, but per-line ignores proved fragile
-# there: in a PySide6-present environment they read as unused and get cleaned
-# away, breaking the no-PySide6 lint CI (which is exactly what happened).
-# The whole directory guards with importorskip("PySide6") at runtime, so a
-# genuinely broken import still fails pytest collection loudly.
-[[tool.ty.overrides]]
-include = ["tests/unit/qtui/*"]
-
-[tool.ty.overrides.rules]
-unresolved-import = "ignore"
 unused-ignore-comment = "ignore"

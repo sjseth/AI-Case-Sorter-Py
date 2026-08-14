@@ -45,8 +45,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QThread, Signal  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QHBoxLayout,

@@ -1,16 +1,15 @@
 """Model evaluator — score a trained model against a folder of labelled images.
 
-Qt form of ``sorter.ui.dialog_model_evaluator``: pick a folder of
-``{label}__{ticks}.jpg`` images, optionally map the folder's class names onto
-the model's headstamps, classify every image, and review accuracy, per-class
-stats and a filterable result table. Every run writes the legacy-format
-interactive HTML report into the model's ``reports/`` directory; the History
-tab is that directory, listed newest-first (no DB mirror — the folder is the
-history, same as the Tk dialog).
+Pick a folder of ``{label}__{ticks}.jpg`` images, optionally map the folder's
+class names onto the model's headstamps, classify every image, and review
+accuracy, per-class stats and a filterable result table. Every run writes the
+legacy-format interactive HTML report into the model's ``reports/`` directory;
+the History tab is that directory, listed newest-first — no DB mirror, the
+folder is the history.
 
 ⚠️ The report interpolates result rows into a ``<script>`` block
 (``ml/eval_report.py``), so it is only safe to open for locally-evaluated,
-trusted image folders — the same caveat the Tk dialog carries.
+trusted image folders.
 
 Evaluation runs on a ``QThread`` (not the window's ``run_worker``): the dialog
 takes either the main window or a bare ``Config``, so it can't depend on a bus
@@ -29,9 +28,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QThread, QUrl, Signal  # ty: ignore[unresolved-import]
-from PySide6.QtGui import QBrush, QColor, QDesktopServices  # ty: ignore[unresolved-import]
-from PySide6.QtWidgets import (  # ty: ignore[unresolved-import]
+from PySide6.QtCore import Qt, QThread, QUrl, Signal
+from PySide6.QtGui import QBrush, QColor, QDesktopServices
+from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDialog,
@@ -63,7 +62,7 @@ from . import formatting
 from .dialog_image_preview import ImagePreviewDialog, bgr_to_pixmap
 
 MATCH_LABELS = {"match": "Match", "mismatch": "Mismatch", "unknown": "—"}
-# Row color per match status, as palette roles (the Tk table's tag colors).
+# Row color per match status, as palette roles.
 MATCH_ROLES = {"match": "success", "mismatch": "error", "unknown": "text_muted"}
 _FALLBACK_COLORS = {"success": "#22c55e", "error": "#ef4444", "text_muted": "#9a9a9a"}
 MATCH_FILTERS = ("All", "Match", "Mismatch", "No ground truth")
@@ -77,11 +76,7 @@ PREVIEW_SIZE = 240
 
 
 def mapping_key(model_id: int) -> str:
-    """Settings key holding this model's folder-class -> model-class mapping.
-
-    Same key the Tk dialog writes, so a mapping saved in either UI is the one
-    the other sees.
-    """
+    """Settings key holding this model's folder-class -> model-class mapping."""
     return f"eval_class_mapping:{model_id}"
 
 
@@ -325,7 +320,7 @@ class ModelEvaluatorDialog(QDialog):
         self.result_tree.setSortingEnabled(True)
         # Qt's default sort indicator is column 0 *descending*, and re-enabling
         # sorting after a fill applies it; ascending filename is the evaluator's
-        # own order, which is what the Tk table showed before any header click.
+        # own order, which is what the table should show before any header click.
         self.result_tree.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.result_tree.currentItemChanged.connect(lambda current, _prev: self._show_preview(current))
         self.result_tree.itemDoubleClicked.connect(lambda item, _col: self._open_preview(item))
@@ -451,7 +446,7 @@ class ModelEvaluatorDialog(QDialog):
         return self._worker is not None and self._worker.isRunning()
 
     def run_evaluation(self) -> None:
-        """Preflight in the Tk dialog's order, then start the worker."""
+        """Preflight, then start the worker."""
         if self.running:
             return
         folder = self.folder_edit.text().strip()
