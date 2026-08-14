@@ -179,7 +179,7 @@ def test_last_trained_renders_in_the_os_regional_format(page, config, monkeypatc
     row = names(page).index("Range brass")
     # sv_SE's short format is exactly ISO/24h; a US-locale machine would
     # render "8/1/26 9:30 AM" for the same stored value — see
-    # test_qt_formatting.py for that side of the contract.
+    # test_formatting.py for that side of the contract.
     assert cell(page, row, "Last trained") == "2026-08-01 09:30"
 
 

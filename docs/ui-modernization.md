@@ -142,7 +142,7 @@ Status: implemented on this branch. Design goals: prove the risky parts
   `SerialBroker`/`EmulatorBroker`, `Config`/`SettingsRepo`.
 - **One source of truth for colors:** the palettes and the custom-theme
   registry live in `qtui/palettes.py` — a copy of `ui/theme.py`'s palette
-  half, byte-compared by `test_qt_drift_pins.py` — rendered as QSS by
+  half, byte-compared by `test_drift_pins.py` — rendered as QSS by
   `qtui/theme.py::build_stylesheet`. (It *imported* `sorter.ui.theme` until
   2026-08-13; `ui/theme.py` imports tkinter at module level, so a
   PySide6-only install couldn't launch. Both UIs still read the same
@@ -747,7 +747,7 @@ candidate work item; per-item agent tasks in a future increment.
 | 2026-08-12 | Cost estimate re-baselined from spike 3's measurement: ~8–12 h session time to parity (was 15–25 h; the "dense chunks are slower" assumption measured false). |
 | 2026-08-12 | **Windows validated**: the showcase build runs on a real Windows machine from a plain `uv sync --extra qt` — sidebar, dashboard and all; only runtime noise is OpenCV's DSHOW "no camera" warning. Requirement 2 now confirmed empirically on Linux + Windows. |
 | 2026-08-12 | Spike 2 built and verified (28 offscreen tests, full unit suite green, ruff/ty clean). New gotchas: `QAction.menu()` deletes the menu it returns; dock title-bar buttons aren't themable without icons. Sidebar glyphs stay emoji until real `QIcon`s exist. |
-| 2026-08-13 | **Palettes copied, not imported** (`qtui/palettes.py`, drift-pinned by `test_qt_drift_pins.py`): `ui/theme.py` imports tkinter at module level, so importing it made a PySide6-only install unlaunchable. Custom themes register into the running UI's registry; the shared `ui.custom_themes` row is what still crosses between them. |
+| 2026-08-13 | **Palettes copied, not imported** (`qtui/palettes.py`, drift-pinned by `test_drift_pins.py`): `ui/theme.py` imports tkinter at module level, so importing it made a PySide6-only install unlaunchable. Custom themes register into the running UI's registry; the shared `ui.custom_themes` row is what still crosses between them. |
 | 2026-08-13 | **Sort page grounded on the crop, not the feed** (Seth, the Windows app's layout): the cropped headstamp and the call made on it are the primary panel, the live camera an off-by-default toggle (no frame is fetched or painted while off; the grab thread keeps running). History moved wholly into its panel. |
 | 2026-08-13 | **Vector icons replace the emoji glyphs** — one stroke-only SVG per motif, inked from the live palette at render time (Seth's concept art; Sort/Train carry the machine's own identity). The app/taskbar mark is the one fixed-neutral exception. |
 | 2026-08-13 | **Model-scoped image processing** (Seth): crop and primer settings follow the active model — the model row has carried them since the WinForms port and nothing read them. Mirrored into `config.image_proc`, which stays the live copy the run reads; a pristine model row inherits the global rather than resetting it. LED brightness stays global (it is a board setting). |

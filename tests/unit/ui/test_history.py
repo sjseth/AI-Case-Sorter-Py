@@ -2,7 +2,7 @@
 
 Everything here runs offscreen against a real SQLite-backed ``Config`` and,
 for the end-to-end case, the in-process serial emulator — no display, no
-hardware, no network. Mirrors ``test_qt_sort.py``'s fixtures and its
+hardware, no network. Mirrors ``test_sort.py``'s fixtures and its
 emulator + manual-feed pattern rather than importing from it, so this module
 stays independent of another increment's in-flight file.
 """

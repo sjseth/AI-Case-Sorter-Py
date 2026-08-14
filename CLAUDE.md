@@ -10,7 +10,7 @@ the relevant section here in the same change.**
 alters behavior ships with its documentation in the same change: this file's
 relevant section, the module docstring it invalidates, `docs/guide/GUIDE.md`
 for anything an operator can see or do (its headings are load-bearing — the F1
-help maps to them; `tests/unit/ui/test_qt_help.py` pins the anchors), and
+help maps to them; `tests/unit/ui/test_help.py` pins the anchors), and
 `docs/ui-modernization.md` for UI design decisions. Stale docs are bugs:
 they were the direct cause of a full retroactive documentation sweep on
 2026-08-14, and the guide misdirecting an operator is a user-facing defect.
@@ -675,7 +675,7 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   built-ins plus whatever the theme editor has saved. **The role of each key
   is fixed; only its color changes per theme** — a new theme is a copy of
   `_DARK` with new values and must define exactly the same keys, which
-  `test_qt_theme.py` exercises by rendering every builtin. `success` mirrors
+  `test_theme.py` exercises by rendering every builtin. `success` mirrors
   `action` and `error` mirrors `danger` (`DERIVED_ROLES`), so a theme with no
   green (Comic Book, where blue is "go") has a blue "connected" indicator.
   The user's choice is the `ui.theme` setting (`palettes.SETTING_THEME`);
@@ -712,7 +712,7 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   an anchor in `docs/guide/GUIDE.md`, which `QTextBrowser` renders directly;
   F1 and Help → User Guide open the dock at that topic, falling back to the
   top of the guide for an anchor it can't resolve. Every activity and Settings
-  section has a topic, and `test_qt_help.py` pins each one to a real
+  section has a topic, and `test_help.py` pins each one to a real
   heading — rename a heading and that test is what tells you.
 - **Model-scoped image processing.** `settings_imageproc.py` reads and writes
   the **active model's** crop/primer values (`Model.image_processing`,
@@ -749,7 +749,7 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   server and no Xvfb** (§8). `conftest.py` supplies `qapp`, a real
   SQLite-backed `config`, `window_factory`/`window`, plus `seed_model` and
   `drain_until` (pump the bus until a predicate holds — never a sleep).
-  `test_qt_e2e.py` is the cross-cutting layer: whole demo journeys (connect →
+  `test_e2e.py` is the cross-cutting layer: whole demo journeys (connect →
   assign → sort → counts, a settings round-trip across a restart, a model's
   life from cartridge to activation, F1 following the page) through the real
   bus, controller and serial emulator, with only the camera and

@@ -819,7 +819,7 @@ def test_a_model_switch_re_reads_the_slots_and_templates(window, config) -> None
 
 
 # Port-combo ordering (Emulated first, USB before /dev/ttyS*) is pinned in
-# test_qt_settings_serial.py, where the combo lives now.
+# test_settings_serial.py, where the combo lives now.
 
 
 def test_connecting_the_emulator_wires_the_run_controller(window, config) -> None:

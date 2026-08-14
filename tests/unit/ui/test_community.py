@@ -1040,7 +1040,7 @@ def test_the_description_is_the_rows_tooltip_on_every_column(window, api) -> Non
 # ----- share gating, sign-out ---------------------------------------------------
 # Identity display moved to the status bar (JL): the page used to carry its own
 # "Signed in as ... [Sign out]" row, duplicating the status bar's Sign out
-# button — see test_qt_chrome.py for the status-bar identity_label coverage.
+# button — see test_chrome.py for the status-bar identity_label coverage.
 
 
 def test_read_only_role_never_shows_the_share_button(window, api) -> None:

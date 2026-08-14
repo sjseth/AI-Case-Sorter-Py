@@ -3,7 +3,7 @@
 This is the requirement-4 proof from docs/ui-modernization.md: real widgets on
 the offscreen platform plugin, with the event bus doing the cross-thread work.
 Fixtures live in conftest.py; the Sort dashboard's own behavior is in
-test_qt_sort.py.
+test_sort.py.
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@ persistence, and the dock float/re-dock recovery hooks.
 
 Everything here runs offscreen, no real modals (dialogs are constructed and
 inspected directly — never ``.exec()``'d) and against a real SQLite-backed
-``Config``, same conventions as test_qt_app.py / test_qt_sort.py.
+``Config``, same conventions as test_app.py / test_sort.py.
 """
 
 from __future__ import annotations
