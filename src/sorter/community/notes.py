@@ -14,8 +14,7 @@ Merge rules (``merge``): an incoming note updates the stored text/date and
 store, so the history view keeps showing it. Order is stable — stored notes
 first, new ones appended — and any display ordering is the caller's business.
 
-UI-free on purpose: the Qt dialog renders these, the Tk side can later render
-the same objects.
+UI-free on purpose: the dialog renders these, nothing here knows about it.
 """
 
 from __future__ import annotations

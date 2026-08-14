@@ -130,14 +130,14 @@ integration"` skips them outright for a faster inner loop; plain
 Please run them before opening a PR. The torch-dependent tests skip
 automatically when PyTorch isn't installed.
 
-`tests/unit/qtui/` builds and drives the real UI **offscreen** — no display
+`tests/unit/ui/` builds and drives the real UI **offscreen** — no display
 server, no Xvfb, no UI-automation tool: `QT_QPA_PLATFORM=offscreen`, direct
 calls, and assertions on the resulting widget state. Its `conftest.py` sets
 that platform itself, so a plain `pytest` runs it. Two things about it are
 load-bearing and easy to break: never pass `--no-cov` (those tests carry
 pytest-cov's `no_cover` marker, which the flag turns into an error), and
 teardown deliberately does no forced `gc.collect()` — see the comments in
-`tests/unit/qtui/conftest.py` and `.claude/skills/qt-ui-debugging/SKILL.md`.
+`tests/unit/ui/conftest.py` and `.claude/skills/qt-ui-debugging/SKILL.md`.
 CI (`.github/workflows/build.yml`) runs the same suite across a Python version
 matrix on every push and PR, with the UI tests as a second step that runs one
 pytest process per module — treat a red CI run the same as a local test

@@ -1,11 +1,11 @@
 ---
 name: qt-ui-debugging
-description: Debugging playbook for the PySide6 UI (sorter/qtui) — crash classes we have actually hit, their symptoms, and the proven fixes. Load when a qtui test segfaults, crashes at a distance, fails only on one platform/CI leg, or when writing new Qt widget tests.
+description: Debugging playbook for the PySide6 UI (sorter/ui, tests in tests/unit/ui; the package was called sorter/qtui until 2026-08-14) — crash classes we have actually hit, their symptoms, and the proven fixes. Load when a Qt UI test segfaults, crashes at a distance, fails only on one platform/CI leg, or when writing new Qt widget tests.
 ---
 
 # Qt UI debugging playbook
 
-Hard-won findings from the qtui port (2026-08). Every rule here was paid
+Hard-won findings from the Qt port (2026-08). Every rule here was paid
 for with a multi-run CI saga — check this list before theorizing from
 scratch.
 
@@ -33,16 +33,21 @@ pytest-cov's tracer corrupts something under a large PySide6 suite. Pinned
 by experiment (2026-08-14): reverting/re-adding one unrelated QAction
 flipped the crash; every coverage core (ctrace/sysmon) and branch on/off
 crashed; uninstrumented never crashed, 650+ tests, both platforms.
-Resolution: `tests/unit/qtui/conftest.py` applies pytest-cov's `no_cover`
-marker to the whole directory. Do NOT re-enable coverage for qtui; do NOT
-burn time bisecting "the crashing test" — the crash point is allocation
-noise. To confirm this class: run the same suite with `--no-cov`; if it
-passes every time, it's this.
+Resolution: `tests/unit/ui/conftest.py` applies pytest-cov's `no_cover`
+marker to the whole directory (scoped by a path derived from `__file__`, so
+a rename can't silently switch coverage back on). Do NOT re-enable coverage
+for these tests; do NOT burn time bisecting "the crashing test" — the crash
+point is allocation noise.
+**`--no-cov` does not do what you want here**: it leaves the pytest-cov
+plugin loaded with no session, and every `no_cover`-marked test then dies on
+`AttributeError: 'NoneType' object has no attribute 'pause'`. To run with
+coverage genuinely out of the picture, drop the plugin *and* the ini's
+addopts: `pytest tests/unit/ui -p no:cov -o addopts=-ra`.
 
 ### Windows-only access violation (0xc0000374) between tests
 Forced `gc.collect()` between tests finalizes shiboken wrappers over
 half-torn-down C++ trees. There is no forced-gc fixture anywhere (the
-repo-wide one went with the Tk UI); what qtui's conftest runs in teardown is
+repo-wide one went with the Tk UI); what the UI conftest runs in teardown is
 a **DeferredDelete-only flush** (`sendPostedEvents(None,
 QEvent.DeferredDelete)`) — never a generic `processEvents()` (delivering
 arbitrary events into half-torn windows segfaulted Linux when tried). CI
@@ -102,7 +107,7 @@ windows and finalizers warn.
 ## Reproducing CI locally
 
 - Suite, CI-parity: `DISPLAY= WAYLAND_DISPLAY= QT_QPA_PLATFORM=offscreen
-  PYTHONPATH=src uv run --no-sync pytest tests/unit/qtui -q`
+  PYTHONPATH=src uv run --no-sync pytest tests/unit/ui -q`
 - A clean-tree repro beats theorizing: `git archive <sha> | tar -x -C
   <scratch>` + the project venv's python, then bisect by module list,
   then by diff hunk. The 2026-08-14 saga was cracked exactly this way.

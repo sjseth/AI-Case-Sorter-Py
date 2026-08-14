@@ -6,7 +6,7 @@ get_config, update_init_settings, etc.).
 
 Threading model: one reader thread, one ping thread, writes serialized with a lock.
 Each callback is invoked on the reader thread; UI layers should post into an
-EventBus and drain it from the Tk main loop.
+EventBus and drain it on the UI thread.
 """
 
 from __future__ import annotations

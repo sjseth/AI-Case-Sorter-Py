@@ -1,7 +1,7 @@
-"""Thread-safe pub/sub used to marshal worker-thread events onto the Tk main thread.
+"""Thread-safe pub/sub used to marshal worker-thread events onto the UI thread.
 
 All worker threads (serial reader, camera grabber, HTTP worker) push (topic, payload)
-tuples onto a single Queue. The Tk main loop polls it via root.after().
+tuples onto a single Queue; the UI drains it on a timer from its own thread.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ class EventBus:
         self._q.put((topic, payload))
 
     def drain(self, max_items: int = 64) -> int:
-        """Called from the Tk main thread. Returns count dispatched."""
+        """Called from the UI thread. Returns count dispatched."""
         count = 0
         while count < max_items:
             try:

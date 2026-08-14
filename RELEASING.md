@@ -124,7 +124,7 @@ stay reachable forever at their own URL.
   PDF machinery lives in `mkdocs-pdf.yml` (used with `-F` by the workflow), NOT in
   `mkdocs.yml`: the plugin's dormant-notice and its WeasyPrint CSS complaints would fail
   `--strict`, and a laptop's `mkdocs serve` needs none of it (WeasyPrint wants system pango).
-- **`docs/guide/GUIDE.md` is also the in-app F1 guide** (`sorter/qtui/help_viewer.py` loads
+- **`docs/guide/GUIDE.md` is also the in-app F1 guide** (`sorter/ui/help_viewer.py` loads
   that exact file into a `QTextBrowser`). It must stay at that path and stay plain Markdown --
   Material-only syntax would render as source text at the user. Its heading anchors are
   GitHub's, and MkDocs slugs them identically, so a deep link into the published site and one

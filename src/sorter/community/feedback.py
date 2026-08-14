@@ -4,7 +4,7 @@ When a community model's publisher enabled the feedback loop, predictions whose
 confidence falls below the publisher's threshold are captured during a run and
 uploaded to the server for the owner to moderate. This module owns the
 *decision* (should this prediction be captured?) and the *I/O* (stage the
-image, drain the upload queue), kept free of any Tk dependency so it is
+image, drain the upload queue), kept free of any UI dependency so it is
 unit-testable.
 
 The staging folder ``data/models/<id>/feedback_images/`` IS the queue — one

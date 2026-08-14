@@ -34,5 +34,5 @@ def _clear_dev_env(monkeypatch):
 # StringVars only die in the cyclic collector, and one finalized on a worker
 # thread called into Tcl from the wrong thread. It went with the Tk UI —
 # forcing the collector over half-torn-down Qt widget trees is actively
-# harmful (see tests/unit/qtui/conftest.py), so the fixture is not something to
+# harmful (see tests/unit/ui/conftest.py), so the fixture is not something to
 # reinstate.

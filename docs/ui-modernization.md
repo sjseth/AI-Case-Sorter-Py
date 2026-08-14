@@ -2,11 +2,12 @@
 
 Working document tracking the investigation into replacing or refreshing the
 Tkinter UI, and the port that came out of it. Audience: Seth + contributors.
-Status: **decided and done** — `sorter/qtui/` is the only UI as of
-2026-08-14, `sorter/ui/` is deleted, and PySide6 is a core dependency (see
-the decision log's last entry). Everything below the "Current state" section
-is the record of how that was reached; it is deliberately not rewritten to
-match the outcome.
+Status: **decided and done** — as of 2026-08-14 the Tk UI is deleted, the Qt
+package has taken the `sorter/ui/` name, and PySide6 is a core dependency
+(see the decision log's last two entries). Everything below the "Current
+state" section is the record of how that was reached, written while the Qt
+package was still called `qtui`; it is deliberately not rewritten to match
+the outcome.
 
 ## Problem
 
@@ -762,3 +763,4 @@ candidate work item; per-item agent tasks in a future increment.
 | 2026-08-14 | **The Models table's "● ACTIVE" marker is inked in the action colour** (JL, live-testing): activity should read by colour, not only by text. An item foreground brush is baked in and no stylesheet reaches it, so `models_page.apply_palette()` joins the serial log and history cards in `_apply_theme`'s hand re-render list. |
 | 2026-08-14 | **Row actions reverted; both tables act from a selection-scoped bar** (JL, after living with the experiment above). Models is Delete … Activate with "● ACTIVE" back as the Active column's marker; Community is Remove plus one state-driven primary whose label and role follow the selected row's `installed_state` and the download queue. Only the trigger surface moved: the queue, the `models/changed` state sync, the Includes column and full column sorting all stayed. Net simplification — no item widgets in either table, so nothing has to be rebuilt after a sort or `_pin_ai_row`. |
 | 2026-08-14 | **The Tk UI is retired.** `src/sorter/ui/` (30 modules) and `tests/unit/ui/` (21) are deleted, `--qt`/`CASESORTER_QT` are gone, and `python -m sorter` launches `qtui` unconditionally. PySide6-Essentials + pyside6-qtads move from the `[qt]` extra into the core `dependencies`; the extra is removed. Why now: JL live-tested the Qt UI to parity and Seth approved, and carrying two UIs was costing a drift-pin test, a duplicated palette module, a second CI job and a per-file ty override, none of which buy anything once one of the two is the only one anyone launches. Consequences worth knowing: ty now really type-checks `sorter/qtui/` (it could not resolve PySide6 while the extra was absent from CI — the tree came out at **zero** new diagnostics), the UI tests fold into the normal matrix on `QT_QPA_PLATFORM=offscreen` with **no Xvfb anywhere**, and every matrix leg now downloads the ~80 MB abi3 PySide6 wheel. The `qtui` package is **not** renamed to `ui` in this step; that lands separately so the rename stays reviewable as pure churn. |
+| 2026-08-14 | **`sorter/qtui/` → `sorter/ui/`, `tests/unit/qtui/` → `tests/unit/ui/`** — a separate commit from the retirement above, so the rename reads as pure churn and the substantive change reads on its own. `git mv` for both, so it records as a rename. Two follow-ons were not mechanical: `tests/unit/ui/conftest.py`'s `no_cover` filter matched a hardcoded `"tests/unit/qtui"` and now derives the directory from `__file__` (a stale literal there puts the whole UI suite back under the tracer that segfaults it, silently); and the debugging skill's advice to "confirm with `--no-cov`" turned out to be wrong — that flag leaves pytest-cov loaded with no session and every marked test dies on `AttributeError: 'NoneType' object has no attribute 'pause'`. `pytest -p no:cov -o addopts=-ra` is the working form. |

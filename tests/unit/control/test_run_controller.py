@@ -187,7 +187,7 @@ def test_run_once_returns_parent_label_in_parent_mode(tmp_path) -> None:
     ctrl.bus.subscribe("run/classified", events.append)
     with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 95)):
         result = ctrl.run_once()
-    ctrl.bus.drain()  # bus is queued; the Tk loop normally pumps it
+    ctrl.bus.drain()  # bus is queued; the UI's drain timer normally pumps it
 
     # Both labels + confidence are returned, and routing follows the parent.
     assert result["label"] == "WIN"

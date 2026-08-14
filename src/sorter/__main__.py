@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
 
     config = Config(db).load()
 
-    from sorter.qtui.app import run_app
+    from sorter.ui.app import run_app
 
     # opencv-python bundles its own Qt and registers its plugin dir on
     # import (already done, transitively, by the line above). Loading cv2's

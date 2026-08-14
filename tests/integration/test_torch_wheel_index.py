@@ -23,7 +23,7 @@ from urllib.parse import unquote
 import pytest
 import requests
 
-from sorter.qtui.dialog_install_torch import _CUDA_INDEX_BY_OS, ml_pin_targets
+from sorter.ui.dialog_install_torch import _CUDA_INDEX_BY_OS, ml_pin_targets
 
 pytestmark = [
     pytest.mark.integration,

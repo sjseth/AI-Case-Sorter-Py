@@ -26,7 +26,7 @@ jobs:
         python-version: ["3.12", "3.13", "3.14"]
     env:
       # Qt's own offscreen platform plugin: no display server, no xvfb, on
-      # either OS. tests/unit/qtui/conftest.py setdefault's the same value;
+      # either OS. tests/unit/ui/conftest.py setdefault's the same value;
       # this makes CI's intent legible.
       QT_QPA_PLATFORM: offscreen
     steps:
@@ -71,7 +71,7 @@ jobs:
 
       # Everything but the UI: one process, as it has always run.
       - name: Run tests
-        run: uv run --locked --python ${{ matrix.python-version }} pytest -q --ignore=tests/unit/qtui --junitxml=build/junit.xml
+        run: uv run --locked --python ${{ matrix.python-version }} pytest -q --ignore=tests/unit/ui --junitxml=build/junit.xml
 
       # BOTH platforms run one pytest process per test module. Windows first:
       # its offscreen plugin took an access violation at the first real event
@@ -90,12 +90,12 @@ jobs:
       # Runs even when the step above failed (but not when the sync did, which
       # would only produce noise): a broken non-UI test must not hide the UI's
       # results, which is what the separate job it replaces used to guarantee.
-      - name: Run the qtui tests (process per module)
+      - name: Run the UI tests (process per module)
         if: ${{ !cancelled() && steps.sync.conclusion == 'success' }}
         shell: pwsh
         run: |
           $failed = @()
-          Get-ChildItem tests/unit/qtui/test_*.py | ForEach-Object {
+          Get-ChildItem tests/unit/ui/test_*.py | ForEach-Object {
             $junit = "build/junit-" + $_.BaseName + ".xml"
             uv run --locked --python ${{ matrix.python-version }} pytest $_.FullName -q --junitxml=$junit
             if ($LASTEXITCODE -ne 0) { $failed += $_.Name }

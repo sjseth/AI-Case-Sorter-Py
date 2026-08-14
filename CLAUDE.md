@@ -10,7 +10,7 @@ the relevant section here in the same change.**
 alters behavior ships with its documentation in the same change: this file's
 relevant section, the module docstring it invalidates, `docs/guide/GUIDE.md`
 for anything an operator can see or do (its headings are load-bearing — the F1
-help maps to them; `tests/unit/qtui/test_qt_help.py` pins the anchors), and
+help maps to them; `tests/unit/ui/test_qt_help.py` pins the anchors), and
 `docs/ui-modernization.md` for UI design decisions. Stale docs are bugs:
 they were the direct cause of a full retroactive documentation sweep on
 2026-08-14, and the guide misdirecting an operator is a user-facing defect.
@@ -49,15 +49,15 @@ Two ways to classify:
 
 **Entry point:** `src/sorter/__main__.py` → initializes paths, opens the
 SQLite DB (migrating from a legacy `data/config.json` if present), loads
-`Config`, and launches `sorter.qtui.app.run_app`. Launched as
+`Config`, and launches `sorter.ui.app.run_app`. Launched as
 `python -m sorter` with `PYTHONPATH=src`, which `bootstrap.py` sets on the
 child process — the package is deliberately **never installed** into the venv
 (`uv sync --no-install-project`), so the environment is what makes `-m`
 resolve. **No module in `src/sorter/` may rewrite `sys.path`**
 (`tests/unit/test_entry_point.py` enforces it): the launcher owns the path,
 and a hand-rolled shim that inserts `src/sorter` instead of `src/` puts every
-subpackage on the path as a top-level name, where `data` and `update` shadow
-same-named third-party packages.
+subpackage on the path as a top-level name, where `ui`, `data` and `update`
+shadow same-named third-party packages.
 
 **One exception, and it is never run from this tree:**
 `src/sorter/_legacy_entry.py` is copied into the sdist as a root `main.py` by
@@ -110,7 +110,7 @@ fixtures only; `tests/integration/` stays flat — the files that exercise a
 real external tool or service (`uv build`, `git-cliff`, the PyTorch wheel
 index) instead, each self-skipping if that tool — or, for the wheel index,
 the network — is missing; `pytest -m "not integration"` skips them outright.
-`tests/unit/qtui/` mirrors `sorter/qtui/` like the rest, and runs the whole
+`tests/unit/ui/` mirrors `sorter/ui/` like the rest, and runs the whole
 UI headless on `QT_QPA_PLATFORM=offscreen` (its `conftest.py` sets it) —
 **no Xvfb, no display** (§5, §8).
 CI (`.github/workflows/build.yml`) runs the full matrix on every push/PR —
@@ -143,7 +143,7 @@ AI-Case-Sorter-Py/
 │       ├── community/           # auth, community backend client, feedback loop
 │       ├── update/              # self-update: check/stage + pre-launch apply
 │       ├── training/            # out-of-process ConvNeXt trainer
-│       └── qtui/                # PySide6 UI — the only UI (§5)
+│       └── ui/                  # PySide6 UI — the only UI (§5)
 ├── installer/               # Windows bootstrapper (see §7)
 └── tests/                   # pytest suite, mirrors src/sorter/'s subpackages
 ```
@@ -158,14 +158,14 @@ The app separates **hardware I/O**, **control logic**, **persistence**, and
 **UI** into independent, testable layers, glued by a thread-safe event bus.
 Since #58's `src/` layout, that sentence is literally the top level of
 `src/sorter/`: `hardware/` ↔ hardware I/O, `control/` ↔ control logic
-(the event bus and the sort loop), `data/` ↔ persistence, `qtui/` ↔ UI — plus
+(the event bus and the sort loop), `data/` ↔ persistence, `ui/` ↔ UI — plus
 `ml/` (classification/inference/evaluation), `community/` (auth + the
 community backend client + the feedback loop), `update/` (self-update), and
 `training/` (the out-of-process trainer), each its own subpackage.
 
 ```mermaid
 flowchart TB
-    UI["UI — PySide6, main thread<br/>qtui.QtMainWindow · sidebar pages · docks · dialogs · theme"]
+    UI["UI — PySide6, main thread<br/>ui.QtMainWindow · sidebar pages · docks · dialogs · theme"]
     Bus["control.events.EventBus<br/>Queue-backed pub/sub"]
 
     UI -- "subscribes (drained on main thread)" --> Bus
@@ -494,19 +494,19 @@ between them from the Sort page's template dropdown.
 
 ---
 
-## 5. The UI (`sorter/qtui/`)
+## 5. The UI (`sorter/ui/`)
 
-The PySide6 UI is **the** UI — `python -m sorter` lands in `qtui/app.py`, and
-PySide6 is an ordinary core dependency. A Tk UI lived beside it in
-`sorter/ui/` until 2026-08-14; it is gone, and comments across this package
-still reference it where a behaviour was inherited from it deliberately.
-`docs/ui-modernization.md` is the decision record for the port and the
-retirement.
+The PySide6 UI is **the** UI — `python -m sorter` lands in `ui/app.py`, and
+PySide6 is an ordinary core dependency. This package was a second, opt-in UI
+called `sorter/qtui/` until 2026-08-14, beside a Tkinter one that held the
+`ui` name; the Tk UI is gone and this took its place, name included.
+`docs/ui-modernization.md` is the decision record for the port, the
+retirement and the rename.
 
 `QtMainWindow` (`app.py`) is the shell: an **activity sidebar** in two groups —
 the always-live surfaces (`ACTIVITIES`: Sort, Models, Community), a hairline
 (`sidebar_separator`, objectName `sidebarSeparator`, coloured from the
-palette's `border` role by `qtui/theme.py` alone, so a theme switch needs no
+palette's `border` role by `ui/theme.py` alone, so a theme switch needs no
 hook), then the mode pair (`MODE_ACTIVITIES`: Train, AI Config); Settings
 stays pinned below the stretch — driving a `QStackedWidget` of pages, plus
 four **docks** — serial monitor (bottom), classification history, the user
@@ -522,7 +522,7 @@ through the bus.
 Train ⟺ `models.is_trainable(active model)`, AI Config ⟺ no active model —
 so a community model leaves neither live. The other gets
 `_set_activity_unavailable`, which sets the dynamic property `unavailable`
-on the button — restyled `text_subtle` by `qtui/theme.py` and re-inked by
+on the button — restyled `text_subtle` by `ui/theme.py` and re-inked by
 `_paint_sidebar_icon`, since a stylesheet can't reach a QIcon — and leaves
 it **enabled**: the click must still work, because the explainer behind it
 is what answers it. Both halves are the same stacked panel: `train_page`'s,
@@ -551,7 +551,7 @@ to be a user restoring their own model onto a new machine.
 ### The PyTorch install gate
 PyTorch is the optional `[ml]` extra, so a fresh install has none. **The rule:
 torch is installed the first time something actually needs it, and never
-before** — an AI Config user must never be prompted. `qtui/torch_gate.py` is
+before** — an AI Config user must never be prompted. `ui/torch_gate.py` is
 the single entry point: `TorchGate` is bound once as `win.ensure_torch`
 (`__call__` = hard gate, `offer` = once-per-session soft gate), opens
 `dialog_install_torch` and re-enters the caller on success:
@@ -657,8 +657,8 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   `QTimer.singleShot` is a main-thread-only deferral, not an escape hatch. A
   modal raised *from* a bus handler is queued with `singleShot(0, …)` so it
   can't re-enter the drain.
-- **Palette-only QSS.** `qtui/theme.py`'s `build_stylesheet(palette)` renders
-  one `qtui/palettes.py` palette into a stylesheet keyed on **objectNames**
+- **Palette-only QSS.** `ui/theme.py`'s `build_stylesheet(palette)` renders
+  one `ui/palettes.py` palette into a stylesheet keyed on **objectNames**
   (`action`, `danger`, `update`, `slotCard`, `serialLog`, …) — set the
   objectName, never a hard-coded color. Halftone/ink-outline themes render
   flat here. The dock panels are the one block keyed on class instead
@@ -669,7 +669,7 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   the feed and indicators, `QPlainTextEdit` line colors, painted history
   cards) bake their colors in and are re-rendered by an explicit
   `apply_palette()` on every switch.
-- **Themes live in `qtui/palettes.py`**, which is toolkit-neutral and imports
+- **Themes live in `ui/palettes.py`**, which is toolkit-neutral and imports
   nothing. `BUILTIN_THEMES` is what ships — Dark (the original), Light, Sepia,
   Midnight Blue, Gothic and Comic Book; `THEMES` is the live registry,
   built-ins plus whatever the theme editor has saved. **The role of each key
@@ -741,7 +741,7 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   to QtAds didn't change (its floating containers are the same kind of
   frameless top-level) — and always yields to an explicit `QT_QPA_PLATFORM`,
   which is what lets the tests run offscreen.
-- **Tests** live in `tests/unit/qtui/` and run **offscreen, with no display
+- **Tests** live in `tests/unit/ui/` and run **offscreen, with no display
   server and no Xvfb** (§8). `conftest.py` supplies `qapp`, a real
   SQLite-backed `config`, `window_factory`/`window`, plus `seed_model` and
   `drain_until` (pump the bus until a predicate holds — never a sleep).
@@ -755,10 +755,11 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   - Every `QTimer.singleShot` passes its owner as the context argument —
     `singleShot(ms, self, callback)` — so a dying widget drops the callback
     instead of firing into freed C++.
-  - qtui tests run outside coverage (`no_cover`, applied by their conftest);
-    pytest-cov's tracer segfaults them non-deterministically. Never re-enable
-    it, never chase "the crashing test" under coverage — and never pass
-    `--no-cov`, which turns the marker into an error.
+  - The UI tests run outside coverage (`no_cover`, applied by their conftest,
+    scoped by a path derived from `__file__` so a rename can't silently switch
+    it back on); pytest-cov's tracer segfaults them non-deterministically.
+    Never re-enable it, never chase "the crashing test" under coverage — and
+    never pass `--no-cov`, which turns the marker into an error.
   - Test teardown: DeferredDelete-only flush, no forced gc, no generic
     `processEvents()`; `closeEvent` stops the window's timers.
   - Geometry tests derive every threshold from measured metrics
@@ -1039,11 +1040,11 @@ flowchart TD
   friendly "install PyTorch" path rather than letting an `ImportError` escape.
   Don't add torch to the core `dependencies` in `pyproject.toml` — it's the
   `[ml]` extra. Any **new** entry point that runs a model locally must go
-  through `win.ensure_torch` / `qtui/torch_gate.py` (§5) — a bare
+  through `win.ensure_torch` / `ui/torch_gate.py` (§5) — a bare
   `LocalInferenceError` reaching the user is the bug that gate exists to
   prevent.
 - **The `[ml]` extra is the only place the torch version lives.**
-  `qtui/dialog_install_torch.py` reads the pins out of `pyproject.toml` at
+  `ui/dialog_install_torch.py` reads the pins out of `pyproject.toml` at
   install time — never re-declare them as a constant, which is how the runtime
   install once drifted from the lockfile and went invisible to dependency
   scanning (#67). The one coupling to keep by hand: the GPU build installs
@@ -1100,7 +1101,7 @@ flowchart TD
   stubs. Note the job does a **full** `uv sync` rather than `--only-group dev`:
   ty resolves third-party imports from the environment, so without the runtime
   deps the output drowns in unresolved-import noise. That sync now brings
-  PySide6 with it, so `sorter/qtui/` is genuinely type-checked against the
+  PySide6 with it, so `sorter/ui/` is genuinely type-checked against the
   wheel's stubs — it was effectively unchecked while PySide6 was an optional
   extra CI didn't install. The one remaining `[[tool.ty.overrides]]` block
   covers `src/sorter/__init__.py`, whose `_version.py` import is generated and

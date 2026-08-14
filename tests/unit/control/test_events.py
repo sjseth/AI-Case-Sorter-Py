@@ -83,7 +83,7 @@ def test_drain_returns_the_count_dispatched() -> None:
 def test_drain_on_an_empty_bus_returns_zero() -> None:
     # Distinct from the trailing `drain() == 0` in the two tests above: this is
     # a bus that has never been posted to, so it covers the very first call the
-    # Tk timer makes at startup, before anything has been published.
+    # drain timer makes at startup, before anything has been published.
     assert EventBus().drain() == 0
 
 
@@ -159,7 +159,7 @@ def test_a_raising_handler_is_swallowed_and_the_drain_continues() -> None:
     # Characterization: handler exceptions are caught and dropped on the floor
     # with no logging at all, so a broken UI handler fails completely silently.
     # Issue #32 proposes logging the exception here; the swallow itself stays
-    # (one bad handler must not take down the Tk drain loop), so only the
+    # (one bad handler must not take down the drain loop), so only the
     # logging is added and this assertion should keep holding.
     bus = EventBus()
     other: list[object] = []

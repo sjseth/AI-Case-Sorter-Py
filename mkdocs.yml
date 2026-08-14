@@ -2,7 +2,7 @@
 #
 # docs_dir is the repo's existing `docs/` as-is -- nothing was moved to build
 # this. `docs/guide/GUIDE.md` in particular is also the in-app F1 guide
-# (sorter/qtui/help_viewer.py loads that exact path into a QTextBrowser), so it
+# (sorter/ui/help_viewer.py loads that exact path into a QTextBrowser), so it
 # stays where it is and stays plain Markdown: no Material-only syntax in it, or
 # the app renders the source text at the user.
 #
@@ -80,7 +80,7 @@ markdown_extensions:
   # Heading anchors. `permalink` adds the hover link; the slugs themselves are
   # Python-Markdown's default, which agrees with GitHub's (and therefore with
   # help_viewer._slugify) for every heading in the guide --
-  # tests/unit/qtui/test_qt_help.py pins the in-app half of that agreement.
+  # tests/unit/ui/test_qt_help.py pins the in-app half of that agreement.
   - toc:
       permalink: true
   - admonition
