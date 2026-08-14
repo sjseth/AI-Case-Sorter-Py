@@ -184,7 +184,7 @@ dev = [
     # Hangs become failures with tracebacks: the suite is full of worker
     # round-trips and real subprocesses whose failure mode is silence.
     "pytest-timeout==2.4.0",
-    "pytest-cov==7.0.0",
+    "pytest-cov==7.1.0",
     "ruff==0.16.2",
     "ty==0.0.70",
 ]
