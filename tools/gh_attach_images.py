@@ -51,17 +51,43 @@ from pathlib import Path
 
 UPLOAD_URL = "https://uploads.github.com/user-attachments/assets"
 
-# The endpoint accepts images and video only; anything else 422s.
+# The endpoint accepts images and video only; anything else 422s. SVG is left
+# out deliberately, though the endpoint takes it: it has no magic number to
+# verify against, and it is a scriptable document rather than a picture.
 CONTENT_TYPES = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".gif": "image/gif",
     ".webp": "image/webp",
-    ".svg": "image/svg+xml",
     ".mp4": "video/mp4",
     ".webm": "video/webm",
 }
+
+# Leading bytes each extension must actually start with. An upload is permanent
+# and public, so the extension alone is not enough: `mv secrets.env shot.png`
+# would otherwise publish the file unread. Offsets exist because the container
+# formats put the marker after a size field.
+MAGIC = {
+    ".png": ((0, b"\x89PNG\r\n\x1a\n"),),
+    ".jpg": ((0, b"\xff\xd8\xff"),),
+    ".jpeg": ((0, b"\xff\xd8\xff"),),
+    ".gif": ((0, b"GIF87a"), (0, b"GIF89a")),
+    ".webp": ((0, b"RIFF"), (8, b"WEBP")),
+    ".mp4": ((4, b"ftyp"),),
+    ".webm": ((0, b"\x1a\x45\xdf\xa3"),),
+}
+
+
+def looks_like(path: Path) -> bool:
+    """Whether the file's leading bytes match what its extension claims."""
+    head = path.open("rb").read(16)
+    signatures = MAGIC[path.suffix.lower()]
+    # webp needs both of its markers; every other format is a list of
+    # alternatives, and each entry there is on its own sufficient.
+    if path.suffix.lower() == ".webp":
+        return all(head[at : at + len(sig)] == sig for at, sig in signatures)
+    return any(head[at : at + len(sig)] == sig for at, sig in signatures)
 
 
 def gh(*args: str) -> str:
@@ -110,6 +136,8 @@ def main() -> int:
             sys.exit(f"no such file: {path}")
         if path.suffix.lower() not in CONTENT_TYPES:
             sys.exit(f"the attachment endpoint takes images and video only: {path}")
+        if not looks_like(path):
+            sys.exit(f"{path} does not start with the bytes a {path.suffix} should — refusing to upload it")
 
     repo_args = ["repo", "view", "--json", "id,nameWithOwner"]
     if args.repo:

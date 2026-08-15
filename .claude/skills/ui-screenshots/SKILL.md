@@ -9,6 +9,25 @@ Every change under `src/sorter/ui/` gets before/after screenshots on its issue
 and/or PR. A UI change described only in prose can't be reviewed — the reviewer
 has to build it to see it.
 
+## Before you upload — mandatory
+
+An upload lands in GitHub-owned storage with **no deletion mechanism**: deleting
+the comment that references it does not remove it. Treat every upload as
+permanent, and get the user's explicit go-ahead first. Dragging a file into the
+browser gave that for free; running from the CLI does not.
+
+- **Offer to open the file in their viewer.** Reading a file renders it for the
+  agent, not for the user — a terminal may show nothing, and a description of an
+  image is not the image. `xdg-open` on Linux, `open` on macOS, `start` on
+  Windows. Video especially: a described clip is the least reviewable of all.
+- **Check what is in frame.** No credentials, no customer data, no serial ports
+  or file paths that identify the machine, and no models or headstamps that
+  aren't staged fixtures. The capture rules below exist mostly for this reason.
+
+The tool refuses a file whose leading bytes don't match its extension, so a
+renamed non-image can't be published unread. That is a backstop, not the check —
+it cannot tell whether a genuine screenshot contains something private.
+
 ## Attaching
 
 ```bash
