@@ -28,10 +28,17 @@ nav:
   - Getting Started: getting-started.md
   - User Guide: guide/GUIDE.md
   - Troubleshooting: troubleshooting.md
-  - UI Modernization: ui-modernization.md
 # docs/images/ is deliberately absent: images are resolvable assets, not pages.
 # MkDocs copies every non-Markdown file under docs_dir to the site regardless of
 # nav, so links to them keep working.
+
+# ui-modernization.md is the port's decision record -- written for contributors,
+# addressed to a PR review, and full of judgment calls that are nobody's
+# operating instructions. It stays in the repo (CLAUDE.md and several modules
+# cite the path) and off the site, where it was reaching users as a chapter of
+# the guide's PDF.
+exclude_docs: |
+  ui-modernization.md
 
 theme:
   name: material

@@ -60,6 +60,7 @@ you're reading.
 
 - [Source, issues and releases](https://github.com/sjseth/AI-Case-Sorter-Py) on GitHub
 - [Download the latest release](https://github.com/sjseth/AI-Case-Sorter-Py/releases/latest)
-- [UI Modernization](ui-modernization.md) — the research and decisions behind the Qt client
+- [UI Modernization](https://github.com/sjseth/AI-Case-Sorter-Py/blob/main/docs/ui-modernization.md)
+  — the research and decisions behind the Qt client (for contributors)
 - [Contributing](https://github.com/sjseth/AI-Case-Sorter-Py/blob/main/CONTRIBUTING.md)
   and [Releasing](https://github.com/sjseth/AI-Case-Sorter-Py/blob/main/RELEASING.md)

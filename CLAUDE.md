@@ -15,6 +15,13 @@ help maps to them; `tests/unit/ui/test_help.py` pins the anchors), and
 they were the direct cause of a full retroactive documentation sweep on
 2026-08-14, and the guide misdirecting an operator is a user-facing defect.
 
+**The published site is user-facing only.** `mkdocs.yml`'s nav is the whole
+of it — home, `install.md`, `getting-started.md`, `guide/GUIDE.md`,
+`troubleshooting.md` — and `mkdocs-pdf.yml` renders the same pages as one PDF
+per release. Contributor documents stay in `docs/` and go in `exclude_docs`
+(`ui-modernization.md` is the only one so far); a decision record reaching an
+operator as a chapter of the manual is what that list exists to stop.
+
 ---
 
 ## 1. What this project is
