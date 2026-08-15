@@ -56,7 +56,8 @@ that follows the active model below it.
 | *(separator line)* | Below it, the two ways a classifier is taught. |
 | **Train** | The [Train](#train) screen — teaching a local model of your own. |
 | **AI Config** | The [AI Config](#ai-config) screen — the equivalent step when an HTTP server does the recognising: teaching *it* what to look for. |
-| **Settings** | Pinned at the bottom, separate from the activities above it: everything you configure once and rarely touch again. |
+| *(separator line)* | Below it, the app itself rather than a way of working. |
+| **Settings** | Everything you configure once and rarely touch again. |
 
 Train and AI Config are always both there, and exactly one of them is in use
 at a time — which one follows the **active model** (see [Models](#models)):

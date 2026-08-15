@@ -512,12 +512,14 @@ called `sorter/qtui/` until 2026-08-14, beside a Tkinter one that held the
 `docs/ui-modernization.md` is the decision record for the port, the
 retirement and the rename.
 
-`QtMainWindow` (`app.py`) is the shell: an **activity sidebar** in two groups —
-the always-live surfaces (`ACTIVITIES`: Sort, Models, Community), a hairline
-(`sidebar_separator`, objectName `sidebarSeparator`, coloured from the
-palette's `border` role by `ui/theme.py` alone, so a theme switch needs no
-hook), then the mode pair (`MODE_ACTIVITIES`: Train, AI Config); Settings
-stays pinned below the stretch — driving a `QStackedWidget` of pages, plus
+`QtMainWindow` (`app.py`) is the shell: an **activity sidebar** in three
+groups — the always-live surfaces (`ACTIVITIES`: Sort, Models, Community), the
+mode pair (`MODE_ACTIVITIES`: Train, AI Config), then Settings — split by two
+hairlines (`sidebar_separator` and `sidebar_settings_separator`, both
+objectName `sidebarSeparator`, coloured from the palette's `border` role by
+`ui/theme.py` alone, so a theme switch needs no hook). **Every entry is in the
+flow, with the stretch last**: Settings used to be pinned below the stretch
+and went off-screen on a short window — driving a `QStackedWidget` of pages, plus
 four **docks** — serial monitor (bottom), classification history, the user
 guide and the theme picker (right, all three closed until asked for) — a
 status bar (camera/serial indicators, an inference-device indicator —

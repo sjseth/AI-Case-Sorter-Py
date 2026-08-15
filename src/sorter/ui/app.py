@@ -112,9 +112,9 @@ SIDEBAR_WIDTH = 84
 # this unless a section is added without one.
 PLACEHOLDER_TEXT = "This section has no settings yet."
 
-# Sidebar: (icon name, page name). Settings is pinned to the bottom, below the
-# stretch. The icons are drawn from ui/icons.py and inked by the live
-# palette (_paint_sidebar_icons) — emoji read as artwork and themed badly.
+# Sidebar: (icon name, page name), in three groups separated by hairlines. The
+# icons are drawn from ui/icons.py and inked by the live palette
+# (_paint_sidebar_icons) — emoji read as artwork and themed badly.
 AI_CONFIG_ACTIVITY = "AI Config"
 # The always-live surfaces.
 ACTIVITIES = (
@@ -130,6 +130,9 @@ MODE_ACTIVITIES = (
     (TRAIN, "Train"),
     (AI_CONFIG, AI_CONFIG_ACTIVITY),
 )
+# Below a second separator, and in the flow rather than pinned under a stretch:
+# pinned to the bottom it fell off-screen at a modest window height (JL, on a
+# Mac), which is the one entry that must be reachable from anywhere.
 SETTINGS_ACTIVITY = (SETTINGS, "Settings")
 # One line each, always set, saying only whether this entry is the live one.
 ACTIVITY_TOOLTIP_LIVE = "Classification uses this now"
@@ -527,8 +530,10 @@ class QtMainWindow(QMainWindow):
         column.addWidget(self.sidebar_separator)
         for icon_name, name in MODE_ACTIVITIES:
             column.addWidget(self._activity_button(sidebar, icon_name, name))
-        column.addStretch(1)
+        self.sidebar_settings_separator = self._sidebar_separator(sidebar)
+        column.addWidget(self.sidebar_settings_separator)
         column.addWidget(self._activity_button(sidebar, *SETTINGS_ACTIVITY))
+        column.addStretch(1)
 
         # Width follows the widest label's font metrics, not a constant — a
         # fixed pixel width clips "Community" on fonts wider than the dev box.

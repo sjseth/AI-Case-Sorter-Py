@@ -33,20 +33,45 @@ def test_sidebar_activities(window) -> None:
     assert window.pages.currentWidget() is window._pages_by_name["Sort"]
 
 
-def test_a_separator_splits_the_mode_pair_off(window) -> None:
-    """The line is what makes the sidebar two groups rather than one list."""
+def test_separators_split_the_sidebar_into_three_groups(window) -> None:
+    """The lines are what make the sidebar grouped rather than one list:
+    live surfaces / the mode pair / Settings."""
     # Community is auth-gated, and a hidden widget drops out of the layout —
-    # sign in so the group above the line is actually laid out.
+    # sign in so the group above the first line is actually laid out.
     window.community_page.is_signed_in = lambda: True
     window._apply_auth_visibility()
     sidebar = window.sidebar_buttons["Sort"].parentWidget()
     sidebar.layout().activate()
 
-    separator = window.sidebar_separator
+    mode_line = window.sidebar_separator
+    settings_line = window.sidebar_settings_separator
 
-    assert separator.objectName() == "sidebarSeparator"  # palette-driven, via theme.py
-    assert window.sidebar_buttons["Community"].geometry().bottom() <= separator.y()
-    assert separator.geometry().bottom() <= window.sidebar_buttons["Train"].y()
+    # Both palette-driven through the same objectName, via theme.py.
+    assert mode_line.objectName() == "sidebarSeparator"
+    assert settings_line.objectName() == "sidebarSeparator"
+
+    assert window.sidebar_buttons["Community"].geometry().bottom() <= mode_line.y()
+    assert mode_line.geometry().bottom() <= window.sidebar_buttons["Train"].y()
+    assert window.sidebar_buttons["AI Config"].geometry().bottom() <= settings_line.y()
+    assert settings_line.geometry().bottom() <= window.sidebar_buttons["Settings"].y()
+
+
+def test_settings_stays_reachable_when_the_window_is_short(window, qapp) -> None:
+    """Pinned under a stretch it fell off-screen on a short window (issue #105).
+    In the flow it follows AI Config, so it is on-screen whenever the entries
+    above it are."""
+    sidebar = window.sidebar_buttons["Sort"].parentWidget()
+    settings = window.sidebar_buttons["Settings"]
+    ai_config = window.sidebar_buttons["AI Config"]
+
+    # Short enough that a bottom-pinned entry would be pushed past the edge:
+    # the entries plus both hairlines, with nothing to spare.
+    window.resize(window.width(), settings.sizeHint().height() * len(window.sidebar_buttons) + 40)
+    qapp.processEvents()
+    sidebar.layout().activate()
+
+    assert settings.geometry().bottom() - ai_config.geometry().bottom() <= settings.height() * 2
+    assert settings.geometry().bottom() <= sidebar.height()
 
 
 @pytest.mark.parametrize("name", ["Train", "AI Config", "Models", "Community", "Settings", "Sort"])
