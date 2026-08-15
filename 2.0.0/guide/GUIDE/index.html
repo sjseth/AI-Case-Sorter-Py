@@ -1,0 +1,2106 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Sorts spent brass cartridge casings by headstamp -- camera, image classifier, serial-connected sorting machine.">
+      
+      
+      
+        <link rel="canonical" href="https://sjseth.github.io/AI-Case-Sorter-Py/latest/guide/GUIDE/">
+      
+      
+        <link rel="prev" href="../..">
+      
+      
+        <link rel="next" href="../../ui-modernization/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>User Guide - AI Case Sorter</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ai-case-sorter-user-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AI Case Sorter" class="md-header__button md-logo" aria-label="AI Case Sorter" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AI Case Sorter
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              User Guide
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Follow system"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Follow system" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/sjseth/AI-Case-Sorter-Py" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    sjseth/AI-Case-Sorter-Py
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AI Case Sorter" class="md-nav__button md-logo" aria-label="AI Case Sorter" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    AI Case Sorter
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/sjseth/AI-Case-Sorter-Py" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    sjseth/AI-Case-Sorter-Py
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-this-guide-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How this guide works
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The window
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The window">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#activities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Activities
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#status-bar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status bar
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#menus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Menus
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Panels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Panels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serial-monitor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Serial Monitor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#classification-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Classification History
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#themes-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Themes panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sort-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sort dashboard
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sort dashboard">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-current-case" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The current case
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#slot-cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Slot cards
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#editing-an-assignment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editing an assignment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sorting-templates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sorting templates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start-stop-and-manual-feed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Start, Stop, and Manual feed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#package-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Package mode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#community-model-notices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Community model notices
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#train" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Train
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Train">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-train-isnt-available" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When Train isn't available
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#capturing-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Capturing images
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-counts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Image counts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#training-a-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training a model
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ai-config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AI Config
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AI Config">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-ai-config-isnt-the-one-classifying" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When AI Config isn't the one classifying
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#setting-up-the-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setting up the server
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-model-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The model list
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#managing-a-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Managing a model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#importing-and-exporting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Importing and exporting
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#community" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Community
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#camera" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serial" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Serial
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Image Processing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#theme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#getting-help" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting help
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Getting help">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-guide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The guide
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#support-package" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Support package
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updates
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ui-modernization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Modernization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-this-guide-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How this guide works
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The window
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The window">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#activities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Activities
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#status-bar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status bar
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#menus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Menus
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Panels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Panels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serial-monitor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Serial Monitor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#classification-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Classification History
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#themes-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Themes panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sort-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sort dashboard
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sort dashboard">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-current-case" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The current case
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#slot-cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Slot cards
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#editing-an-assignment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editing an assignment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sorting-templates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sorting templates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start-stop-and-manual-feed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Start, Stop, and Manual feed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#package-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Package mode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#community-model-notices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Community model notices
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#train" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Train
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Train">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-train-isnt-available" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When Train isn't available
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#capturing-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Capturing images
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-counts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Image counts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#training-a-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training a model
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ai-config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AI Config
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AI Config">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-ai-config-isnt-the-one-classifying" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When AI Config isn't the one classifying
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#setting-up-the-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setting up the server
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-model-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The model list
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#managing-a-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Managing a model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#importing-and-exporting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Importing and exporting
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#community" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Community
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#camera" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#serial" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Serial
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Image Processing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#theme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theme
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#getting-help" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting help
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Getting help">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-guide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The guide
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#support-package" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Support package
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updates
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/sjseth/AI-Case-Sorter-Py/edit/main/docs/guide/GUIDE.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="ai-case-sorter-user-guide">AI Case Sorter — User Guide<a class="headerlink" href="#ai-case-sorter-user-guide" title="Permanent link">&para;</a></h1>
+<p>A guide to the desktop client, written for the person running the machine. It covers every screen and panel you use day to
+day, in the order you meet them.</p>
+<h2 id="contents">Contents<a class="headerlink" href="#contents" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="#the-window">The window</a> — the activity sidebar, the status bar and the
+  menus that frame everything else.</li>
+<li><a href="#panels">Panels</a> — the movable side and bottom panels:
+  <a href="#serial-monitor">Serial Monitor</a>, <a href="#classification-history">Classification
+  History</a>, the guide you are reading, and
+  <a href="#themes-panel">Themes</a>.</li>
+<li><a href="#sort-dashboard">Sort dashboard</a> — the main working screen: the current
+  case, the slot cards, sorting templates and the run controls.</li>
+<li><a href="#train">Train</a> — capture cases, label them, and train a model from them.</li>
+<li><a href="#ai-config">AI Config</a> — the other way to classify: an HTTP server instead
+  of a local model.</li>
+<li><a href="#models">Models</a> — the model library: activate, edit, import, export.</li>
+<li><a href="#community">Community</a> — browse and install published models.</li>
+<li><a href="#settings">Settings</a> — <a href="#camera">Camera</a>, <a href="#serial">Serial</a>, <a href="#image-processing">Image
+  Processing</a> and <a href="#theme">Theme</a>.</li>
+<li><a href="#getting-help">Getting help</a> — this guide, the <a href="#support-package">support
+  package</a> and <a href="#updates">updates</a>.</li>
+</ul>
+<h2 id="how-this-guide-works">How this guide works<a class="headerlink" href="#how-this-guide-works" title="Permanent link">&para;</a></h2>
+<p>This whole guide is one Markdown file, rendered two ways:</p>
+<ul>
+<li><strong>On GitHub</strong>, browsing straight to <code>docs/guide/GUIDE.md</code>.</li>
+<li><strong>In the app</strong>, in the User Guide panel (<code>F1</code>, or Help → User Guide),
+  which opens this file and jumps straight to the section for whatever
+  screen you're on — like <a href="#serial">Settings → Serial</a>.</li>
+</ul>
+<p>Press <code>F1</code> again after moving to another screen and the panel follows you.
+The <strong>&lt; Back</strong> button at the top of the panel returns to the previous
+section.</p>
+<h2 id="the-window">The window<a class="headerlink" href="#the-window" title="Permanent link">&para;</a></h2>
+<p>The window is the same everywhere: a column of activity buttons down the
+left, your working screen in the middle, movable <a href="#panels">panels</a> around
+it, a menu bar on top and a status bar underneath.</p>
+<h3 id="activities">Activities<a class="headerlink" href="#activities" title="Permanent link">&para;</a></h3>
+<p>The sidebar switches between the things you do, one button each. A thin line
+splits it in two: the screens that are always live above it, and the pair
+that follows the active model below it.</p>
+<table>
+<thead>
+<tr>
+<th>Button</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sort</strong></td>
+<td>The <a href="#sort-dashboard">Sort dashboard</a> — where sorting happens.</td>
+</tr>
+<tr>
+<td><strong>Models</strong></td>
+<td>The <a href="#models">model library</a>.</td>
+</tr>
+<tr>
+<td><strong>Community</strong></td>
+<td>The <a href="#community">community catalogue</a>. Shown only while signed in.</td>
+</tr>
+<tr>
+<td><em>(separator line)</em></td>
+<td>Below it, the two ways a classifier is taught.</td>
+</tr>
+<tr>
+<td><strong>Train</strong></td>
+<td>The <a href="#train">Train</a> screen — teaching a local model of your own.</td>
+</tr>
+<tr>
+<td><strong>AI Config</strong></td>
+<td>The <a href="#ai-config">AI Config</a> screen — the equivalent step when an HTTP server does the recognising: teaching <em>it</em> what to look for.</td>
+</tr>
+<tr>
+<td><strong>Settings</strong></td>
+<td>Pinned at the bottom, separate from the activities above it: everything you configure once and rarely touch again.</td>
+</tr>
+</tbody>
+</table>
+<p>Train and AI Config are always both there, and exactly one of them is in use
+at a time — which one follows the <strong>active model</strong> (see <a href="#models">Models</a>):</p>
+<ul>
+<li><strong>a model you own</strong> — Train is live, AI Config is dimmed;</li>
+<li><strong>AI Config mode</strong> ("Use AI Config" on the Models page) — AI Config is live,
+  Train is dimmed;</li>
+<li><strong>a community model</strong> — neither is live: its publisher trained it, and it,
+  not a server, does the classifying.</li>
+</ul>
+<p>Hover either button and the tooltip says which of those you are in. A dimmed
+button still works — it is the screen behind it that explains the state, and
+carries a button to the Models page to change it. Never a dead end.</p>
+<h3 id="status-bar">Status bar<a class="headerlink" href="#status-bar" title="Permanent link">&para;</a></h3>
+<p>Along the bottom, from left to right:</p>
+<ul>
+<li><strong>Messages</strong> — what the app just did ("Auto-connected to COM3.", "Run
+  stopped."). This is where a refused action explains itself.</li>
+<li><strong>● Camera</strong> and <strong>● Serial</strong> — connection indicators. Green means
+  connected, and the serial one names the port, speed and the firmware
+  version it handshook with.</li>
+<li><strong>Update to <em>version</em></strong> or <strong>Restart to update</strong> — appears only when there
+  is an app update to fetch or a downloaded one waiting. See
+  <a href="#updates">updates</a>.</li>
+<li><strong>Model update: v<em>N</em></strong> — appears when the active community model's
+  publisher has released a newer version. See <a href="#community-model-notices">community model
+  notices</a>.</li>
+<li><strong>Your name</strong> and <strong>Sign in / Sign out</strong> — the community account. Nothing
+  outside the <a href="#community">Community</a> screen needs one.</li>
+</ul>
+<h3 id="menus">Menus<a class="headerlink" href="#menus" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>File → Open data folder</strong> opens the folder holding the database, your
+  models, their training images and the logs. <strong>Quit</strong> closes the app.</li>
+<li><strong>View</strong> switches each <a href="#panels">panel</a> on or off, and holds <strong>Re-dock
+  panels</strong>.</li>
+<li><strong>Help</strong> holds this guide (<code>F1</code>), <a href="#updates">Check for updates…</a>, <a href="#support-package">Export
+  support package…</a>, About and License.</li>
+</ul>
+<h2 id="panels">Panels<a class="headerlink" href="#panels" title="Permanent link">&para;</a></h2>
+<p>Four panels can sit around your working screen. Each one can be moved,
+tabbed together with another, torn off into its own floating window, or
+closed:</p>
+<ul>
+<li><strong>Serial Monitor</strong> — along the bottom, open by default.</li>
+<li><strong>Classification History</strong> — on the right, closed by default.</li>
+<li><strong>User Guide</strong> — on the right, closed by default (this guide).</li>
+<li><strong>Themes</strong> — on the right, closed by default.</li>
+</ul>
+<p><strong>Moving a panel:</strong> drag it by its <em>tab</em> — the small labelled tab at the
+edge of the panel, not its title. As you drag, blue drop indicators appear
+showing where it can land: the four edges of the window, or the middle of
+another panel to tab the two together. Drop it outside the window and it
+becomes a floating window you can put on a second monitor.</p>
+<p><strong>Getting a panel back:</strong> <strong>View → Re-dock panels</strong> returns every open panel
+to where it started, un-floated. Use it any time a panel ends up somewhere
+you didn't intend — it always works, which dragging one back does not.</p>
+<p><strong>Closing and re-opening:</strong> the ✕ on a panel closes it; its entry in the
+<strong>View</strong> menu switches it back on. Your arrangement is remembered and
+restored the next time you start the app.</p>
+<h3 id="serial-monitor">Serial Monitor<a class="headerlink" href="#serial-monitor" title="Permanent link">&para;</a></h3>
+<p>Live traffic between the app and the board — every line it sends and every
+line the board answers, in the order it happened. It is the first place to
+look when the machine does something unexpected.</p>
+<ul>
+<li>The header shows the connection state, plus <strong>Autoscroll</strong>, <strong>Timestamps</strong>
+  and <strong>Pause</strong>. Pausing holds new lines back and releases them when you
+  un-pause; nothing is lost.</li>
+<li><strong>Zoom</strong> scales the text from 50% to 200%, for reading the log across the
+  bench.</li>
+<li><strong>Clear</strong> empties the view. <strong>Save…</strong> writes what you are currently
+  looking at to a text file — filtered lines are not written, so narrow the
+  view first if that's what you want to send.</li>
+<li><strong>Filter</strong> hides every line that doesn't contain what you type, and the
+  <strong>RX</strong> / <strong>TX</strong> / <strong>Notes</strong> toggles hide a whole direction (received,
+  sent, and the monitor's own commentary). Filtering only hides: clear the
+  box and the traffic is all still there.</li>
+<li>The bottom row sends a command by hand — type it, pick the line ending the
+  firmware expects, press <strong>Send</strong>. <code>Up</code> and <code>Down</code> walk back through what
+  you have sent before.</li>
+<li><strong>Baud</strong> changes the port speed and reconnects at it. It is the same
+  setting as <a href="#serial">Settings → Serial</a>'s; change it in either place and
+  the other follows.</li>
+</ul>
+<h3 id="classification-history">Classification History<a class="headerlink" href="#classification-history" title="Permanent link">&para;</a></h3>
+<p>A grid of tiles, one per sorted case: the cropped image, the headstamp, the
+confidence, the bin it went to, and a running case number.</p>
+<p>Tiles never scroll or move. When the grid is full the newest case overwrites
+the oldest tile in place, and a coloured border trails the most recent few
+so you can see where "now" is. That is deliberate — it means you can watch
+one position and see cases go past, instead of chasing a scrolling list.</p>
+<p><strong>Zoom</strong> (at the bottom of the panel, 50–200%) sets the tile size. Bigger
+tiles are easier to read across a bench; smaller tiles mean more of them fit,
+since the panel holds however many tiles fit its area. Click any tile to
+open that case's image full size.</p>
+<h3 id="themes-panel">Themes panel<a class="headerlink" href="#themes-panel" title="Permanent link">&para;</a></h3>
+<p>The whole list of themes in one place. Click one and the app repaints
+immediately, so you can try them against the room's lighting without leaving
+what you were doing. <strong>Edit theme…</strong> opens the theme editor.</p>
+<p>This is the same list as <a href="#theme">Settings → Theme</a>; whichever you use, the
+other follows.</p>
+<h2 id="sort-dashboard">Sort dashboard<a class="headerlink" href="#sort-dashboard" title="Permanent link">&para;</a></h2>
+<p>The Sort activity (the sidebar's top button) is where sorting actually
+happens. It combines the current case, the slot layout and the run controls
+on one screen.</p>
+<p>On a fresh machine — nothing connected and nothing routed to a slot yet —
+this screen shows a short panel with buttons straight to <a href="#serial">Settings →
+Serial</a> and <a href="#camera">Settings → Camera</a> instead of an empty grid.</p>
+<h3 id="the-current-case">The current case<a class="headerlink" href="#the-current-case" title="Permanent link">&para;</a></h3>
+<p>The left-hand panel shows the <strong>last captured and cropped headstamp</strong> —
+exactly the image the classifier was given — with what it made of it
+underneath: the headstamp it matched and how confident it was. A confidence
+below the confidence floor is coloured as a warning, and that case goes to
+the Catch-All. Only the current case is shown here; the running record is in
+the <a href="#classification-history">Classification History</a> panel.</p>
+<p><strong>Show live camera</strong> above the panel adds the live camera feed as a smaller
+second panel below the crop. It is off by default — the feed is a setup aid,
+not what an operator watches during a run — and while it is off no frame is
+fetched or drawn. If the camera isn't running, clicking the feed takes you to
+<a href="#camera">Settings → Camera</a>.</p>
+<h3 id="slot-cards">Slot cards<a class="headerlink" href="#slot-cards" title="Permanent link">&para;</a></h3>
+<p>Every slot on the machine gets a card, arranged in a grid. Slot 0 is the
+<strong>Catch-All</strong>, for anything unclassified, below the confidence floor, or not
+routed to a slot; the rest are your bins. A card shows:</p>
+<ul>
+<li>the slot number (or "Catch-All")</li>
+<li>how many cases have landed there this run</li>
+<li>every headstamp currently routed to it, listed in full — the card grows to
+  fit the list rather than truncating it</li>
+</ul>
+<p>Above the grid: <strong>Sorted this run</strong> counts every case this run has sorted,
+<strong>Reset counts</strong> zeroes the counters (the grid's and the per-bin ones)
+without touching your assignments, and the <a href="#sorting-templates">template</a>
+picker names the layout the cards are showing.</p>
+<h3 id="editing-an-assignment">Editing an assignment<a class="headerlink" href="#editing-an-assignment" title="Permanent link">&para;</a></h3>
+<p>Click any card except Catch-All to open its assignment editor. Tick a
+headstamp to route it to that slot; unticking sends it back to the
+Catch-All. Outside of <a href="#package-mode">package mode</a> a headstamp can only be
+assigned to one slot at a time — ticking it here moves it off whichever slot
+it was in before, and the row tells you which one that was. A filter box
+narrows a long headstamp list by name.</p>
+<h3 id="sorting-templates">Sorting templates<a class="headerlink" href="#sorting-templates" title="Permanent link">&para;</a></h3>
+<p>The <strong>Template</strong> picker on the slot grid's header row holds the active
+<strong>sorting template</strong> — a named snapshot of the whole slot layout, so one
+model can carry several bin arrangements ("Range brass" vs. "Match prep")
+and switch between them. <strong>+</strong> creates one (optionally copied from the
+current layout); <strong>✎</strong> renames or deletes the active one.</p>
+<p>You never have to save a template: the active one follows your edits as you
+make them. Switching templates replaces every slot assignment at once, so the
+whole picker is blocked while a run is in progress — stop first. Standard and package
+mode keep separate template lists, because their layouts mean different
+things.</p>
+<h3 id="run-options">Run options<a class="headerlink" href="#run-options" title="Permanent link">&para;</a></h3>
+<p><strong>⚙ Run options</strong> on the strip at the foot of the page holds everything that
+changes how a run behaves:</p>
+<ul>
+<li><strong>Store images</strong> — keep a copy of each run's captures (none / above the
+  floor / below it / all), under the active model's folder, so AI Config mode
+  stores nothing. Anything but "None" will use real disk space over a long
+  session.</li>
+<li><strong>Confidence floor</strong> — the percentage a prediction has to reach to be
+  trusted. Below it, the case goes to the Catch-All.</li>
+<li><strong>Automatically select trays</strong> — when a confident prediction has no slot,
+  route it to the first empty one and keep the assignment.</li>
+<li><strong>Package mode</strong> and <strong>Batch size</strong> — see <a href="#package-mode">package mode</a>.</li>
+</ul>
+<h3 id="start-stop-and-manual-feed">Start, Stop, and Manual feed<a class="headerlink" href="#start-stop-and-manual-feed" title="Permanent link">&para;</a></h3>
+<p>The strip at the foot of the page, with the green <strong>Start</strong> at the far
+right:</p>
+<ul>
+<li><strong>Start</strong> begins the continuous sort loop: capture, classify, sort,
+  repeat. It is one button — while the loop runs it reads <strong>Stop</strong>, in red.</li>
+<li><strong>Stop</strong> ends it. Case counts are kept, not reset, so you can clear a jam
+  and pick back up mid-tray.</li>
+<li><strong>Manual feed</strong> runs exactly one cycle without starting the loop, useful
+  for testing a single case.</li>
+</ul>
+<p>Without a board connected, Start and Manual feed are greyed out and say so.
+Otherwise starting is refused, with a message explaining why, if the AI
+Config API key or model name is unset, the active model's checkpoint is
+missing, PyTorch isn't installed yet for a local model, or a <a href="#community-model-notices">moderator
+note</a> is waiting to be read.</p>
+<h3 id="package-mode">Package mode<a class="headerlink" href="#package-mode" title="Permanent link">&para;</a></h3>
+<p>Turning on <strong>Package mode</strong> in <a href="#run-options">Run options</a> switches the grid
+to batch counting against the one <strong>Batch size</strong> you set, shown as
+"count / target" on every slot card. A slot that reaches the target stops
+taking that headstamp; once every slot for a given headstamp is full, the run
+halts and asks you to empty bins and reset counters. A slot card's <strong>⟲ Reset</strong>
+button empties just that bin's counter without stopping the run, so it can
+keep filling.</p>
+<h3 id="community-model-notices">Community model notices<a class="headerlink" href="#community-model-notices" title="Permanent link">&para;</a></h3>
+<p>When the active model came from the <a href="#community">Community</a> and you are
+signed in, the app checks in with its publisher each time you open the Sort
+screen. Two things can come back, and neither stops a run in progress:</p>
+<ul>
+<li><strong>Model update: v<em>N</em></strong> in the status bar — a newer version has been
+  published. The button opens a summary of what you have versus what is
+  available; <strong>Update now</strong> installs it in place, keeping your slot
+  assignments, sorting templates and the name you gave it. Dismissing it is
+  fine — it comes back next time you open Sort.</li>
+<li><strong>Moderator notes (<em>N</em>)</strong> on the run strip — messages from the model's
+  moderators, usually about the feedback images the model is collecting. A
+  note you haven't acknowledged opens by itself and <strong>blocks Start</strong> until
+  you have read it. The same button is the history of every note, including
+  the ones already acknowledged.</li>
+</ul>
+<p>If the check can't reach the server, nothing appears and the app behaves
+exactly as it does offline.</p>
+<h2 id="train">Train<a class="headerlink" href="#train" title="Permanent link">&para;</a></h2>
+<p>The Train screen is the loop that builds a training set: feed a case,
+capture it, label it, save it — and, when you have enough images, train a
+model from them.</p>
+<h3 id="when-train-isnt-available">When Train isn't available<a class="headerlink" href="#when-train-isnt-available" title="Permanent link">&para;</a></h3>
+<p>Train is always in the sidebar, but it needs a local model of <em>your own</em> to
+work on. When the active model isn't one, the button is dimmed and the page
+says which of the two cases you are in:</p>
+<ul>
+<li><strong>AI Config mode</strong> — classification is running over HTTP, so there is no
+  model on this machine to train. Activate or create a local model on the
+  <a href="#models">Models</a> page.</li>
+<li><strong>A community model</strong> — the checkpoint belongs to its publisher and they
+  keep updating it. To build on it, export it from the Models page and
+  import the archive back as your own model.</li>
+</ul>
+<p>Either way the page carries a button straight to the model library.</p>
+<p>The same holds the other way round for <a href="#ai-config">AI Config</a>, which is
+dimmed whenever a local model is active: clicking it opens its own page,
+where — in place of the server form — a panel names the model doing the
+classifying and offers the same jump to the model library. Both buttons stay
+in the sidebar in every mode — what changes is which one is live.</p>
+<h3 id="capturing-images">Capturing images<a class="headerlink" href="#capturing-images" title="Permanent link">&para;</a></h3>
+<p>The left column reads top to bottom in the order you work:</p>
+<ol>
+<li>The <strong>case image</strong> — the cropped headstamp of whatever was last fed.</li>
+<li><strong>Feed</strong>, centred beneath it — drops the next case and captures it. It
+   needs the board connected.</li>
+<li><strong>Label</strong> and <strong>Save image</strong> — the label to file this image under, and
+   the button that writes it. The label box remembers every headstamp the
+   model knows, and you can type a new one.</li>
+<li>The readouts — the predicted label (when a trained checkpoint and PyTorch
+   are both present), how long image processing took, how long the
+   prediction took, and a per-step breakdown. Useful for spotting a setup
+   that has become slow.</li>
+</ol>
+<p>PyTorch is <em>offered</em> here, never required: capturing and labelling images is
+exactly the work you do before there is anything to predict with. Declining
+costs you only the predicted-label convenience, and you won't be asked
+again this session.</p>
+<h3 id="image-counts">Image counts<a class="headerlink" href="#image-counts" title="Permanent link">&para;</a></h3>
+<p>The right half lists every headstamp and how many images are on disk for it
+— your training set, straight from the folder. Drag the divider to give it
+more width and the list reflows into more columns, which is what makes a
+model with a hundred-odd headstamps readable.</p>
+<p><strong>Clicking a headstamp in this list saves the captured case under that
+label and immediately feeds the next one</strong> — the fastest way to work through
+a tray of mixed brass.</p>
+<h3 id="training-a-model">Training a model<a class="headerlink" href="#training-a-model" title="Permanent link">&para;</a></h3>
+<p>The <strong>Training</strong> strip at the foot of the page turns the images above into a
+model:</p>
+<ul>
+<li><strong>Sort while training</strong> routes each case you label into its own bin
+  instead of the catch-all, using the label <em>you</em> picked — so a training
+  session also sorts the tray.</li>
+<li><strong>Training settings…</strong> opens the hyperparameters (epochs, batch size,
+  learning rate, image size, focal loss, SWA and the rest). The defaults are
+  sensible; change them when you know why. The ConvNeXt size is the model's
+  own property — change it in the model editor, not here.</li>
+<li><strong>Start training</strong> launches the run in a separate process and opens a live
+  console for it. Closing the console mid-run asks first, and confirming
+  cancels the run — the console is the only thing it reports to.</li>
+</ul>
+<p>Training needs PyTorch. If it isn't installed, the app offers to install it
+here.</p>
+<h2 id="ai-config">AI Config<a class="headerlink" href="#ai-config" title="Permanent link">&para;</a></h2>
+<p>The alternative to a local model: classification is sent to an
+OpenAI-compatible HTTP server, and this screen is where that server — and the
+headstamps it may answer with — is set up. It is Train's mirror in the
+sidebar: live whenever no local model is active, dimmed when one is.</p>
+<h3 id="when-ai-config-isnt-the-one-classifying">When AI Config isn't the one classifying<a class="headerlink" href="#when-ai-config-isnt-the-one-classifying" title="Permanent link">&para;</a></h3>
+<p>Activate a local model and this screen swaps its form for a panel naming the
+model that is classifying instead, with a button straight to the
+<a href="#models">Models</a> page. Select <strong>Use AI Config</strong> there to come back — the
+server settings are still exactly as you left them.</p>
+<h3 id="setting-up-the-server">Setting up the server<a class="headerlink" href="#setting-up-the-server" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Server</strong> — endpoint URL, API key, model name, the prompt (use
+  <code>{{headstamps}}</code> where the list of headstamps should be injected), and the
+  JPEG quality and scale used for the image. Press <strong>Save</strong> to apply — these
+  fields do not save as you type.</li>
+<li><strong>Headstamps</strong> — the list this mode routes on, and each one's slot. Add,
+  rename, remove, clear, or <strong>Load from server</strong>. These do save immediately,
+  and editing a slot here updates the Sort dashboard's cards straight away.</li>
+<li><strong>Test shot</strong>, under <em>Test (capture → crop → classify)</em> — takes one frame
+  from the camera, runs it through the same pipeline, and shows the label and
+  confidence that came back. No board feed needed; it reads the fields above
+  as they stand, so an API key and model name must be filled in.</li>
+</ul>
+<h2 id="models">Models<a class="headerlink" href="#models" title="Permanent link">&para;</a></h2>
+<p>The model library. Everything the app knows how to classify with is a row in
+this table, plus one synthetic row for AI Config mode.</p>
+<h3 id="the-model-list">The model list<a class="headerlink" href="#the-model-list" title="Permanent link">&para;</a></h3>
+<p>The table lists each model's name, whether it is active, its cartridge, type
+(yours or a community model), the ConvNeXt size it was built as, how many
+training images it has, whether it has been trained, and when. Click a
+column heading to sort by it.</p>
+<p>The <strong>Active</strong> column marks the model the app currently classifies with:
+exactly one row reads <strong>● ACTIVE</strong> in the theme's action colour, and every
+other row's Active cell is blank. To change it, select a row and press
+<strong>Activate</strong> at the bottom right.</p>
+<p>Above the table: filters by <strong>cartridge</strong> and <strong>type</strong>, a search box, and
+<strong>New cartridge</strong>, <strong>New model</strong> and <strong>Import…</strong>.</p>
+<p>The <strong>"Use AI Config"</strong> row sits at the top of the list, whenever the filters
+and the search box leave it there. Activating it puts the app in AI Config
+mode — classification goes to the HTTP server configured on the <a href="#ai-config">AI
+Config</a> screen instead of a local model. It is not a model, so
+Edit, Delete, Export and the rest stay greyed out while it is selected.</p>
+<h3 id="managing-a-model">Managing a model<a class="headerlink" href="#managing-a-model" title="Permanent link">&para;</a></h3>
+<p>Everything on the bar under the table acts on the <strong>selected</strong> row.
+<strong>Delete</strong> sits alone on the far left and <strong>Activate</strong> on the far right, so
+the destructive one and the primary one can never be neighbours:</p>
+<ul>
+<li><strong>Delete</strong> — delete the model and its folder, after a confirmation. The
+  active model refuses: activate something else first.</li>
+<li><strong>Edit…</strong> — name, cartridge, model size, primer settings, and the
+  community feedback opt-in where it applies.</li>
+<li><strong>Images…</strong> — browse the model's training images as thumbnails, and
+  reclassify or delete them. A single image opens full size with prev/next
+  navigation. Models you own only.</li>
+<li><strong>Headstamps…</strong> — the model's headstamp list: add, rename, delete, set
+  each one's slot, and group headstamps under parent classifications.
+  Renaming a headstamp also renames its training images, so the label and
+  the files stay in step.</li>
+<li><strong>Evaluate…</strong> — score the model against a folder of labelled images and
+  write an interactive HTML report. Only open reports you generated
+  yourself, from image folders you trust.</li>
+<li><strong>Export…</strong> — write the model out as a ZIP (checkpoint, headstamps and
+  images), the format the Windows app uses.</li>
+<li><strong>Activate</strong> — make this the model the app classifies with. Greyed out on
+  the row that is already active.</li>
+</ul>
+<h3 id="importing-and-exporting">Importing and exporting<a class="headerlink" href="#importing-and-exporting" title="Permanent link">&para;</a></h3>
+<p><strong>Import…</strong> reads a model ZIP back in, after a notice that a model file can
+execute code — import only from authors you trust. If the archive carries a
+community ID you already have installed, the app asks whether to <strong>update the
+installed one in place</strong> — keeping its slot assignments, sorting templates and
+your name for it — or to <strong>import it as a separate copy</strong>; anything else lands
+as a new model. A ZIP you import stays <em>yours</em>: importing your own model onto
+a new machine leaves it trainable.</p>
+<p>Import and export both run in the background; a model with its images can be
+large.</p>
+<h2 id="community">Community<a class="headerlink" href="#community" title="Permanent link">&para;</a></h2>
+<p>Published models, shared by other users. Signing in is the only thing in the
+app that needs an account — everything else works signed out.</p>
+<p>The table lists each model with its cartridge, version, what the archive
+includes (model, images, or both), headstamp and image counts, size, publish
+date, author, and its <strong>State</strong> against your library: Available, Update
+available, or Installed.</p>
+<p>Select a row and the two buttons under the table follow its state. The
+right-hand one is the primary, and it says what the state makes possible:</p>
+<table>
+<thead>
+<tr>
+<th>Button</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Download model</strong></td>
+<td>Download and install it, after a notice that a model file can execute code — download only from authors you trust.</td>
+</tr>
+<tr>
+<td><strong>Update model</strong></td>
+<td>Update your installed copy in place, or take this version as a separate copy; it asks which.</td>
+</tr>
+<tr>
+<td><strong>Already installed</strong></td>
+<td>Nothing to do — this version is the one you have.</td>
+</tr>
+<tr>
+<td><strong>Remove</strong></td>
+<td>On the far left, and live only for an installed, current model: delete your local copy. The catalogue entry stays, and the primary goes back to <strong>Download model</strong>.</td>
+</tr>
+</tbody>
+</table>
+<p>Select a second model and press Download while one is still running and it
+queues behind the first, with the status showing "(2 of 3)" as it works
+through them. Selecting a queued model shows where it sits in the queue, and
+the one being fetched reads <strong>Downloading…</strong>.</p>
+<p>A model you install this way is <strong>managed by its publisher</strong>: it can't be
+trained here, and updates from them install over it cleanly. The Sort screen
+tells you when a newer version exists — see <a href="#community-model-notices">community model
+notices</a>.</p>
+<p><strong>Share a model…</strong> publishes one of your own models to the community. It
+appears only for accounts the server grants the contributor role. Sharing does
+not make the model foreign: your copy stays yours and stays trainable.</p>
+<h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
+<p>The Settings activity groups everything you configure once and rarely touch
+again, behind a section list. Most settings here save as you change them,
+with no separate Save step. The exception is the <a href="#camera">Camera</a> page,
+where the device and resolution are committed by <strong>Apply</strong>.</p>
+<h3 id="camera">Camera<a class="headerlink" href="#camera" title="Permanent link">&para;</a></h3>
+<p>Picks which camera the Sort dashboard's preview and the classifier both read
+from.</p>
+<ul>
+<li><strong>Detect / refresh</strong> probes attached cameras (opening each one briefly to
+  read its supported resolutions) and fills the <strong>Camera</strong> and
+  <strong>Resolution</strong> dropdowns.</li>
+<li><strong>Apply</strong> swaps the live camera to the selected device and resolution —
+  the preview beneath updates immediately, so a bad pick is obvious before
+  you leave the page.</li>
+</ul>
+<p>Nothing here grabs a camera on its own; both actions are yours. The current
+device and resolution are shown beneath the controls.</p>
+<h3 id="serial">Serial<a class="headerlink" href="#serial" title="Permanent link">&para;</a></h3>
+<p>Connects the app to the sorting machine over the board's UART protocol.</p>
+<ul>
+<li><strong>Port</strong> — pick a detected serial port, or <strong>Emulated</strong> to run against the
+  built-in board emulator with no hardware attached.</li>
+<li><strong>Baud</strong> and <strong>probe timeout</strong> — connection parameters; the defaults match
+  the firmware. The baud picker is shared with the <a href="#serial-monitor">Serial
+  Monitor</a>'s.</li>
+<li><strong>Connect</strong> / <strong>Disconnect</strong> open or close the link; the status bar's
+  serial indicator mirrors the result.</li>
+<li><strong>Refresh ports</strong> re-scans, for a board plugged in after the app started.</li>
+<li><strong>Open serial monitor ↗</strong> reveals the <a href="#serial-monitor">Serial Monitor</a>
+  panel.</li>
+<li><strong>Initialize these settings on startup</strong> pushes the board init settings
+  below automatically on every connect, instead of only when you press "Push
+  to board".</li>
+</ul>
+<p><strong>Board init settings</strong> covers the machine's tunables — feed and sort speed,
+homing offsets, motor current, debounce timing and the camera LED level —
+with <strong>Get config from board</strong> / <strong>Push to board</strong> to read or write them.
+The <strong>Sort arm</strong> group jogs the arm to a slot or homes it, for testing
+wiring before a real run. <strong>Airdrop configuration</strong> holds the three timing
+values (pre-drop delay, signal duration, post-drop delay), plus the switch
+that turns it on, for boards fitted with an airdrop mechanism.</p>
+<h3 id="image-processing">Image Processing<a class="headerlink" href="#image-processing" title="Permanent link">&para;</a></h3>
+<p>Tunes how a captured frame becomes the 480×480 headstamp image the
+classifier sees. <strong>Capture</strong> takes a frame and shows it beside the processed
+result, and every detection or primer change re-processes that same frame — so
+you tune against one case instead of re-feeding for every adjustment.</p>
+<p><strong>These settings belong to the active model</strong>, not to the app: case diameter
+and primer size are properties of the cartridge, so switching models brings
+its own values back. A model that has never been tuned inherits whatever is
+currently set, so nothing is lost when you activate one for the first time.</p>
+<ul>
+<li><strong>Configuration</strong> — the circle-detection parameters: accumulator scale,
+  minimum separation between centres, edge strength, detection threshold,
+  and the minimum and maximum case radius in pixels. Start with the two
+  radius values: they bracket the size of the case in the frame.</li>
+<li><strong>Primer mask</strong> — leave the primer alone, keep only the primer area, or
+  hide it, plus the primer radius. Hiding the primer helps when primer
+  markings confuse the classifier.</li>
+<li><strong>Camera LED brightness</strong> — the board's ring-light level. This one <em>is</em>
+  global: it is a property of the machine, not of the model. The board is
+  updated shortly after you stop moving the slider.</li>
+</ul>
+<h3 id="theme">Theme<a class="headerlink" href="#theme" title="Permanent link">&para;</a></h3>
+<p>Picks the colour theme. The same list is in the <a href="#themes-panel">Themes
+panel</a>, which is the easier place to try several.</p>
+<p><strong>Edit theme…</strong> opens the theme editor: it starts from the theme you are
+currently using and gives you a colour picker per role with a live preview.
+<strong>Save &amp; apply</strong> writes back to a theme you made (renaming it moves it rather
+than copying), makes a new one when you started from a built-in, and leaves
+the editor open so you can keep adjusting — <strong>Close</strong> ends the session;
+<strong>Create new…</strong> saves under a name you pick, and a built-in is never
+overwritten either way. A theme can also be exported to a file and imported
+on another machine.</p>
+<h2 id="getting-help">Getting help<a class="headerlink" href="#getting-help" title="Permanent link">&para;</a></h2>
+<h3 id="the-guide">The guide<a class="headerlink" href="#the-guide" title="Permanent link">&para;</a></h3>
+<p><code>F1</code>, or <strong>Help → User Guide</strong>, opens this guide in a panel at the section
+for the screen you are on. It is a normal <a href="#panels">panel</a>: dock it beside
+your work while learning something, close it after.</p>
+<h3 id="support-package">Support package<a class="headerlink" href="#support-package" title="Permanent link">&para;</a></h3>
+<p><strong>Help → Export support package…</strong> collects your current configuration into
+a plain-text report — the app version and platform, the active model, run
+options, training configuration, image processing, serial and camera
+settings, and the AI Config setup.</p>
+<p><strong>Copy to clipboard</strong> gives you the text to paste on the community Discord
+when asking for help. <strong>Save package…</strong> writes a ZIP holding the same report
+plus a machine-readable <code>config.json</code>.</p>
+<p>It is safe to share: the API key is reported only as "set" or "not set",
+nothing is read from the sign-in cache, and file paths are shown relative to
+the data folder, so your home directory never appears.</p>
+<h3 id="updates">Updates<a class="headerlink" href="#updates" title="Permanent link">&para;</a></h3>
+<p>The app checks for a new release shortly after it starts and, if there is
+one, offers it in the status bar. <strong>Help → Check for updates…</strong> asks
+immediately.</p>
+<p>The dialog shows the release notes and a <strong>Download &amp; install</strong> button.
+Downloading only stages the update — nothing is replaced until you restart,
+and the button becomes <strong>Restart now</strong> when it is ready. <strong>Choose a
+different version…</strong> lists every published release, including older ones,
+and optionally pre-releases (which the automatic check never offers). You
+can turn the automatic check off in the same dialog.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      GPL-3.0-or-later
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/sjseth/AI-Case-Sorter-Py" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.top", "navigation.tracking", "content.action.edit", "toc.follow", "search.suggest"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
