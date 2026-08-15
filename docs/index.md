@@ -1,9 +1,15 @@
-# AI Case Sorter
+# AI Case Sorter — Application Guide
 
-Desktop app for Windows and Linux that sorts spent brass cartridge casings by
-**headstamp**. A camera photographs each case, an image classifier predicts the
-headstamp, and a serial-connected sorting machine drops the case into the right
-bin.
+Documentation for the **desktop application** that drives the sorter. The
+machine itself is a separate project with its own build documentation; this is
+the software that runs it.
+
+It sorts spent brass cartridge casings by **headstamp**: a camera photographs
+each case, an image classifier predicts the headstamp, and the
+serial-connected sorting machine drops the case into the right bin.
+
+![The Sort dashboard: the last captured headstamp on the left, a card per slot
+on the right, and the run controls along the foot](images/ui-sort-dashboard.png)
 
 Two ways to classify:
 
@@ -15,6 +21,13 @@ Community features (model sharing, downloads, the feedback loop) are the only
 part that needs an account. Everything else runs signed out.
 
 ## Start here
+
+1. [**Download and Install**](install.md) — Windows installer, or from source
+   on Linux and macOS.
+2. [**Getting Started**](getting-started.md) — from a fresh install to your
+   first sorted case.
+3. [**Troubleshooting**](troubleshooting.md) — when the camera is black, the
+   board isn't found, or everything lands in the Catch-All.
 
 The [**User Guide**](guide/GUIDE.md) covers every screen, in the order you meet
 them. It is also the guide the app itself shows on `F1`.
