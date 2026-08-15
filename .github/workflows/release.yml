@@ -491,12 +491,23 @@ jobs:
   #
   # Runs after promote and independently of the PyPI jobs: a docs failure must
   # not hold up (or be held up by) publishing.
+  #
+  # This block has to mirror docs.yml's `deploy` job permissions exactly, not
+  # just cover what this workflow needs: a called workflow's token is capped at
+  # what the calling job grants, and requesting more is a *parse* error -- the
+  # whole of release.yml is rejected as an invalid workflow file, before any
+  # job runs, with "the nested job 'deploy' is requesting 'pages: write', but
+  # is only allowed 'pages: none'". actionlint does not catch it;
+  # tests/unit/test_workflow_permissions.py does. `contents: write` is mike
+  # pushing to gh-pages, `pages: write` the one-time Pages enablement call at
+  # the end of that job.
   docs:
     name: publish the documentation site
     needs: [prepare, promote]
     uses: ./.github/workflows/docs.yml
     permissions:
       contents: write
+      pages: write
     with:
       version: ${{ needs.prepare.outputs.version }}
 

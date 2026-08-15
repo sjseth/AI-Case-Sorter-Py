@@ -56,6 +56,12 @@ jobs:
       # gh-pages is an ordinary branch; mike commits and pushes to it. This
       # does not use the Pages deployment API -- `pages: write` is only for
       # the one-time enablement call below.
+      #
+      # release.yml calls this workflow, and a caller's job permissions cap
+      # what the called job may request -- asking for more is a parse error
+      # that invalidates *release.yml*, not this file, and actionlint does not
+      # flag it. Anything added here has to be added to release.yml's `docs`
+      # job in the same change.
       contents: write
       pages: write
     steps:

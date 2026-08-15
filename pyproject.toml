@@ -187,6 +187,12 @@ dev = [
     "pytest-cov==7.1.0",
     "ruff==0.16.2",
     "ty==0.0.70",
+    # Only tests/unit/test_workflow_permissions.py uses this, and only to read
+    # .github/workflows/*.yml. It earns its place because the thing it checks
+    # is a *parse* error GitHub raises when a release is dispatched -- there is
+    # no earlier signal, actionlint does not flag it, and the alternative is
+    # learning about it from a failed release.
+    "pyyaml==6.0.3",
 ]
 # The published documentation site (mkdocs.yml, docs/). Its own group, not
 # `dev`: nothing in the test loop needs it, and mkdocs-material pulls a dozen

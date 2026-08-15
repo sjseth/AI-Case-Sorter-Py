@@ -104,7 +104,9 @@ automatically):**
 subdirectories below it). `tests/unit/` mirrors `src/sorter/`'s subpackages
 one-for-one (`tests/unit/hardware/`, `tests/unit/data/`, …), plus a handful of
 modules that test something at the package's own top level (`test_paths.py`,
-`test_bootstrap.py`, `test_version.py`, `test_installer_scripts.py`) and stay
+`test_bootstrap.py`, `test_version.py`) or outside it entirely — the shipped
+scripts and CI plumbing (`test_installer_scripts.py`,
+`test_next_prerelease.py`, `test_workflow_permissions.py`) — and stay
 directly under `tests/unit/`. Everything in `tests/unit/` uses synthetic
 fixtures only; `tests/integration/` stays flat — the files that exercise a
 real external tool or service (`uv build`, `git-cliff`, the PyTorch wheel

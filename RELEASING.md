@@ -112,6 +112,12 @@ stay reachable forever at their own URL.
 - **It publishes itself.** `docs.yml` is called by `release.yml` right after the promote step,
   building from the release's *tag* -- not from the branch the release was dispatched from, so
   the docs at version N are the docs that shipped in N.
+  Because it is *called*, its `deploy` job's `permissions:` block and the one on `release.yml`'s
+  `docs` job have to agree: a called job may not request more than the caller grants it, and
+  asking for more makes GitHub reject **release.yml** as an invalid workflow file before any job
+  runs -- so a mismatch surfaces as a release that will not start, naming the wrong file.
+  actionlint does not check across the call; `tests/unit/test_workflow_permissions.py` does, for
+  every `uses: ./.github/workflows/...` in the tree.
 - **A release candidate does not move `latest`.** Candidates share one rolling
   **prerelease** entry in the dropdown (URL `/prerelease/`, title showing the actual tag) --
   always the newest candidate's docs, never an accumulating rc1/rc2/... list -- and the slot is
