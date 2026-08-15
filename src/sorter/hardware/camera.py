@@ -1,6 +1,7 @@
 """Cross-platform camera capture via OpenCV.
 
-Uses CAP_DSHOW on Windows and CAP_V4L2 on Linux to avoid backend hangs.
+Uses CAP_DSHOW on Windows, CAP_V4L2 on Linux and CAP_AVFOUNDATION on macOS
+to avoid backend hangs.
 A single grab thread keeps the latest frame in a slot; UI tabs poll it.
 
 Includes a metadata probe (list_cameras_with_metadata) that returns each
@@ -64,6 +65,8 @@ def _preferred_backend() -> int:
         return cv2.CAP_DSHOW
     if sys.platform.startswith("linux"):
         return cv2.CAP_V4L2
+    if sys.platform == "darwin":
+        return cv2.CAP_AVFOUNDATION
     return cv2.CAP_ANY
 
 

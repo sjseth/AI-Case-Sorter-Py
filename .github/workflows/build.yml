@@ -22,7 +22,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # macos-latest runs on Apple Silicon: it turns "probably works on
+        # macOS" into a fact (#36). It covers the CPU inference path only —
+        # Actions offers no MPS guarantee worth relying on.
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.12", "3.13", "3.14"]
     env:
       # Qt's own offscreen platform plugin: no display server, no xvfb, on

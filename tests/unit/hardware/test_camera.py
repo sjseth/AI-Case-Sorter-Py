@@ -30,6 +30,27 @@ linux_only = pytest.mark.skipif(
 )
 
 
+@pytest.mark.parametrize(
+    ("platform", "backend_name"),
+    [
+        ("win32", "CAP_DSHOW"),
+        ("linux", "CAP_V4L2"),
+        ("darwin", "CAP_AVFOUNDATION"),
+    ],
+)
+def test_each_platform_gets_its_explicit_backend(
+    monkeypatch: pytest.MonkeyPatch, platform: str, backend_name: str
+) -> None:
+    """CAP_ANY autoprobing is what the explicit backends exist to avoid (#36)."""
+    monkeypatch.setattr(camera.sys, "platform", platform)
+    assert camera._preferred_backend() == getattr(camera.cv2, backend_name)
+
+
+def test_an_unknown_platform_falls_back_to_cap_any(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(camera.sys, "platform", "sunos5")
+    assert camera._preferred_backend() == camera.cv2.CAP_ANY
+
+
 def _fake_v4l2(
     monkeypatch: pytest.MonkeyPatch,
     *,

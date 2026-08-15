@@ -4,7 +4,7 @@
 [![Lint](https://github.com/sjseth/AI-Case-Sorter-Py/actions/workflows/lint.yml/badge.svg)](https://github.com/sjseth/AI-Case-Sorter-Py/actions/workflows/lint.yml)
 [![License: GPL v3+](https://img.shields.io/badge/License-GPLv3%2B-blue.svg)](LICENSE)
 
-A cross-platform (Windows + Linux) desktop app that drives a machine which
+A cross-platform (Windows + Linux + macOS) desktop app that drives a machine which
 **sorts spent brass cartridge casings by headstamp**. A camera photographs each
 case, an image classifier predicts the headstamp stamped on its base, and a
 serial-connected sorting machine drops the case into the correct bin.
