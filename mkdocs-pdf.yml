@@ -22,6 +22,12 @@ plugins:
   # installs it; that is why this config is CI's, not the default.
   - with-pdf:
       output_path: pdf/ai-case-sorter-docs.pdf
-      cover_title: AI Case Sorter
-      cover_subtitle: Operator documentation
+      cover_title: AI Case Sorter — Application Guide
+      # Says "application" twice on purpose: the machine has its own build
+      # documentation upstream, and a cover reading "AI Case Sorter" alone was
+      # being taken for it.
+      cover_subtitle: Installing, setting up and running the desktop application (not the sorter hardware)
+      # Without this the cover prints a literal "None" where the author goes:
+      # the template falls back to `site_author`, which mkdocs.yml doesn't set.
+      author: AI Case Sorter contributors
       toc_level: 2
