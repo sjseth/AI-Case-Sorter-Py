@@ -97,3 +97,17 @@ def test_the_group_splitter_handle_drops_to_the_group_frames() -> None:
 
     assert f"margin-top: {GROUPBOX_TOP_MARGIN}px" in block(qss, "QGroupBox")
     assert f"margin-top: {GROUPBOX_TOP_MARGIN}px" in block(qss, "QSplitter#groupSplitter::handle:horizontal")
+
+
+@pytest.mark.parametrize("name", list(BUILTIN_THEMES))
+def test_disabled_role_buttons_drop_their_hue(name: str) -> None:
+    """A disabled Disconnect stayed fully red next to an enabled plain-gray
+    button, so the row read backwards — red looked live, gray looked dead."""
+    palette = BUILTIN_THEMES[name]
+    qss = build_stylesheet(palette)
+    rule_start = qss.index("QPushButton#action:disabled, QPushButton#update:disabled, QPushButton#danger:disabled")
+    rule = qss[rule_start : qss.index("}", rule_start)]
+    assert palette["text_muted"] in rule
+    assert "background-color: transparent" in rule
+    for hue in (palette["action"], palette["danger"], palette["update"]):
+        assert hue not in rule

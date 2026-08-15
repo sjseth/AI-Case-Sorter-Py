@@ -437,7 +437,11 @@ QPushButton {{
     padding: 5px 14px;
 }}
 QPushButton:hover {{ background-color: {c["bg_card_hover"]}; }}
-QPushButton:disabled {{ color: {c["text_muted"]}; }}
+QPushButton:disabled {{
+    color: {c["text_muted"]};
+    background-color: transparent;
+    border-color: {c["border"]};
+}}
 
 QPushButton#action {{
     background-color: {c["action"]};
@@ -479,6 +483,15 @@ QPushButton#danger:hover {{
 QPushButton#danger:pressed {{
     background-color: {c["danger_press"]};
     border-color: {c["danger_press"]};
+}}
+/* Disabled role buttons drop their hue entirely. Without this, a disabled
+   Disconnect stays fully red next to an *enabled* plain-gray "Refresh ports",
+   and the row reads exactly backwards — red looks live, gray looks dead
+   (misread as such on the rig during #36's macOS verification). */
+QPushButton#action:disabled, QPushButton#update:disabled, QPushButton#danger:disabled {{
+    color: {c["text_muted"]};
+    background-color: transparent;
+    border-color: {c["border"]};
 }}
 
 QComboBox, QLineEdit {{

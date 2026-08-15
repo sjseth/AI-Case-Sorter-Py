@@ -167,7 +167,10 @@ class SerialSection(QWidget):
         """
         selected = self.port_combo.currentText() or (self._win.config.serial.get("port") or "").strip()
         detected = serial_broker.list_serial_ports()
-        likely = [p for p in detected if "USB" in p or "ACM" in p or "COM" in p.upper()]
+        # Case-insensitive: macOS adapters are lowercase (/dev/cu.usbmodem…).
+        # COM is a prefix, not a substring — "cu.Bluetooth-Incoming-Port"
+        # contains it and is exactly the kind of port this ordering demotes.
+        likely = [p for p in detected if "USB" in p.upper() or "ACM" in p.upper() or p.upper().startswith("COM")]
         ports = [EMULATED_PORT, *likely, *(p for p in detected if p not in likely)]
         self.port_combo.clear()
         self.port_combo.addItems(ports)
