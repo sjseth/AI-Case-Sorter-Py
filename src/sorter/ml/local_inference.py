@@ -578,6 +578,53 @@ def current_device_label() -> str:
     return _device_cache.type if _device_cache is not None else "n/a"
 
 
+# Cached sysctl result for device_description(); the chip name can't change
+# while the process runs.
+_apple_chip: str | None = None
+
+
+def _apple_chip_name() -> str:
+    """The chip's marketing name ("Apple M4 Pro") — torch has no MPS name API."""
+    global _apple_chip
+    if _apple_chip is None:
+        import subprocess
+
+        try:
+            out = subprocess.run(
+                ["sysctl", "-n", "machdep.cpu.brand_string"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=True,
+            ).stdout.strip()
+        except Exception:
+            out = ""
+        _apple_chip = out or "Apple GPU"
+    return _apple_chip
+
+
+def device_description() -> str | None:
+    """Human-readable "where classify() runs", e.g. "CUDA · NVIDIA GeForce RTX 5060 Ti".
+
+    Reads only the already-picked module state — never imports torch and
+    never triggers the device probe or its benchmarks — so it is free and
+    safe to call on the UI thread (same constraint as `is_installed()`).
+    Returns None until the first classify() has picked a device.
+    """
+    device = _device_cache
+    if device is None:
+        return None
+    kind = getattr(device, "type", "cpu")
+    if kind == "cuda":
+        try:
+            return f"CUDA · {_torch_mod.cuda.get_device_name(0)}"
+        except Exception:
+            return "CUDA"
+    if kind == "mps":
+        return f"MPS · {_apple_chip_name()}"
+    return "CPU"
+
+
 def is_installed() -> bool:
     """Is torch present, *without* importing it?
 

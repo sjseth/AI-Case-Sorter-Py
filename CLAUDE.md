@@ -306,6 +306,10 @@ between them from the Sort page's template dropdown.
   (feed one), `xf:<slot>` (force feed + sort), bare `<slot>` (sort imaged case),
   `sortto:<slot>` (move arm), `getconfig` (JSON board state), `version`, `stop`,
   `<key>:<value>` (set board param). `try_open()` does a version handshake.
+  `is_probe_candidate` gates the startup auto-connect walk on macOS only:
+  Bluetooth/debug pseudo-ports are skipped (probing one wastes a handshake
+  timeout and can wake a paired headset); Settings → Serial still lists
+  everything, and a saved port is always probed.
   Responses are matched as **anchored tokens** — the line, stripped and
   lowercased, equals `ok`/`done`/`error`/`waiting` or begins with it followed
   by a non-alphanumeric delimiter — so `error: broken sensor` routes as the
@@ -365,7 +369,9 @@ between them from the Sort page's template dropdown.
   "can this model actually classify?" before starting a run — keep them in
   lock-step with `classify_active` or the install gate (§5) drifts from reality.
 - **`local_inference.py`** — lazy-imports torch; picks the device once
-  (CUDA → MPS on Apple Silicon → CPU, each GPU probed before commit); caches
+  (CUDA → MPS on Apple Silicon → CPU, each GPU probed before commit;
+  `device_description()` is the status bar's read-only view of the pick —
+  it never imports torch, so it is UI-thread-safe like `is_installed()`); caches
   loaded models by `(path, mtime)`; runs all inference through a single-threaded
   executor to keep cuDNN state warm. Detects the checkpoint's classifier layout
   and rebuilds the ConvNeXt head. Loads checkpoints with
@@ -514,7 +520,10 @@ hook), then the mode pair (`MODE_ACTIVITIES`: Train, AI Config); Settings
 stays pinned below the stretch — driving a `QStackedWidget` of pages, plus
 four **docks** — serial monitor (bottom), classification history, the user
 guide and the theme picker (right, all three closed until asked for) — a
-status bar (camera/serial indicators, update affordance, identity + sign-in)
+status bar (camera/serial indicators, an inference-device indicator —
+`refresh_device_indicator`, fed by `local_inference.device_description()`,
+warmed off-thread at startup by `_warm_device_indicator` and hidden in AI
+Config mode — update affordance, identity + sign-in)
 and File/View/Help menus. It owns the `EventBus`, `Camera`, `SerialBroker`,
 `RunController` and `AuthManager`, auto-connects serial/camera on startup, and
 runs the bus drain loop. `run_worker(fn, on_done, on_error)` is the standard

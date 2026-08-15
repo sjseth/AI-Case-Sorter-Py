@@ -78,7 +78,7 @@ from ..control.run_controller import RunController
 from ..hardware import serial_broker
 from ..hardware.camera import Camera
 from ..hardware.serial_emulator import EMULATED_PORT, EmulatorBroker
-from ..ml import classifier
+from ..ml import classifier, local_inference
 from ..paths import app_data_dir
 from .ai_page import build_ai_page
 from .community_page import build_community_page
@@ -363,6 +363,10 @@ class QtMainWindow(QMainWindow):
         self.bus.subscribe("test/status", self.set_status)
         self.bus.subscribe("run/error", lambda msg: self.set_status(f"Run error: {msg}"))
         self.bus.subscribe("run/result", self._on_run_result)
+        # Both fire right after classify_active — the moment the inference
+        # device is guaranteed to have been picked.
+        self.bus.subscribe("run/classified", lambda _p: self.refresh_device_indicator())
+        self.bus.subscribe("test/classified", lambda _p: self.refresh_device_indicator())
         self.bus.subscribe("run/history", self._on_run_history)
         self.bus.subscribe("run/assignment_changed", lambda _p: self._refresh_sort_grid())
         self.bus.subscribe("run/package_full", self._on_package_full)
@@ -395,6 +399,7 @@ class QtMainWindow(QMainWindow):
             self._fetch_community_settings()
             self.start_camera()
             self._auto_connect_serial()
+            self._warm_device_indicator()
             QTimer.singleShot(2500, self, self._startup_update_check)
         self._apply_auth_visibility()
 
@@ -449,6 +454,12 @@ class QtMainWindow(QMainWindow):
         self._build_themes_dock()
         self._build_menus()
 
+        # Where local classification runs (e.g. "Inference: MPS · Apple M4").
+        # Hidden until the first classify() has picked a device; absent in AI
+        # Config mode, where classification is an HTTP call.
+        self.device_label = self._muted_label("", self)
+        self.device_label.hide()
+        self.statusBar().addPermanentWidget(self.device_label)
         self.camera_label = QLabel(self)
         self.serial_label = QLabel(self)
         # Added left to right, so serial ends up rightmost.
@@ -1675,6 +1686,8 @@ class QtMainWindow(QMainWindow):
         self.train_page.refresh()
         # The library's active marker is the mode, spelled out per row.
         self.models_page.refresh()
+        # AI Config mode has no local device; a model switch re-evaluates it.
+        self.refresh_device_indicator()
 
     # ----- theme --------------------------------------------------------------
 
@@ -1810,6 +1823,46 @@ class QtMainWindow(QMainWindow):
         self._paint_indicators()
         self.bus.post("serial/state", {"connected": connected, "message": message})
 
+    def refresh_device_indicator(self) -> None:
+        """Show where local classification runs, once that is known.
+
+        Reads only the device `local_inference` has already picked — never
+        imports torch, never triggers the probe or its benchmarks — so it is
+        free and safe on the UI thread. Hidden until the first classify(),
+        and in AI Config mode, where classification is an HTTP call and no
+        local device is involved.
+        """
+        text: str | None = None
+        if self.db is not None and classifier.uses_local_inference(self.db):
+            text = local_inference.device_description()
+        if text:
+            self.device_label.setText(f"Inference: {text}")
+            self.device_label.show()
+        else:
+            self.device_label.hide()
+
+    def _warm_device_indicator(self) -> None:
+        """Pick the inference device ahead of the first classify, off-thread.
+
+        The status bar should say where classification will run without the
+        user having to feed a case first. Guarded so an AI Config user never
+        pays a torch import (the gate rule, §5): only when a local model is
+        active and torch is already installed. `is_available()` imports torch
+        and runs the device probe on the worker — the same work the first
+        classify would have paid — and the on_done just repaints the label.
+        Startup-only (behind ``auto_connect``): a model activated later gets
+        its indicator from the first classification instead.
+        """
+        if self.db is None or not classifier.uses_local_inference(self.db):
+            return
+        if not local_inference.is_installed() or local_inference.device_description():
+            return
+        self.run_worker(
+            local_inference.is_available,
+            on_done=lambda _ok: self.refresh_device_indicator(),
+            on_error=lambda _exc: None,
+        )
+
     # ----- camera -------------------------------------------------------------
 
     def start_camera(self) -> None:
@@ -1874,11 +1927,19 @@ class QtMainWindow(QMainWindow):
 
         available = serial_broker.list_serial_ports()
         candidates: list[str] = []
+        # The saved port is always probed, even if the filter below would
+        # skip it — the user chose it once, so it is not a guess.
         if saved_port and saved_port in available:
             candidates.append(saved_port)
         for port in available:
-            if port not in candidates:
+            if port not in candidates and serial_broker.is_probe_candidate(port):
                 candidates.append(port)
+        skipped = [p for p in available if p not in candidates]
+        if skipped:
+            self.bus.post(
+                "serial/note",
+                "skipping (Bluetooth/pseudo, connect manually from Settings → Serial): " + ", ".join(skipped),
+            )
 
         if not candidates:
             self.set_status("No serial ports detected.")

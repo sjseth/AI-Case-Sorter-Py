@@ -604,6 +604,8 @@ class TrainPage(QWidget):
             return
         device = data.get("predict_device")
         self.predict_label.setText(f"{predict_ms:.0f} ms" + (f" · {device}" if device else ""))
+        # A prediction just ran locally, so the device is now known.
+        self._win.refresh_device_indicator()
         breakdown = data.get("predict_breakdown") or {}
         self.breakdown_label.setText("  ".join(f"{k}:{v:.0f}" for k, v in breakdown.items()) if breakdown else NO_VALUE)
 

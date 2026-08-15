@@ -96,3 +96,40 @@ def test_the_pick_is_cached_for_classify() -> None:
     """classify() reads `_device_cache` directly; the pick must land there."""
     local_inference._pick_device(_fake_torch(mps_available=True))
     assert local_inference._device_cache.type == "mps"
+
+
+# ----- device_description (the status-bar indicator's data source) -------------
+
+
+def test_no_pick_yet_means_no_description() -> None:
+    assert local_inference.device_description() is None
+
+
+def test_cpu_description(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(local_inference, "_device_cache", SimpleNamespace(type="cpu"))
+    assert local_inference.device_description() == "CPU"
+
+
+def test_mps_description_names_the_chip(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(local_inference, "_device_cache", SimpleNamespace(type="mps"))
+    monkeypatch.setattr(local_inference, "_apple_chip_name", lambda: "Apple M4 Pro")
+    assert local_inference.device_description() == "MPS · Apple M4 Pro"
+
+
+def test_cuda_description_names_the_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(local_inference, "_device_cache", SimpleNamespace(type="cuda"))
+    monkeypatch.setattr(local_inference, "_torch_mod", _fake_torch(cuda_available=True))
+    assert local_inference.device_description() == "CUDA · Fake GPU"
+
+
+def test_cuda_description_survives_a_nameless_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A get_device_name failure degrades to the bare kind, never raises."""
+
+    def boom(_i: int) -> str:
+        raise RuntimeError("no device 0")
+
+    fake = _fake_torch(cuda_available=True)
+    fake.cuda.get_device_name = boom
+    monkeypatch.setattr(local_inference, "_device_cache", SimpleNamespace(type="cuda"))
+    monkeypatch.setattr(local_inference, "_torch_mod", fake)
+    assert local_inference.device_description() == "CUDA"

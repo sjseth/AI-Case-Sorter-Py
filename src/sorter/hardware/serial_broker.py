@@ -12,6 +12,7 @@ EventBus and drain it on the UI thread.
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
 from collections.abc import Callable, Iterable
@@ -50,6 +51,26 @@ def _matches_token(line: str, token: str) -> bool:
 
 def list_serial_ports() -> list[str]:
     return [p.device for p in list_ports.comports()]
+
+
+def is_probe_candidate(device: str) -> bool:
+    """Whether the startup auto-connect should handshake this port unprompted.
+
+    Only restrictive on macOS, where `comports()` returns pseudo-ports that
+    can never be the board — `cu.Bluetooth-Incoming-Port`, `cu.debug-console`,
+    and a `cu.<name>` node per paired Bluetooth headset. Probing those is
+    worse than noise: each one waits out the handshake timeout, and opening a
+    Bluetooth serial port can wake the radio link to the paired device. A
+    real board arrives via a USB serial adapter, and every macOS driver for
+    those puts "usb" in the node name (`cu.usbmodem*`, `cu.usbserial-*`,
+    `cu.wchusbserial*`, `cu.SLAB_USBtoUART`).
+
+    This gates only the *automatic* walk: Settings → Serial still lists every
+    port for manual connection, and a port the user saved is always probed.
+    """
+    if sys.platform != "darwin":
+        return True
+    return "usb" in device.lower()
 
 
 class SerialBroker:

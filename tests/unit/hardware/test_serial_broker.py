@@ -703,3 +703,44 @@ def test_send_command_still_owns_its_newline(broker: SerialBroker, monkeypatch: 
     monkeypatch.setattr(broker, "_sp", fake)
     broker.send_command("xf:0")
     assert fake.written == [b"xf:0\n"]
+
+
+# ----- auto-connect probe candidates (#36 follow-up) ----------------------------
+#
+# macOS lists pseudo-ports (Bluetooth headsets, the debug console) that can
+# never be the board; probing them wastes a handshake timeout each and can
+# wake the Bluetooth link to a paired device. Everywhere else, everything is
+# a candidate.
+
+
+@pytest.mark.parametrize(
+    "port",
+    [
+        "/dev/cu.usbmodem14201",
+        "/dev/cu.usbserial-0001",
+        "/dev/cu.wchusbserial310",
+        "/dev/cu.SLAB_USBtoUART",
+    ],
+)
+def test_darwin_probes_usb_serial_adapters(monkeypatch: pytest.MonkeyPatch, port: str) -> None:
+    monkeypatch.setattr(serial_broker.sys, "platform", "darwin")
+    assert serial_broker.is_probe_candidate(port) is True
+
+
+@pytest.mark.parametrize(
+    "port",
+    [
+        "/dev/cu.Bluetooth-Incoming-Port",
+        "/dev/cu.debug-console",
+        "/dev/cu.JabraEliteActive75t",
+    ],
+)
+def test_darwin_skips_bluetooth_and_debug_pseudo_ports(monkeypatch: pytest.MonkeyPatch, port: str) -> None:
+    monkeypatch.setattr(serial_broker.sys, "platform", "darwin")
+    assert serial_broker.is_probe_candidate(port) is False
+
+
+@pytest.mark.parametrize("platform", ["linux", "win32"])
+def test_other_platforms_probe_everything(monkeypatch: pytest.MonkeyPatch, platform: str) -> None:
+    monkeypatch.setattr(serial_broker.sys, "platform", platform)
+    assert serial_broker.is_probe_candidate("/dev/cu.Bluetooth-Incoming-Port") is True
