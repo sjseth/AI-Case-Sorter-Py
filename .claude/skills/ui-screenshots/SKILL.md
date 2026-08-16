@@ -1,6 +1,6 @@
 ---
 name: ui-screenshots
-description: Capture before/after screenshots of the Tkinter app and attach them to a GitHub issue or PR. Use whenever a change touches src/sorter/ui/ — every UI issue and PR gets before/after images. Also use when asked to screenshot the app, illustrate a UI change, or attach an image to an issue or PR.
+description: Capture before/after screenshots of the PySide6 app and attach them to a GitHub issue or PR. Use whenever a change touches src/sorter/ui/ — every UI issue and PR gets before/after images. Also use when asked to screenshot the app, illustrate a UI change, or attach an image to an issue or PR.
 ---
 
 # Before/after screenshots for UI changes
@@ -61,36 +61,67 @@ release would offer itself to users as an installable version.
 
 ## Capturing
 
-Drive the real `MainWindow`; don't hand-build widgets, or the screenshot stops
-being evidence. Two things this app needs:
+Drive the real `QtMainWindow`; don't hand-build widgets, or the screenshot stops
+being evidence. It renders fully under `QT_QPA_PLATFORM=offscreen`, so there is
+no X display, no window id and no ImageMagick in this path.
 
 - **Point `CASESORTER_DATA_DIR` at a throwaway directory.** Otherwise you
   photograph your own models and headstamps and publish them.
-- **Stub `serial_broker.list_serial_ports` to `[]` before constructing
-  `MainWindow`.** It auto-connects on startup and will probe whatever is
-  plugged into the machine, burying the traffic you staged. (First attempt at
-  these shots came out reading "82 earlier lines" of this machine's real ports.)
-
-`MainWindow.run()` subscribes the `serial/*` topics to the log and then enters
-the mainloop, so a harness that can't call it has to repeat that wiring itself.
-
-Grab a whole toplevel by its X window id, and crop for anything smaller:
+- **Construct with `auto_connect=False`**, or the shell opens a camera and
+  probes whatever is plugged into this machine. (An early attempt published a
+  monitor reading "82 earlier lines" of real ports.)
 
 ```python
-subprocess.run(["import", "-window", hex(widget.winfo_toplevel().winfo_id()), out])
+import os, tempfile
+from pathlib import Path
+
+scratch = Path(tempfile.mkdtemp())
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+os.environ["CASESORTER_DATA_DIR"] = str(scratch / "data")
+
+from PySide6.QtWidgets import QApplication
+from sorter.data.config import Config
+from sorter.data.db import Database
+from sorter.ui.app import QtMainWindow
+
+app = QApplication.instance() or QApplication([])
+db = Database(scratch / "casesorter.db")
+db.ensure_initialized()
+win = QtMainWindow(Config(db).load(), auto_connect=False)
+win.resize(1280, 800)
+win.show()
+app.processEvents()
+win.grab().save("shot.png")
 ```
 
-Grabbing a child widget's own id fails for anything inside a `ScrollableFrame`
-— it isn't independently viewable — so capture the toplevel and crop to
-`winfo_rootx/rooty/width/height` with `convert -crop`. Scroll the widget into
-view first (`ScrollableFrame._canvas.yview_moveto(1.0)`).
+- **Any widget grabs on its own** — `win.statusBar().grab()`, a page, a dialog,
+  `win.serial_dock.widget().grab()`. No cropping, and none of the old
+  "not independently viewable" problem.
+- **Call `processEvents()` after anything you want in the frame.**
+- **Drop the serial dock with `win.serial_dock.toggleView(False)`** when a page
+  is the subject: it opens by default and takes the lower half. `hide()` is the
+  wrong call — it leaves the tab bar and the reserved space behind and the page
+  never expands. `CDockWidget` has no `closeDock()`.
+- **Stage serial traffic on the bus**, no hardware needed — the `serial/*`
+  topics are wired by `_attach_serial_listeners` when a broker attaches, but the
+  monitor renders whatever the bus carries:
+
+  ```python
+  win.bus.post("serial/tx", "version")
+  win.bus.post("serial/rx", "CS7.2 Firmware V1.7")
+  win.bus.drain()  # the drain QTimer isn't running without an event loop
+  app.processEvents()
+  ```
 
 For the "before" image, export the base commit rather than switching branches:
 
 ```bash
 git archive main --prefix=main-tree/ | tar -x -C <scratch>/
-PYTHONPATH=<scratch>/main-tree/src python capture.py <out> before
+PYTHONPATH=<scratch>/main-tree/src uv run --no-sync python capture.py <out> before
 ```
+
+`uv run --no-sync`, not a bare `python`: the capture needs PySide6 from the
+venv, and a bare `uv run` would sync and install the project (see CLAUDE.md §2).
 
 ## What makes a useful pair
 
