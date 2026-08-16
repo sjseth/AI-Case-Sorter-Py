@@ -14,7 +14,7 @@
       
       
       
-        <link rel="next" href="guide/GUIDE/">
+        <link rel="next" href="install/">
       
       
         
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#ai-case-sorter" class="md-skip">
+        <a href="#ai-case-sorter-application-guide" class="md-skip">
           Skip to content
         </a>
       
@@ -392,6 +392,60 @@
   
   
     <li class="md-nav__item">
+      <a href="install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Download and Install
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="guide/GUIDE/" class="md-nav__link">
         
   
@@ -419,14 +473,14 @@
   
   
     <li class="md-nav__item">
-      <a href="ui-modernization/" class="md-nav__link">
+      <a href="troubleshooting/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    UI Modernization
+    Troubleshooting
   
 
     
@@ -534,11 +588,15 @@
   
 
 
-<h1 id="ai-case-sorter">AI Case Sorter<a class="headerlink" href="#ai-case-sorter" title="Permanent link">&para;</a></h1>
-<p>Desktop app for Windows and Linux that sorts spent brass cartridge casings by
-<strong>headstamp</strong>. A camera photographs each case, an image classifier predicts the
-headstamp, and a serial-connected sorting machine drops the case into the right
-bin.</p>
+<h1 id="ai-case-sorter-application-guide">AI Case Sorter — Application Guide<a class="headerlink" href="#ai-case-sorter-application-guide" title="Permanent link">&para;</a></h1>
+<p>Documentation for the <strong>desktop application</strong> that drives the sorter. The
+machine itself is a separate project with its own build documentation; this is
+the software that runs it.</p>
+<p>It sorts spent brass cartridge casings by <strong>headstamp</strong>: a camera photographs
+each case, an image classifier predicts the headstamp, and the
+serial-connected sorting machine drops the case into the right bin.</p>
+<p><img alt="The Sort dashboard: the last captured headstamp on the left, a card per slot
+on the right, and the run controls along the foot" src="images/ui-sort-dashboard.png" /></p>
 <p>Two ways to classify:</p>
 <ul>
 <li><strong>Local model</strong> — a PyTorch ConvNeXt model you trained yourself, downloaded
@@ -548,6 +606,14 @@ bin.</p>
 <p>Community features (model sharing, downloads, the feedback loop) are the only
 part that needs an account. Everything else runs signed out.</p>
 <h2 id="start-here">Start here<a class="headerlink" href="#start-here" title="Permanent link">&para;</a></h2>
+<ol>
+<li><a href="install/"><strong>Download and Install</strong></a> — Windows installer, or from source
+   on Linux and macOS.</li>
+<li><a href="getting-started/"><strong>Getting Started</strong></a> — from a fresh install to your
+   first sorted case.</li>
+<li><a href="troubleshooting/"><strong>Troubleshooting</strong></a> — when the camera is black, the
+   board isn't found, or everything lands in the Catch-All.</li>
+</ol>
 <p>The <a href="guide/GUIDE/"><strong>User Guide</strong></a> covers every screen, in the order you meet
 them. It is also the guide the app itself shows on <code>F1</code>.</p>
 <ul>
@@ -575,7 +641,8 @@ you're reading.</p>
 <ul>
 <li><a href="https://github.com/sjseth/AI-Case-Sorter-Py">Source, issues and releases</a> on GitHub</li>
 <li><a href="https://github.com/sjseth/AI-Case-Sorter-Py/releases/latest">Download the latest release</a></li>
-<li><a href="ui-modernization/">UI Modernization</a> — the research and decisions behind the Qt client</li>
+<li><a href="https://github.com/sjseth/AI-Case-Sorter-Py/blob/main/docs/ui-modernization.md">UI Modernization</a>
+  — the research and decisions behind the Qt client (for contributors)</li>
 <li><a href="https://github.com/sjseth/AI-Case-Sorter-Py/blob/main/CONTRIBUTING.md">Contributing</a>
   and <a href="https://github.com/sjseth/AI-Case-Sorter-Py/blob/main/RELEASING.md">Releasing</a></li>
 </ul>
