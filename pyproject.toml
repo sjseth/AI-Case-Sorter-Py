@@ -37,7 +37,7 @@ dependencies = [
     "packaging==26.3",
     # Schema migrations: sorter/data/db.py runs its migration steps through
     # sqlite_utils.Migrations (tracking table `_sqlite_migrations`).
-    "sqlite-utils==4.1.1",
+    "sqlite-utils==4.2.1",
     # The UI toolkit. Essentials, not the PySide6 meta-package: the meta adds
     # pyside6-addons (~175 MB of WebEngine/3D/Charts/Multimedia) that nothing
     # uses. QtAds (LGPL-2.1+) is the dock system; it pins the same Essentials
