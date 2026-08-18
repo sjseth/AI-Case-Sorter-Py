@@ -32,12 +32,12 @@ dependencies = [
     "Pillow==12.3.0",
     "requests==2.34.2",
     "msal==1.37.0",
-    "platformdirs==4.11.2",
+    "platformdirs==4.11.3",
     # PEP 440 parsing/ordering for the updater's version comparison.
     "packaging==26.3",
     # Schema migrations: sorter/data/db.py runs its migration steps through
     # sqlite_utils.Migrations (tracking table `_sqlite_migrations`).
-    "sqlite-utils==4.1.1",
+    "sqlite-utils==4.2.1",
     # The UI toolkit. Essentials, not the PySide6 meta-package: the meta adds
     # pyside6-addons (~175 MB of WebEngine/3D/Charts/Multimedia) that nothing
     # uses. QtAds (LGPL-2.1+) is the dock system; it pins the same Essentials
@@ -185,7 +185,7 @@ dev = [
     # round-trips and real subprocesses whose failure mode is silence.
     "pytest-timeout==2.4.0",
     "pytest-cov==7.1.0",
-    "ruff==0.16.2",
+    "ruff==0.16.3",
     "ty==0.0.71",
     # Only tests/unit/test_workflow_permissions.py uses this, and only to read
     # .github/workflows/*.yml. It earns its place because the thing it checks

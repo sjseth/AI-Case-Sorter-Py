@@ -1,0 +1,104 @@
+name: Docs preview
+
+# The docs PDF for a PR, before it merges. docs.yml publishes the same PDF for
+# `dev` and for releases, but both are post-merge -- prose changes can't be
+# reviewed from a diff, and nothing rendered them while the PR was open.
+#
+# Only the PDF: lint.yml's `docs` job already runs `mkdocs build --strict` on
+# every PR, so the link/anchor gate exists and doesn't belong here twice.
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "mkdocs-pdf.yml"
+      - ".github/workflows/docs-preview.yml"
+
+# Superseded by the next push -- a PDF of an older commit has no reviewer.
+# Unlike docs.yml's group, which must never cancel: nothing here is deployed.
+concurrency:
+  group: docs-preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pdf:
+    name: render the docs PDF
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The comment below. A fork PR's token is read-only whatever this says,
+      # which is what the step's own guard is for.
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install the docs toolchain
+        run: uv sync --locked --only-group docs --no-install-project
+
+      # Kept in lock-step with docs.yml's step of the same name: WeasyPrint
+      # links against system pango, which the runner image doesn't guarantee.
+      - name: Install PDF system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
+
+      # Named for the commit so a reviewer can tell which push they downloaded.
+      - name: Render the PDF
+        id: render
+        env:
+          PR: ${{ github.event.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          uv run --no-sync mkdocs build -f mkdocs-pdf.yml
+          name="ai-case-sorter-docs-pr${PR}-$(echo "$SHA" | cut -c1-7).pdf"
+          mv site/pdf/ai-case-sorter-docs.pdf "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      # archive: false uploads the file raw instead of zipping it, so the
+      # download opens in a PDF viewer. It takes the artifact name from the
+      # filename and ignores `name`, and allows exactly one file.
+      - name: Upload the PDF
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: ${{ steps.render.outputs.name }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      # Upserted by marker so a PR carries one comment, not one per push.
+      # Skipped on fork PRs, where the token can't write -- the artifact is
+      # still on the run, reachable from the check.
+      - name: Link the PDF from the PR
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          marker='<!-- docs-pdf-preview -->'
+          body="$marker
+          **Docs PDF** for \`$(echo "$SHA" | cut -c1-7)\` — [download](${URL})
+
+          <sub>Rendered from this PR's docs. Kept up to date on each push; expires after 14 days.</sub>"
+
+          id=$(gh api "repos/${REPO}/issues/${PR}/comments" --paginate \
+                 --jq '.[] | select(.body | startswith("<!-- docs-pdf-preview -->")) | .id' | head -1)
+
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${id}" -f body="$body" --silent
+          else
+            gh api -X POST "repos/${REPO}/issues/${PR}/comments" -f body="$body" --silent
+          fi
