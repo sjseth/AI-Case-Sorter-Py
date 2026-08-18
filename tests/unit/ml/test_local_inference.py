@@ -10,6 +10,7 @@ raising.
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from typing import Any
 
@@ -62,17 +63,19 @@ def test_cuda_wins_over_mps() -> None:
     assert device.type == "cuda"
 
 
-def test_mps_is_picked_when_cuda_is_absent(capsys: pytest.CaptureFixture[str]) -> None:
-    device = local_inference._pick_device(_fake_torch(mps_available=True))
+def test_mps_is_picked_when_cuda_is_absent(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger=local_inference.__name__):
+        device = local_inference._pick_device(_fake_torch(mps_available=True))
     assert device.type == "mps"
-    assert "[device] MPS ok" in capsys.readouterr().err
+    assert "MPS ok" in caplog.text
 
 
-def test_a_failing_mps_probe_falls_back_to_cpu(capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_failing_mps_probe_falls_back_to_cpu(caplog: pytest.LogCaptureFixture) -> None:
     """MPS op gaps raise at runtime, not at load — commit only after the probe."""
-    device = local_inference._pick_device(_fake_torch(mps_available=True, probe_fails_on="mps"))
+    with caplog.at_level(logging.INFO, logger=local_inference.__name__):
+        device = local_inference._pick_device(_fake_torch(mps_available=True, probe_fails_on="mps"))
     assert device.type == "cpu"
-    assert "MPS probe failed" in capsys.readouterr().err
+    assert "MPS probe failed" in caplog.text
 
 
 def test_a_failing_cuda_probe_falls_back_to_cpu() -> None:
@@ -80,10 +83,11 @@ def test_a_failing_cuda_probe_falls_back_to_cpu() -> None:
     assert device.type == "cpu"
 
 
-def test_no_gpu_at_all_is_cpu(capsys: pytest.CaptureFixture[str]) -> None:
-    device = local_inference._pick_device(_fake_torch())
+def test_no_gpu_at_all_is_cpu(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger=local_inference.__name__):
+        device = local_inference._pick_device(_fake_torch())
     assert device.type == "cpu"
-    assert "no CUDA or MPS" in capsys.readouterr().err
+    assert "no CUDA or MPS" in caplog.text
 
 
 def test_a_torch_build_without_an_mps_backend_reads_as_no_mps() -> None:

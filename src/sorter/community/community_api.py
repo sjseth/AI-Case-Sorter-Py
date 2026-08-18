@@ -16,6 +16,7 @@ still applies.
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from collections.abc import Callable
@@ -28,7 +29,8 @@ import requests
 
 from . import appenv
 from .auth import API_SCOPES, AuthManager
-from .feedback import debug_log
+
+log = logging.getLogger(__name__)
 
 # The production default. The URL actually used is `appenv.api_base()`, which
 # applies a CASESORTER_API_BASE override; this constant is what that falls back
@@ -508,25 +510,28 @@ class CommunityApi:
                 "confidence": confidence,
             },
         )
-        debug_log(f"POST /Models/FeedbackImageUploadRequest -> HTTP {resp.status_code}")
+        log.debug("POST /Models/FeedbackImageUploadRequest -> HTTP %s", resp.status_code)
         if resp.status_code != 200:
-            debug_log(f"  non-200 body: {(resp.text or '')[:200]!r}")
+            log.debug("  non-200 body: %r", (resp.text or "")[:200])
             return None
         text = (resp.text or "").lstrip()
         if text.startswith("<!DOCTYPE html>") or text.startswith("<html"):
-            debug_log("  HTML error page — endpoint not available for this user")
+            log.debug("  HTML error page — endpoint not available for this user")
             return None
         try:
             data = resp.json()
         except ValueError:
-            debug_log(f"  non-JSON body: {text[:200]!r}")
+            log.debug("  non-JSON body: %r", text[:200])
             return None
         if not isinstance(data, dict):
-            debug_log(f"  unexpected JSON shape: {type(data).__name__}")
+            log.debug("  unexpected JSON shape: %s", type(data).__name__)
             return None
         ticket = FeedbackUploadTicket.from_json(data)
-        debug_log(
-            f"  ticket: accepted={ticket.feedback_accepted} container={ticket.container_uri!r} blob={ticket.blob_path!r}"
+        log.debug(
+            "  ticket: accepted=%s container=%r blob=%r",
+            ticket.feedback_accepted,
+            ticket.container_uri,
+            ticket.blob_path,
         )
         return ticket
 
@@ -548,22 +553,22 @@ class CommunityApi:
         try:
             resp = self._get(f"/Models/FetchWishList?communityModelId={quote_plus(community_model_uid)}")
         except Exception as exc:
-            debug_log(f"GET /Models/FetchWishList failed ({exc.__class__.__name__}: {exc})")
+            log.debug("GET /Models/FetchWishList failed (%s: %s)", exc.__class__.__name__, exc)
             return []
-        debug_log(f"GET /Models/FetchWishList -> HTTP {resp.status_code}")
+        log.debug("GET /Models/FetchWishList -> HTTP %s", resp.status_code)
         if resp.status_code != 200:
-            debug_log(f"  non-200 body: {(resp.text or '')[:200]!r}")
+            log.debug("  non-200 body: %r", (resp.text or "")[:200])
             return []
         try:
             data = resp.json()
         except ValueError:
-            debug_log(f"  non-JSON body: {(resp.text or '')[:200]!r}")
+            log.debug("  non-JSON body: %r", (resp.text or "")[:200])
             return []
         if not isinstance(data, list):
-            debug_log(f"  unexpected JSON shape: {type(data).__name__}")
+            log.debug("  unexpected JSON shape: %s", type(data).__name__)
             return []
         names = [item.strip() for item in data if isinstance(item, str) and item.strip()]
-        debug_log(f"  wish list ({len(names)}): {names}")
+        log.debug("  wish list (%d): %s", len(names), names)
         return names
 
     def fetch_model_settings(self, community_model_uid: str) -> ModelSettings | None:
@@ -586,25 +591,29 @@ class CommunityApi:
         try:
             resp = self._get(f"/Models/FetchModelSettings?communityModelId={quote_plus(community_model_uid)}")
         except Exception as exc:
-            debug_log(f"GET /Models/FetchModelSettings failed ({exc.__class__.__name__}: {exc})")
+            log.debug("GET /Models/FetchModelSettings failed (%s: %s)", exc.__class__.__name__, exc)
             return None
-        debug_log(f"GET /Models/FetchModelSettings -> HTTP {resp.status_code}")
+        log.debug("GET /Models/FetchModelSettings -> HTTP %s", resp.status_code)
         if resp.status_code != 200:
-            debug_log(f"  non-200 body: {(resp.text or '')[:200]!r}")
+            log.debug("  non-200 body: %r", (resp.text or "")[:200])
             return None
         try:
             data = resp.json()
         except ValueError:
-            debug_log(f"  non-JSON body: {(resp.text or '')[:200]!r}")
+            log.debug("  non-JSON body: %r", (resp.text or "")[:200])
             return None
         if not isinstance(data, dict):
-            debug_log(f"  unexpected JSON shape: {type(data).__name__}")
+            log.debug("  unexpected JSON shape: %s", type(data).__name__)
             return None
         settings = ModelSettings.from_json(data)
-        debug_log(
-            f"  settings: version={settings.version} floor={settings.confidence_floor} "
-            f"enabled={settings.feedback_enabled} blocked={settings.blocked} "
-            f"wish={len(settings.wish_list)} notes={len(settings.notes)}"
+        log.debug(
+            "  settings: version=%s floor=%s enabled=%s blocked=%s wish=%d notes=%d",
+            settings.version,
+            settings.confidence_floor,
+            settings.feedback_enabled,
+            settings.blocked,
+            len(settings.wish_list),
+            len(settings.notes),
         )
         return settings
 
@@ -634,13 +643,13 @@ class CommunityApi:
                 timeout=self.timeout,
                 verify=self.verify,
             )
-        debug_log(f"PUT blob -> HTTP {resp.status_code}")
+        log.debug("PUT blob -> HTTP %s", resp.status_code)
         resp.raise_for_status()
 
     def complete_feedback_upload(self, ticket: FeedbackUploadTicket) -> bool:
         """Notify the server the upload finished."""
         resp = self._post("/Models/CompleteFeedbackUpload", json=ticket.raw)
-        debug_log(f"POST /Models/CompleteFeedbackUpload -> HTTP {resp.status_code}")
+        log.debug("POST /Models/CompleteFeedbackUpload -> HTTP %s", resp.status_code)
         return resp.status_code < 400
 
     # ----- model share (export + upload) -------------------------------------
@@ -661,10 +670,10 @@ class CommunityApi:
             "/Models/FileUploadRequest",
             json={"filename": filename, "ModelInfo": model_info},
         )
-        debug_log(f"POST /Models/FileUploadRequest -> HTTP {resp.status_code}")
+        log.debug("POST /Models/FileUploadRequest -> HTTP %s", resp.status_code)
         text = (resp.text or "").strip()
         if resp.status_code != 200:
-            debug_log(f"  non-200 body: {text[:300]!r}")
+            log.debug("  non-200 body: %r", text[:300])
             raise CommunityApiError(f"FileUploadRequest → HTTP {resp.status_code}: {text[:300] or '(empty body)'}")
         if text.startswith("<!DOCTYPE html>") or text.lower().startswith("<html"):
             raise CommunityApiError(
@@ -714,12 +723,12 @@ class CommunityApi:
                     timeout=None,
                     verify=self.verify,
                 )
-                debug_log(f"PUT blob ({total} bytes) -> HTTP {resp.status_code}")
+                log.debug("PUT blob (%s bytes) -> HTTP %s", total, resp.status_code)
                 resp.raise_for_status()
                 return
             except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as exc:
                 last_exc = exc
-                debug_log(f"  blob PUT attempt {attempt + 1} failed: {exc}")
+                log.debug("  blob PUT attempt %d failed: %s", attempt + 1, exc)
                 if attempt < retries - 1:
                     time.sleep(2**attempt)
             finally:
@@ -730,7 +739,7 @@ class CommunityApi:
     def complete_upload(self, ticket: SasResponse) -> bool:
         """Notify the server the model ZIP finished."""
         resp = self._post("/Models/CompleteUpload", json=ticket.raw)
-        debug_log(f"POST /Models/CompleteUpload -> HTTP {resp.status_code}")
+        log.debug("POST /Models/CompleteUpload -> HTTP %s", resp.status_code)
         return resp.status_code < 400
 
     def request_manifest_upload(self, blob_path: str) -> SasResponse | None:
@@ -740,7 +749,7 @@ class CommunityApi:
         the manifest with the model.
         """
         resp = self._post("/Models/ManifestUploadRequest", json={"BlobPath": blob_path})
-        debug_log(f"POST /Models/ManifestUploadRequest -> HTTP {resp.status_code}")
+        log.debug("POST /Models/ManifestUploadRequest -> HTTP %s", resp.status_code)
         if resp.status_code != 200:
             return None
         try:
@@ -798,5 +807,5 @@ class CommunityApi:
             if manifest_sas is not None:
                 self.upload_manifest(manifest_path, manifest_sas)
             else:
-                debug_log(f"Manifest upload skipped: no SAS for {ticket.blob_path!r}")
+                log.debug("Manifest upload skipped: no SAS for %r", ticket.blob_path)
         return final_uid

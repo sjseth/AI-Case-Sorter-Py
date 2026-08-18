@@ -145,6 +145,7 @@ AI-Case-Sorter-Py/
 │       ├── __main__.py         # entry point (+ `--apply-update` pre-launch hook)
 │       ├── _legacy_entry.py    # shipped as the archive's root main.py; see §2
 │       ├── paths.py            # on-disk layout; stdlib-only, imported before uv sync
+│       ├── logging_setup.py    # one-shot logging config (§8)
 │       ├── control/            # event bus + the sort loop
 │       ├── hardware/           # serial, camera, image processing
 │       ├── data/                # SQLite persistence + model ZIP import/export
@@ -207,8 +208,10 @@ flowchart TB
 A single `EventBus` with a thread-safe `Queue`. Workers call `bus.post(topic,
 payload)` from any thread; the Qt main loop calls `bus.drain()` on a 50 ms
 `QTimer` to dispatch queued events to subscribers **on the main thread**, so
-handlers can safely touch widgets. Handler exceptions are
-swallowed. Topics are slash-namespaced strings: `run/*`, `test/*`, `serial/*`,
+handlers can safely touch widgets. Handler exceptions are **logged with their
+topic and then swallowed** — one broken subscriber must not stop the drain,
+but it no longer fails silently either (#32).
+Topics are slash-namespaced strings: `run/*`, `test/*`, `serial/*`,
 `training/*`, `mode/changed`, `feedback/*`, `community/*`. This is the **only**
 sanctioned way for worker threads to update the UI.
 
@@ -828,7 +831,8 @@ and must never be committed.
 │       ├── feedback_images/ # below-threshold feedback queue (folder == queue)
 │       ├── reports/         # evaluator HTML reports
 │       └── trainedmodel/    # <model_id>.pth checkpoint
-├── logs/                  # launcher + installer logs (§7)
+├── logs/                  # app + launcher + installer logs (§7, §8)
+│   ├── casesorter.log       # the app's own; DEBUG, rotating 1 MB x 3
 │   ├── launch.log           # this launch; previous kept as launch.prev.log
 │   └── install-<stamp>.log  # one per install-windows.ps1 run
 └── updates/               # staged app updates (§7)
@@ -1058,6 +1062,21 @@ flowchart TD
   `dialog_install_torch.py`) that a main-thread timer drains. Every
   `singleShot` passes its owner as the context argument, so a dying widget
   drops the callback instead of firing into freed C++ (§5).
+- **Logging is stdlib `logging`, one way to write a call.** `logging_setup.py`
+  configures it once from `__main__.py`: stderr at INFO (what a terminal user
+  already saw, and what `bootstrap.py` mirrors into `launch.log`) plus a
+  rotating `<data root>/logs/casesorter.log` at DEBUG. Modules take
+  `logging.getLogger(__name__)`; **never `print`, and never the root logger**,
+  which would make a per-subsystem level impossible — `CASESORTER_FEEDBACK_DEBUG=1`
+  is exactly that, a level bump on `community.feedback` and `community_api`
+  rather than a gate around a print. Calls are **`%`-style and lazily
+  formatted** (`log.debug("crop=%s", frame)`), enforced by ruff's `G`; an
+  f-string builds the message even when nothing will emit it, and pays
+  `__repr__` on a numpy array to throw the result away. Handlers are installed
+  on the `sorter` logger, not the root, so a dependency's output never lands
+  in our file. Configuring is best-effort by design: an unwritable data
+  directory costs the log file, never the launch. The one module that keeps
+  bare `print` is `update/apply_update.py` — it runs before the venv exists.
 - **Legacy-app interop is intentional.** Many odd choices (PascalCase manifest
   keys, .NET ticks filenames, ConvNeXt-mode integer mapping, the exact serial
   command strings, the verbatim HTML report) exist so this app round-trips with

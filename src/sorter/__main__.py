@@ -12,6 +12,7 @@ launching the old way.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 
@@ -26,23 +27,45 @@ def main(argv: list[str] | None = None) -> int:
 
         return apply_main()
 
-    from sorter import paths
+    from sorter import logging_setup, paths
     from sorter.community import appenv
     from sorter.data.config import Config
     from sorter.data.db import Database
 
+    # Before anything that logs. The data-folder move below is the one thing
+    # that can't be: it decides where the log file goes.
+    moved = paths.migrate_legacy_data_dir()
+    logging_setup.configure()
+    # NOT `__name__`: run as `python -m sorter` this module is called
+    # `__main__`, which sits outside the `sorter` hierarchy the handlers are
+    # installed on — every line from here would go nowhere.
+    log = logging.getLogger("sorter.main")
+
+    # First line of every session. A log whose first entry is the failure gives
+    # a bug report nothing to place it against -- which version, which Python,
+    # which data folder. Cheap enough to be unconditional.
+    import sorter
+
+    log.info(
+        "CaseSorter %s starting — python=%s platform=%s data=%s installed=%s",
+        sorter.__version__,
+        sys.version.split()[0],
+        sys.platform,
+        paths.app_data_dir(),
+        paths.is_installed_package(),
+    )
+
     # One-time move of a pre-0.2 `<app>/data` folder to the per-user location.
     # No-op for portable installs, an explicit CASESORTER_DATA_DIR, or once
     # it has already run.
-    moved = paths.migrate_legacy_data_dir()
     if moved is not None:
-        print(f"[casesorter] moved data folder to {moved}")
+        log.info("moved data folder to %s", moved)
 
     # Developer overrides (community API base URL / TLS trust). Silent unless
     # something is actually configured — see sorter/community/appenv.py and
     # .env.example.
     for line in appenv.startup_report(appenv.load_dotenv()):
-        print(f"[casesorter] {line}")
+        log.info("%s", line)
 
     paths.ensure_directories()
     legacy_json = paths.app_data_dir() / "config.json"

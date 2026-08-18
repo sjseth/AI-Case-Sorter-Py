@@ -9,6 +9,7 @@ runs the same on a CI box with no camera at all.
 from __future__ import annotations
 
 import inspect
+import logging
 import os
 import sys
 import time
@@ -217,17 +218,18 @@ def test_a_device_that_answers_in_time_is_listed_without_comment(
 
 
 def test_a_device_that_blows_the_budget_is_dropped_but_reported(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """The silence here is what made a camera 60 ms over budget so hard to explain."""
     monkeypatch.setattr(camera, "_candidate_indices", lambda _max: [0, 4])
     monkeypatch.setattr(camera, "camera_names", lambda: {0: "Built-in", 4: "Vitade AF"})
     _fake_captures(monkeypatch, {0: 0.0, 4: 1.0})
 
-    found = camera.list_cameras_with_metadata(probe_timeout_s=0.2)
+    with caplog.at_level(logging.WARNING, logger=camera.__name__):
+        found = camera.list_cameras_with_metadata(probe_timeout_s=0.2)
 
     assert [c["index"] for c in found] == [0]
-    err = capsys.readouterr().err
+    err = caplog.text
     assert "index 4" in err
     assert "Vitade AF" in err, "name it, so the reader knows which camera went missing"
     assert "0.2" in err, "quote the budget it missed"

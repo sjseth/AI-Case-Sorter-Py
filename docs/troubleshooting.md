@@ -9,15 +9,30 @@ settings that drive them ([Settings → Serial](guide/GUIDE.md#serial)).
 Before reporting anything, take **Help → Export support package…** — it
 collects your version, platform, active model, run options and every settings
 page into one report, with the API key reported only as "set" or "not set" and
-paths relative to the data folder. Attach `launch.log` from the data folder's
-`logs/` too.
+paths relative to the data folder. Attach the logs described below too.
+
+## Where the logs are
+
+Both live in the data folder's `logs/` directory — on Windows that is
+`%LOCALAPPDATA%\CaseSorter\logs`, on Linux and macOS
+`~/.local/share/CaseSorter/logs`. They answer different questions:
+
+- **`casesorter.log`** — the application itself. It keeps several launches of
+  history (rotating at 1 MB, three files back), so a problem you only got
+  round to reporting after restarting a few times is still in there. This is
+  the one to attach to a bug report.
+- **`launch.log`** — the launcher: finding Python, syncing dependencies,
+  applying an update, and anything the app printed. Rewritten on every start,
+  with the previous one kept as `launch.prev.log`.
+
+To collect more detail, start the app with `CASESORTER_LOG_LEVEL=DEBUG` set in
+the environment.
 
 ## Nothing happens when I start the app
 
-Read `launch.log` in the data folder's `logs/` directory — on Windows that is
-`%LOCALAPPDATA%\CaseSorter\logs`. It holds everything from the launcher onwards,
-including the traceback — on Windows the console closes with the process and
-takes the error with it, which is what "nothing happened" usually is.
+Read `launch.log` — it holds everything from the launcher onwards, including
+the traceback. On Windows the console closes with the process and takes the
+error with it, which is what "nothing happened" usually is.
 
 The first launch after an install or an update also syncs dependencies, which
 takes minutes rather than seconds. That is in the log too.

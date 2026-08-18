@@ -28,10 +28,9 @@ training images for, fetched once at run start. See ``set_wish_list``.
 
 from __future__ import annotations
 
+import logging
 import os
-import sys
 import threading
-import traceback
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -42,6 +41,8 @@ from .. import paths
 from ..data.models import Model, is_foreign_model
 from ..data.repository import ModelRepo
 from ..training.dataset import parse_feedback_filename, save_feedback_image
+
+log = logging.getLogger(__name__)
 
 # Floor on the publisher's floor: even if a publisher set a very low
 # threshold, anything under 50% confidence is worth moderating.
@@ -55,19 +56,14 @@ MIN_EFFECTIVE_FLOOR = 50
 MAX_WISH_LIST_CAPTURES_PER_LABEL = 40
 
 
-def _debug_enabled() -> bool:
-    """Feedback-loop tracing is OFF unless ``CASESORTER_FEEDBACK_DEBUG=1``."""
-    return os.environ.get("CASESORTER_FEEDBACK_DEBUG", "0") == "1"
+def debug_enabled() -> bool:
+    """Feedback-loop tracing is OFF unless ``CASESORTER_FEEDBACK_DEBUG=1``.
 
-
-def debug_log(msg: str) -> None:
-    """Console trace for the feedback pipeline (capture → queue → upload).
-
-    Off by default; enable with ``CASESORTER_FEEDBACK_DEBUG=1`` to print the
-    whole chain to stderr with a ``[feedback]`` prefix.
+    Read by ``logging_setup.configure``, which turns it into a level bump on
+    this module's logger. Kept here rather than there because this is the
+    module the knob is *about*.
     """
-    if _debug_enabled():
-        print(f"[feedback] {msg}", file=sys.stderr, flush=True)
+    return os.environ.get("CASESORTER_FEEDBACK_DEBUG", "0") == "1"
 
 
 def is_feedback_model(model: Model | None) -> bool:
@@ -124,7 +120,7 @@ class FeedbackService:
             self._wish_model_id = model_id if cleaned else None
             self._wish_list = cleaned
             self._wish_counts = {}
-        debug_log(f"wish list for model {model_id}: {sorted(cleaned) or '(empty)'}")
+        log.debug("wish list for model %s: %s", model_id, sorted(cleaned) or "(empty)")
 
     def clear_wish_list(self) -> None:
         self.set_wish_list(None, ())
@@ -152,7 +148,11 @@ class FeedbackService:
         # checks) so the type checker can narrow `model` to `Model` and
         # `model.community_model_uid` to `str` for the rest of this branch.
         if model is None or not is_feedback_model(model) or auth is None or model.community_model_uid is None:
-            debug_log(f"wish list: not fetching (feedback_model={is_feedback_model(model)}, auth={auth is not None})")
+            log.debug(
+                "wish list: not fetching (feedback_model=%s, auth=%s)",
+                is_feedback_model(model),
+                auth is not None,
+            )
         else:
             try:
                 # Lazy import: the capture path carries no requests/msal dependency.
@@ -160,7 +160,7 @@ class FeedbackService:
 
                 names = CommunityApi(auth=auth).fetch_wish_list(model.community_model_uid)
             except Exception:
-                debug_log("wish list fetch FAILED:\n" + traceback.format_exc())
+                log.debug("wish list fetch FAILED", exc_info=True)
                 names = []
         self.set_wish_list(model.id if model is not None else None, names)
         return names
@@ -181,9 +181,10 @@ class FeedbackService:
                 return False
             used = self._wish_counts.get(key, 0)
             if used >= MAX_WISH_LIST_CAPTURES_PER_LABEL:
-                debug_log(
-                    f"wish list: {label!r} already at the per-run cap "
-                    f"({MAX_WISH_LIST_CAPTURES_PER_LABEL}) — not capturing"
+                log.debug(
+                    "wish list: %r already at the per-run cap (%d) — not capturing",
+                    label,
+                    MAX_WISH_LIST_CAPTURES_PER_LABEL,
                 )
                 return False
             self._wish_counts[key] = used + 1
@@ -213,9 +214,12 @@ class FeedbackService:
             self._server_model_id = model_id
             self._server_floor = max(0, int(confidence_floor))
             self._server_capture_allowed = bool(feedback_enabled) and not bool(blocked)
-        debug_log(
-            f"server settings for model {model_id}: floor={confidence_floor} "
-            f"enabled={feedback_enabled} blocked={blocked}"
+        log.debug(
+            "server settings for model %s: floor=%s enabled=%s blocked=%s",
+            model_id,
+            confidence_floor,
+            feedback_enabled,
+            blocked,
         )
 
     def clear_server_settings(self) -> None:
@@ -266,31 +270,36 @@ class FeedbackService:
         # `model is None` is folded into the guard so the type checker can
         # narrow `model` to `Model` for the rest of this method.
         if model is None or not is_feedback_model(model):
-            debug_log(
-                "should_capture=False: not a feedback model "
-                f"(enabled={getattr(model, 'feedback_loop_enabled', None)}, "
-                f"community_uid={getattr(model, 'community_model_uid', None)!r})"
+            log.debug(
+                "should_capture=False: not a feedback model (enabled=%s, community_uid=%r)",
+                getattr(model, "feedback_loop_enabled", None),
+                getattr(model, "community_model_uid", None),
             )
             return False
         if not self._server_policy(model)[1]:
-            debug_log("should_capture=False: the server has feedback disabled or blocked for this model")
+            log.debug("should_capture=False: the server has feedback disabled or blocked for this model")
             return False
         floor = self.effective_floor(model)
         if confidence is None or confidence < 0:
-            debug_log(f"unknown confidence ({confidence!r}) — confidence rule skipped")
+            log.debug("unknown confidence (%r) — confidence rule skipped", confidence)
         elif float(confidence) < floor:
-            debug_log(
-                f"should_capture=True: confidence={confidence} < effective_floor={floor} "
-                f"(publisher_floor={model.feedback_loop_confidence_floor}, "
-                f"mode={model.feedback_loop_upload_mode})"
+            log.debug(
+                "should_capture=True: confidence=%s < effective_floor=%s (publisher_floor=%s, mode=%s)",
+                confidence,
+                floor,
+                model.feedback_loop_confidence_floor,
+                model.feedback_loop_upload_mode,
             )
             return True
         if wish_list and self._claim_wish_capture(model, label):
-            debug_log(f"should_capture=True: {label!r} is on the model's wish list")
+            log.debug("should_capture=True: %r is on the model's wish list", label)
             return True
-        debug_log(
-            f"should_capture=False: confidence={confidence} vs effective_floor={floor}, "
-            f"label={label!r} not wanted (wish_list_checked={wish_list})"
+        log.debug(
+            "should_capture=False: confidence=%s vs effective_floor=%s, label=%r not wanted (wish_list_checked=%s)",
+            confidence,
+            floor,
+            label,
+            wish_list,
         )
         return False
 
@@ -324,10 +333,10 @@ class FeedbackService:
                 label or "unknown",
                 confidence,
             )
-            debug_log(f"captured -> {dest}")
+            log.debug("captured -> %s", dest)
             return str(dest)
         except Exception:
-            debug_log("capture FAILED:\n" + traceback.format_exc())
+            log.debug("capture FAILED", exc_info=True)
             return None
 
     # ----- upload -------------------------------------------------------------
@@ -359,7 +368,12 @@ class FeedbackService:
             "skipped": False,
         }
         files = self.pending_files(model_id)
-        debug_log(f"upload_pending: model_id={model_id} pending_files={len(files)} auth={auth is not None}")
+        log.debug(
+            "upload_pending: model_id=%s pending_files=%d auth=%s",
+            model_id,
+            len(files),
+            auth is not None,
+        )
         if not files:
             return result
 
@@ -368,7 +382,11 @@ class FeedbackService:
         # guard so the type checker can narrow `model` to `Model` and
         # `model.community_model_uid` to `str` for the rest of this method.
         if model is None or not is_feedback_model(model) or model.community_model_uid is None:
-            debug_log(f"upload_pending: model {model_id} not feedback-enabled — dropping {len(files)} staged")
+            log.debug(
+                "upload_pending: model %s not feedback-enabled — dropping %d staged",
+                model_id,
+                len(files),
+            )
             self._drop_all(files, result)
             return result
 
@@ -378,9 +396,9 @@ class FeedbackService:
             try:
                 token = auth.acquire_token_silent()
             except Exception:
-                debug_log("upload_pending: acquire_token_silent raised:\n" + traceback.format_exc())
+                log.debug("upload_pending: acquire_token_silent raised", exc_info=True)
         if auth is None or token is None:
-            debug_log(f"upload_pending: no usable auth token — dropping {len(files)} staged (skipped)")
+            log.debug("upload_pending: no usable auth token — dropping %d staged (skipped)", len(files))
             self._drop_all(files, result)
             result["skipped"] = True
             return result
@@ -395,7 +413,11 @@ class FeedbackService:
             parsed = parse_feedback_filename(path.name)
             label, confidence = parsed if parsed else ("", 0)
             try:
-                debug_log(f"requesting upload ticket for {path.name} (uid={model.community_model_uid!r})")
+                log.debug(
+                    "requesting upload ticket for %s (uid=%r)",
+                    path.name,
+                    model.community_model_uid,
+                )
                 ticket = api.request_feedback_upload(
                     filename=path.name,
                     community_model_uid=model.community_model_uid,
@@ -404,40 +426,45 @@ class FeedbackService:
                 )
             except CommunityApiError as exc:
                 # Auth/network problem mid-drain → drop the rest silently.
-                debug_log(f"request ticket CommunityApiError ({exc}) — dropping remaining {len(files) - i}")
+                log.debug("request ticket CommunityApiError (%s) — dropping remaining %d", exc, len(files) - i)
                 self._drop_all(files[i:], result)
                 break
             except Exception:
-                debug_log("request ticket FAILED:\n" + traceback.format_exc())
+                log.debug("request ticket FAILED", exc_info=True)
                 self._delete_file(path)
                 result["dropped"] += 1
                 continue
 
             if ticket is None:
-                debug_log(f"request ticket returned None (endpoint unavailable) — dropping remaining {len(files) - i}")
+                log.debug(
+                    "request ticket returned None (endpoint unavailable) — dropping remaining %d",
+                    len(files) - i,
+                )
                 self._drop_all(files[i:], result)
                 break
             if not ticket.feedback_accepted:
-                debug_log(
-                    f"server declined feedback (message={ticket.feedback_message!r}) — dropping remaining {len(files) - i}"
+                log.debug(
+                    "server declined feedback (message=%r) — dropping remaining %d",
+                    ticket.feedback_message,
+                    len(files) - i,
                 )
                 result["declined"] = True
                 self._drop_all(files[i:], result)
                 break
 
             try:
-                debug_log(f"uploading blob for {path.name}")
+                log.debug("uploading blob for %s", path.name)
                 api.upload_feedback_blob(str(path), ticket, version=version)
                 api.complete_feedback_upload(ticket)
             except Exception:
-                debug_log("blob upload/complete FAILED:\n" + traceback.format_exc())
+                log.debug("blob upload/complete FAILED", exc_info=True)
                 self._delete_file(path)
                 result["dropped"] += 1
                 continue
 
             self._delete_file(path)
             result["uploaded"] += 1
-            debug_log(f"uploaded {path.name} ✓")
+            log.debug("uploaded %s ✓", path.name)
 
-        debug_log(f"upload_pending done: {result}")
+        log.debug("upload_pending done: %s", result)
         return result

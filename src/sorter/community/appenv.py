@@ -35,13 +35,15 @@ relocating. Set it as a real environment variable, or in the app-root ``.env``.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
-import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from .. import paths
+
+log = logging.getLogger(__name__)
 
 DEFAULT_API_BASE = "https://www.reloadingrecipes.com/api"
 
@@ -63,7 +65,7 @@ def _warn_once(key: str, msg: str) -> None:
     if key in _warned:
         return
     _warned.add(key)
-    print(f"[casesorter] {msg}", file=sys.stderr, flush=True)
+    log.warning("%s", msg)
 
 
 def _flag(name: str) -> bool:

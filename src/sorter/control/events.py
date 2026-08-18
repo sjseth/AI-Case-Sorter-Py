@@ -6,10 +6,13 @@ tuples onto a single Queue; the UI drains it on a timer from its own thread.
 
 from __future__ import annotations
 
+import logging
 import queue
 from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 
 class EventBus:
@@ -40,6 +43,12 @@ class EventBus:
                 try:
                     handler(payload)
                 except Exception:
-                    pass
+                    # Still swallowed, and that part is deliberate: the drain
+                    # runs on the UI thread every 50 ms, and one broken
+                    # subscriber must not stop every other topic being
+                    # delivered. What was missing is the trace -- a handler
+                    # that raised used to leave the UI simply not updating,
+                    # with nothing anywhere to look at.
+                    log.exception("event handler failed: topic=%s", topic)
             count += 1
         return count

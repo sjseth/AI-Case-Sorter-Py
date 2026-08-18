@@ -7,19 +7,21 @@ post UI update. Loops until Stop pressed.
 
 from __future__ import annotations
 
+import logging
 import threading
-import traceback
 from collections.abc import Callable, Sequence
 from typing import Any
 
 from .. import paths
-from ..community.feedback import FeedbackService, debug_log
+from ..community.feedback import FeedbackService
 from ..data.config import Config
 from ..data.repository import ModelRepo
 from ..hardware import image_proc
 from ..ml import classifier
 from ..training.dataset import save_training_image
 from .events import EventBus
+
+log = logging.getLogger(__name__)
 
 SlotCallback = Callable[[int], None]
 
@@ -224,7 +226,7 @@ class RunController:
                 label or "unknown",
             )
         except Exception:
-            traceback.print_exc()
+            log.exception("storing the run image failed")
 
     # ----- community feedback loop -------------------------------------------
 
@@ -296,20 +298,24 @@ class RunController:
         token) can drive the upload.
         """
         if self._feedback is None or image_bgr is None:
-            debug_log(f"run-hook skipped (service={self._feedback is not None}, image={image_bgr is not None})")
+            log.debug(
+                "run-hook skipped (service=%s, image=%s)",
+                self._feedback is not None,
+                image_bgr is not None,
+            )
             return
         model_id = self.config.settings.get_active_model_id()
         if model_id is None:
-            debug_log("run-hook: no active model (AI Config mode) — feedback not applicable")
+            log.debug("run-hook: no active model (AI Config mode) — feedback not applicable")
             return
-        debug_log(f"run-hook: model_id={model_id} label={label!r} confidence={confidence}")
+        log.debug("run-hook: model_id=%s label=%r confidence=%s", model_id, label, confidence)
         try:
             model = ModelRepo(self.db).get(model_id)
             if model is None:
                 # The active-model id points at a row that no longer exists
                 # (e.g. deleted between the settings read and here) — nothing
                 # to capture feedback against.
-                debug_log(f"run-hook: active model {model_id} not found in DB — feedback not applicable")
+                log.debug("run-hook: active model %s not found in DB — feedback not applicable", model_id)
                 return
             if not self._feedback.should_capture(
                 model,
@@ -319,15 +325,17 @@ class RunController:
             ):
                 return
             if self._feedback.capture(model, image_bgr, label, confidence):
-                debug_log(
-                    f"posting feedback/queued for model {model_id} (upload_mode={model.feedback_loop_upload_mode})"
+                log.debug(
+                    "posting feedback/queued for model %s (upload_mode=%s)",
+                    model_id,
+                    model.feedback_loop_upload_mode,
                 )
                 self.bus.post(
                     "feedback/queued",
                     {"model_id": model_id, "upload_mode": model.feedback_loop_upload_mode},
                 )
         except Exception:
-            debug_log("run-hook EXCEPTION:\n" + traceback.format_exc())
+            log.debug("run-hook EXCEPTION", exc_info=True)
 
     # ----- one iteration ------------------------------------------------------
 
@@ -393,7 +401,7 @@ class RunController:
             )
             return result
         except Exception as exc:
-            traceback.print_exc()
+            log.exception("test_once failed")
             return _fail(str(exc) or exc.__class__.__name__)
 
     def run_once(self) -> dict[str, Any]:
@@ -479,7 +487,7 @@ class RunController:
             return result
         except Exception as exc:
             result["error"] = str(exc) or exc.__class__.__name__
-            traceback.print_exc()
+            log.exception("run_once failed")
             return result
 
     # ----- continuous loop ----------------------------------------------------
@@ -559,7 +567,7 @@ class RunController:
             # Stash for the next Manual feed click or continuous Run prime.
             self._last_classified_slot = slot
         except Exception as exc:
-            traceback.print_exc()
+            log.exception("cycle_once failed")
             result["error"] = str(exc) or exc.__class__.__name__
         self.bus.post("run/result", result)
         if result.get("error"):

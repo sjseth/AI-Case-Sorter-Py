@@ -89,6 +89,26 @@ def test_no_module_in_the_package_rewrites_sys_path() -> None:
     assert not offenders, f"bootstrap.py sets PYTHONPATH; the app must not touch sys.path: {offenders}"
 
 
+def test_the_entry_point_does_not_name_its_logger_after_the_module() -> None:
+    """``__name__`` is ``"__main__"`` here, not ``"sorter.__main__"``.
+
+    Run as ``python -m sorter`` -- which is the only way it is ever run -- this
+    module's ``__name__`` sits outside the ``sorter`` hierarchy that
+    ``logging_setup`` installs handlers on, so ``getLogger(__name__)`` would
+    write every startup line to a logger nobody is listening to. It looks
+    correct everywhere else in the tree, which is exactly what makes it easy to
+    reintroduce here.
+    """
+    tree = ast.parse((SRC / "sorter" / "__main__.py").read_text(encoding="utf-8"))
+    calls = [
+        ast.unparse(node)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and ast.unparse(node).startswith("logging.getLogger")
+    ]
+    assert calls, "the entry point should log its startup line"
+    assert all("__name__" not in call for call in calls), f"name the logger explicitly: {calls}"
+
+
 def test_the_stdlib_only_pre_launch_hook_runs(tmp_path: Path) -> None:
     """End to end on the real entry point, under bootstrap.py's conditions.
 

@@ -114,6 +114,8 @@ select = [
     "I",   # isort
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
+    "G",   # flake8-logging-format -- one way to write a log call: `%`-style, lazily formatted
+    "LOG", # flake8-logging -- the correctness rules (`logging.WARN`, `.exception(exc_info=False)`, …)
     "RUF100",  # unused `noqa` -- a suppression that outlives its finding reads as a live one
 ]
 ignore = [

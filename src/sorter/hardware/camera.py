@@ -12,6 +12,7 @@ when available) and the resolutions the device accepts.
 from __future__ import annotations
 
 import ctypes
+import logging
 import os
 import sys
 import threading
@@ -20,6 +21,8 @@ from typing import TypedDict
 
 import cv2
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 # Resolutions probed by `list_cameras_with_metadata`. Add more here if the
 # operator's camera advertises something not in the list.
@@ -407,12 +410,12 @@ def list_cameras_with_metadata(max_index: int = 10, probe_timeout_s: float = PRO
         if t.is_alive():
             # A device that opens and then times out used to vanish from the
             # list in silence, which is exactly what made a camera 60 ms over
-            # budget so hard to account for. bootstrap.py pipes stderr into
-            # launch.log, so this lands where someone would go looking.
-            print(
-                f"[camera] index {idx} ({names.get(idx, 'unnamed')}) did not finish "
-                f"probing within {probe_timeout_s:g}s — not listing it",
-                file=sys.stderr,
+            # budget so hard to account for.
+            log.warning(
+                "index %s (%s) did not finish probing within %gs — not listing it",
+                idx,
+                names.get(idx, "unnamed"),
+                probe_timeout_s,
             )
         if result["opened"]:
             out.append(

@@ -7,6 +7,7 @@ non-guarantees) are worth pinning.
 
 from __future__ import annotations
 
+import logging
 import threading
 
 from sorter.control.events import EventBus
@@ -155,12 +156,11 @@ def test_unsubscribe_of_an_unknown_topic_or_handler_is_harmless() -> None:
     assert seen == [1]
 
 
-def test_a_raising_handler_is_swallowed_and_the_drain_continues() -> None:
-    # Characterization: handler exceptions are caught and dropped on the floor
-    # with no logging at all, so a broken UI handler fails completely silently.
-    # Issue #32 proposes logging the exception here; the swallow itself stays
-    # (one bad handler must not take down the drain loop), so only the
-    # logging is added and this assertion should keep holding.
+def test_a_raising_handler_is_swallowed_and_the_drain_continues(caplog) -> None:
+    # The swallow is deliberate — one bad handler must not take down the drain
+    # loop, which every worker thread in the app funnels through. What #32
+    # added is the trace: before it, a handler that raised left the UI simply
+    # not updating with nothing anywhere to look at.
     bus = EventBus()
     other: list[object] = []
     later: list[object] = []
@@ -176,9 +176,15 @@ def test_a_raising_handler_is_swallowed_and_the_drain_continues() -> None:
     bus.post("u", "second")
 
     # Neither the sibling subscriber nor the next queued event is lost.
-    assert bus.drain() == 2
+    with caplog.at_level(logging.ERROR, logger="sorter.control.events"):
+        assert bus.drain() == 2
     assert other == ["first"]
     assert later == ["second"]
+
+    (record,) = caplog.records
+    assert "topic=t" in record.getMessage(), "name the topic, or the trace can't be placed"
+    assert record.exc_info is not None, "the stack trace is the whole point"
+    assert "handler blew up" in caplog.text
 
 
 def test_subscribing_during_a_drain_does_not_disturb_the_dispatch() -> None:

@@ -6,6 +6,7 @@ backend and must NOT apply to anything else, however it is spelled.
 
 from __future__ import annotations
 
+import logging
 import os
 
 import pytest
@@ -170,12 +171,14 @@ def test_describe_reports_the_effective_settings(tmp_path, monkeypatch) -> None:
     assert "localhost:7043" in text and "DISABLED" in text
 
 
-def test_warnings_are_emitted_once(capsys, monkeypatch) -> None:
+def test_warnings_are_emitted_once(caplog, monkeypatch) -> None:
     monkeypatch.setenv("CASESORTER_API_BASE", "https://localhost/api")
     monkeypatch.setenv("CASESORTER_API_INSECURE", "1")
-    for _ in range(3):
-        appenv.tls_verify()
-    assert capsys.readouterr().err.count("TLS verification is DISABLED") == 1
+    with caplog.at_level(logging.WARNING, logger="sorter.community.appenv"):
+        for _ in range(3):
+            appenv.tls_verify()
+    assert [r for r in caplog.records if "TLS verification is DISABLED" in r.getMessage()] != []
+    assert len(caplog.records) == 1
 
 
 # ----- wiring into the API client --------------------------------------------
