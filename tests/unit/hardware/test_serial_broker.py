@@ -783,6 +783,8 @@ def test_awaiting_leaves_no_handler_behind(broker: SerialBroker) -> None:
     before = len(broker.on_disconnect)
     broker._await_topic(broker.on_done, 0.01)
     assert len(broker.on_disconnect) == before
+
+
 # ----- auto-connect probe candidates (#36 follow-up) ----------------------------
 #
 # macOS lists pseudo-ports (Bluetooth headsets, the debug console) that can
