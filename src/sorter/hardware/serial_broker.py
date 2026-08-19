@@ -97,6 +97,11 @@ class SerialBroker:
         self._write_lock = threading.Lock()
         self._port_lock = threading.Lock()
         self._state_lock = threading.Lock()
+        # Set when a disconnect has been *announced* and not yet handshaked
+        # away again. `is_connected` can't stand in for it: a broker that
+        # never opened a port has it False too, and that is not a link that
+        # died under a pending command.
+        self._link_lost = False
         self._last_activity = time.monotonic()
 
         self._reader_thread: threading.Thread | None = None
@@ -182,6 +187,7 @@ class SerialBroker:
         if connected:
             self._sp.timeout = READ_TIMEOUT_S
             self.is_connected = True
+            self._link_lost = False
             return True
 
         try:
@@ -230,6 +236,8 @@ class SerialBroker:
             was_connected = self.is_connected
             self.is_connected = False
             announce = was_connected and not self._stop_event.is_set()
+            if announce:
+                self._link_lost = True
         if announce:
             self._fire(self.on_disconnect, reason)
 
@@ -394,6 +402,12 @@ class SerialBroker:
         topic_handlers.append(_hit)
         self.on_disconnect.append(_abandon)
         try:
+            # The transition is announced exactly once, so a link that died
+            # between the write going out and this registration has nothing
+            # left to wake us with — and the wait below would sit out the full
+            # timeout, which is the symptom the whole change is about.
+            if self._link_lost:
+                return False
             done.wait(timeout=timeout_s)
             return hit
         finally:

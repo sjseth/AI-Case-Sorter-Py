@@ -779,6 +779,19 @@ def test_a_pending_command_gives_up_the_moment_the_link_dies(broker: SerialBroke
     assert time.monotonic() - started < 1.0
 
 
+def test_a_command_that_outlived_the_link_does_not_wait_it_out(broker: SerialBroker) -> None:
+    # The disconnect is announced once, on the transition. Land it between the
+    # write going out and the wait registering — the window a failed write
+    # can't cover, because that write succeeded — and there is nothing left to
+    # wake the wait, so the wait has to notice the dead link on its own.
+    broker.is_connected = True
+    broker._mark_disconnected("unplugged after the write went out")
+
+    started = time.monotonic()
+    assert broker._await_topic(broker.on_done, serial_broker.SORT_TIMEOUT_S) is False
+    assert time.monotonic() - started < 1.0
+
+
 def test_awaiting_leaves_no_handler_behind(broker: SerialBroker) -> None:
     before = len(broker.on_disconnect)
     broker._await_topic(broker.on_done, 0.01)

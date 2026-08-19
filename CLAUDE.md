@@ -318,6 +318,9 @@ between them from the Sort page's template dropdown.
   one transition into `is_connected = False`: it fires `on_disconnect` exactly
   once, and never for a `stop()` we asked for (which sets `_stop_event` first).
   Both halves matter downstream — `_await_topic` gives up the moment it fires,
+  and won't start waiting at all once it has (`_link_lost`; the announcement
+  is a one-shot transition, so a wait registered *after* it has nothing left
+  to wake it, and a successful `try_open` is what clears the flag again),
   and `send_command` returns False when the write never reached the wire, so a
   dead port fails a feed immediately instead of waiting out `SORT_TIMEOUT_S`
   and reporting a timeout no different from a slow board's (#35). Key commands: `xf:0`
