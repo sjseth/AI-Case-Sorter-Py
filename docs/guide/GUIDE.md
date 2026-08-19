@@ -19,7 +19,8 @@ day, in the order you meet them.
 - [Models](#models) — the model library: activate, edit, import, export.
 - [Community](#community) — browse and install published models.
 - [Settings](#settings) — [Camera](#camera), [Serial](#serial), [Image
-  Processing](#image-processing) and [Theme](#theme).
+  Processing](#image-processing), [Theme](#theme) and [Import from
+  Windows](#import-from-windows).
 - [Getting help](#getting-help) — this guide, the [support
   package](#support-package) and [updates](#updates).
 
@@ -598,6 +599,50 @@ the editor open so you can keep adjusting — **Close** ends the session;
 **Create new…** saves under a name you pick, and a built-in is never
 overwritten either way. A theme can also be exported to a file and imported
 on another machine.
+
+### Import from Windows
+
+Copies your setup out of an installation of the Windows app (**AI Brass
+Sorter**) so you do not have to build it again here. **Nothing in the Windows
+app is changed, moved or deleted** — everything is copied, and that
+installation keeps working exactly as it did.
+
+If the Windows app is installed in the usual place, this page finds it on its
+own; otherwise choose the folder yourself — the one containing `Data` and
+`training`. The same offer appears once, automatically, the first time you
+start this app on a computer that has the Windows app on it.
+
+You tick what comes across:
+
+- **Models** — the model itself, including its trained model file where there
+  is one, so it can classify immediately without retraining.
+- **Training images** — usually the bulk of the data, and the slowest part of
+  the copy.
+- **Headstamps and slot assignments** — your headstamp list, parent
+  classifications, and which bin each one drops into.
+- **Image-processing settings** — the crop tuning from the Windows app.
+- **Serial / board settings** — port, baud rate and the board's init values.
+- **AI Config** — endpoint, model and prompt, if you classify over HTTP.
+
+Training images and headstamps belong to a model, so they are only available
+when **Models** is ticked. Anything this installation does not have is greyed
+out rather than offered.
+
+Two things are worth knowing before you run it:
+
+- **Models trained with the Windows app's older ML.NET pipeline cannot
+  classify here.** They are still imported — with their headstamps and images
+  — but without a trained model file, so the [Train](#train) page is where
+  you pick them up. The import says which models this applied to.
+- **A model that came from the [Community](#community) stays read-only**, the
+  same as one downloaded here: the trained model file belongs to whoever
+  published it, so it is not trainable. Your own models stay trainable.
+
+Running the import a second time is safe. A model already brought across is
+updated in place rather than duplicated, your slot assignments and sorting
+templates survive, and images already copied are skipped. The import never
+takes over an active model you have already chosen here.
+
 
 ## Getting help
 

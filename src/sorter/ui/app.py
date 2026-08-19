@@ -24,6 +24,7 @@ from __future__ import annotations
 import base64
 import html
 import itertools
+import logging
 import os
 import sys
 import threading
@@ -84,6 +85,13 @@ from .ai_page import build_ai_page
 from .community_page import build_community_page
 from .dialog_slot_assign import CATCH_ALL_HINT, SlotAssignDialog
 from .dialog_template import EditTemplateDialog, NewTemplateDialog
+from .dialog_winforms_import import (
+    SECTION_NAME as WINFORMS_IMPORT_SECTION,
+)
+from .dialog_winforms_import import (
+    build_winforms_import_section,
+    maybe_offer_first_run,
+)
 from .help_viewer import build_help_window, topic_for
 from .history_view import build_history_view
 from .icons import AI_CONFIG, COMMUNITY, MODELS, SETTINGS, SORT, TRAIN, app_icon
@@ -105,6 +113,8 @@ from .slot_grid import SlotGrid
 from .theme import build_stylesheet, unavailable_ink
 from .torch_gate import TorchGate
 from .train_page import build_train_page
+
+log = logging.getLogger(__name__)
 
 PREVIEW_FPS = 20
 SIDEBAR_WIDTH = 84
@@ -139,7 +149,10 @@ ACTIVITY_TOOLTIP_LIVE = "Classification uses this now"
 TRAIN_TOOLTIP_MUTED = "Activates when a local model is active — see Models"
 AI_CONFIG_TOOLTIP_MUTED = "Activates when 'Use AI Config' is selected on Models"
 SIDEBAR_ICON_SIZE = 26
-SETTINGS_SECTIONS = ("Camera", "Serial", "Image Processing", "Theme")
+# "Import from Windows" is last: it is a one-off errand, not a knob, and its
+# name is also a GUIDE.md heading (help_viewer slugifies section names
+# straight to an anchor, which tests/unit/ui/test_help.py pins).
+SETTINGS_SECTIONS = ("Camera", "Serial", "Image Processing", "Theme", WINFORMS_IMPORT_SECTION)
 BAUD_CHOICES = (9600, 19200, 38400, 57600, 115200)
 # On every dock's tab: QtAds's drop overlays show where a panel *can* go once
 # a drag starts, but nothing hints that it can be dragged at all (JL).
@@ -404,6 +417,9 @@ class QtMainWindow(QMainWindow):
             self._auto_connect_serial()
             self._warm_device_indicator()
             QTimer.singleShot(2500, self, self._startup_update_check)
+            # After the shell is up, so the dialog has a parent to centre on.
+            # Silent unless a Windows install is actually there (issue #98).
+            QTimer.singleShot(0, self, self._offer_winforms_import)
         self._apply_auth_visibility()
 
     # ----- construction -------------------------------------------------------
@@ -921,6 +937,7 @@ class QtMainWindow(QMainWindow):
             "Serial": self._build_serial_page,
             "Camera": lambda: build_camera_section(self),
             "Image Processing": lambda: build_imageproc_section(self),
+            WINFORMS_IMPORT_SECTION: lambda: build_winforms_import_section(self),
         }
         for name in SETTINGS_SECTIONS:
             self.settings_list.addItem(name)
@@ -1109,6 +1126,29 @@ class QtMainWindow(QMainWindow):
             self.community_page.sign_out()
         else:
             self.community_page.open_login()
+
+    # ----- import from the Windows app ----------------------------------------
+
+    def _offer_winforms_import(self) -> None:
+        """First-run offer. Silent, and cheap, when there is nothing to offer."""
+        try:
+            maybe_offer_first_run(self)
+        except Exception:
+            # An import that cannot even be offered must not take the launch
+            # with it — Settings keeps the same dialog reachable.
+            log.exception("first-run Windows-app import offer failed")
+
+    def after_winforms_import(self, result: Any) -> None:
+        """Re-read everything the import may have rewritten.
+
+        It can touch the model library, the active model, every headstamp and
+        slot, and three settings sections at once, so this re-runs the same
+        refresh a mode switch does rather than trying to be surgical.
+        """
+        self.config.load()
+        self._on_mode_changed()
+        self.models_page.refresh()
+        self.set_status("Imported from the Windows app.")
 
     # ----- updates ------------------------------------------------------------
 
