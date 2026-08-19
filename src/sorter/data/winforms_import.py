@@ -103,6 +103,16 @@ _LINESCAN_FROM_LEGACY = {
     "bg_cliff": ("IP_BgCliff", int),
 }
 
+# What the user is told about a model whose only checkpoint is the legacy
+# ML.NET pipeline's. A named constant rather than an inline f-string so a test
+# can assert the exact message instead of sniffing for a substring of it —
+# CodeQL reads `"ML.NET" in some_string` as a hostname allowlist check
+# (`.NET` parses as a TLD) and flags it as incomplete URL sanitization.
+MLNET_WARNING = (
+    "'{name}' has only an ML.NET checkpoint, which cannot classify here — "
+    "it is imported without one so you can retrain it."
+)
+
 # Every item the user can tick, in the order the dialog shows them — roughly by
 # how much work each one saves.
 ITEM_MODELS = "models"
@@ -349,10 +359,7 @@ def survey(root: Path | str) -> LegacySurvey:
         )
         out.models.append(entry)
         if kind == "mlnet":
-            out.warnings.append(
-                f"'{entry.name}' has only an ML.NET checkpoint, which cannot classify here — "
-                "it is imported without one so you can retrain it."
-            )
+            out.warnings.append(MLNET_WARNING.format(name=entry.name))
 
     defaults = raw.get("Defaults")
     defaults = defaults if isinstance(defaults, dict) else {}

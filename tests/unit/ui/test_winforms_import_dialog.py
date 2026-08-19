@@ -192,11 +192,11 @@ def test_import_lands_and_the_shell_is_refreshed(qapp, window, tmp_path: Path, m
 
 
 def test_summary_says_what_landed() -> None:
-    result = winforms_import.ImportResult(models_imported=2, images_copied=40, warnings=["ML.NET only"])
+    result = winforms_import.ImportResult(models_imported=2, images_copied=40, warnings=["a warning from the survey"])
     text = summarize(result)
     assert "2 model(s) imported" in text
     assert "40 training image(s) copied" in text
-    assert "ML.NET only" in text
+    assert "a warning from the survey" in text
 
 
 def test_summary_of_an_import_that_had_nothing_to_do() -> None:
