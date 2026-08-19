@@ -442,6 +442,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#where-the-logs-are" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the logs are
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#nothing-happens-when-i-start-the-app" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -584,6 +595,17 @@
       Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#where-the-logs-are" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the logs are
+      
+    </span>
+  </a>
+  
+</li>
       
         <li class="md-nav__item">
   <a href="#nothing-happens-when-i-start-the-app" class="md-nav__link">
@@ -729,13 +751,26 @@ settings that drive them (<a href="../guide/GUIDE/#serial">Settings → Serial</
 <p>Before reporting anything, take <strong>Help → Export support package…</strong> — it
 collects your version, platform, active model, run options and every settings
 page into one report, with the API key reported only as "set" or "not set" and
-paths relative to the data folder. Attach <code>launch.log</code> from the data folder's
-<code>logs/</code> too.</p>
+paths relative to the data folder. Attach the logs described below too.</p>
+<h2 id="where-the-logs-are">Where the logs are<a class="headerlink" href="#where-the-logs-are" title="Permanent link">&para;</a></h2>
+<p>Both live in the data folder's <code>logs/</code> directory — on Windows that is
+<code>%LOCALAPPDATA%\CaseSorter\logs</code>, on Linux and macOS
+<code>~/.local/share/CaseSorter/logs</code>. They answer different questions:</p>
+<ul>
+<li><strong><code>casesorter.log</code></strong> — the application itself. It keeps several launches of
+  history (rotating at 1 MB, three files back), so a problem you only got
+  round to reporting after restarting a few times is still in there. This is
+  the one to attach to a bug report.</li>
+<li><strong><code>launch.log</code></strong> — the launcher: finding Python, syncing dependencies,
+  applying an update, and anything the app printed. Rewritten on every start,
+  with the previous one kept as <code>launch.prev.log</code>.</li>
+</ul>
+<p>To collect more detail, start the app with <code>CASESORTER_LOG_LEVEL=DEBUG</code> set in
+the environment.</p>
 <h2 id="nothing-happens-when-i-start-the-app">Nothing happens when I start the app<a class="headerlink" href="#nothing-happens-when-i-start-the-app" title="Permanent link">&para;</a></h2>
-<p>Read <code>launch.log</code> in the data folder's <code>logs/</code> directory — on Windows that is
-<code>%LOCALAPPDATA%\CaseSorter\logs</code>. It holds everything from the launcher onwards,
-including the traceback — on Windows the console closes with the process and
-takes the error with it, which is what "nothing happened" usually is.</p>
+<p>Read <code>launch.log</code> — it holds everything from the launcher onwards, including
+the traceback. On Windows the console closes with the process and takes the
+error with it, which is what "nothing happened" usually is.</p>
 <p>The first launch after an install or an update also syncs dependencies, which
 takes minutes rather than seconds. That is in the log too.</p>
 <h2 id="the-window-wont-open-on-linux">The window won't open on Linux<a class="headerlink" href="#the-window-wont-open-on-linux" title="Permanent link">&para;</a></h2>
