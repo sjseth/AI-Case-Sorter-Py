@@ -26,6 +26,7 @@ from sorter.data.repository import (
 from sorter.data.winforms_import import (
     CONFIG_DB_NAME,
     FIRST_RUN_SEEN_KEY,
+    MLNET_WARNING,
     ImportOptions,
     candidate_install_dirs,
     find_installation,
@@ -250,7 +251,10 @@ def test_survey_flags_an_mlnet_only_model(tmp_path: Path) -> None:
     found = survey(root)
     assert found.models[0].checkpoint_kind == "mlnet"
     assert not found.models[0].has_usable_checkpoint
-    assert any("ML.NET" in w for w in found.warnings)
+    # Equality against the exported constant, not a substring probe: the
+    # message is one string owned by the module, and CodeQL reads a
+    # `"ML.NET" in ...` test as a hostname allowlist check.
+    assert MLNET_WARNING.format(name="9mm Base Model") in found.warnings
 
 
 def test_survey_rejects_a_folder_that_is_not_an_installation(tmp_path: Path) -> None:
