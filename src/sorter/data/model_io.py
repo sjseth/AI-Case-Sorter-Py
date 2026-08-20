@@ -104,10 +104,16 @@ def model_to_export_dict(m: Model) -> dict[str, Any]:
 # The legacy app serialises its ModelMode enum as its integer value. Map back
 # to our snake_case backbone identifiers; non-ConvNeXt modes fall through to a
 # ConvNeXt this app can actually run.
+WINFORMS_MODELMODE_OPENAI = 2
+
 _WINFORMS_MODELMODE_INT_TO_STR = {
     0: "convnext_tiny",  # DeepLearning (ResNet50) — can't run, fall back
     1: "convnext_tiny",  # Inception           — fall back
-    2: "openai",  # OpenAI
+    # OpenAI has no model-row equivalent: classifying over HTTP is AI Config
+    # mode here, which is the *absence* of an active model (§4). Falling back
+    # keeps the row importable; `winforms_import` warns and carries the server
+    # settings across separately.
+    WINFORMS_MODELMODE_OPENAI: "convnext_tiny",
     3: "convnext_large",
     4: "convnext_tiny",  # DeeperLearning (ResNet101) — fall back
     5: "convnext_tiny",  # Custom              — fall back
@@ -118,7 +124,11 @@ _WINFORMS_MODELMODE_INT_TO_STR = {
 
 
 def _normalize_model_mode(raw: Any) -> str:
-    """Accept the snake_case string or the legacy enum int."""
+    """Accept the snake_case string or the legacy enum int.
+
+    Every branch lands in `SUPPORTED_MODEL_MODES`: `ModelRepo` rejects anything
+    else, and `winforms_import` hands the result straight to it.
+    """
     if isinstance(raw, str):
         rl = raw.strip().lower()
         # Tolerate hyphenated/CamelCase variants

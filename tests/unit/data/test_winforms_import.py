@@ -27,6 +27,8 @@ from sorter.data.winforms_import import (
     CONFIG_DB_NAME,
     FIRST_RUN_SEEN_KEY,
     MLNET_WARNING,
+    MODEL_FAILED_WARNING,
+    OPENAI_MODE_WARNING,
     ImportOptions,
     candidate_install_dirs,
     find_installation,
@@ -80,6 +82,20 @@ _MODEL_COMMUNITY: dict[str, Any] = {
     "ModelVersion": 16,
     "ModelType": 1,  # ReadOnly — a community download
     "ModelMode": 7,  # convnext_small
+}
+
+# ModelMode 2 is the legacy OpenAI enum: this model classified over HTTP rather
+# than from a local checkpoint. Reported on PR #125 against a real install.
+_MODEL_OPENAI: dict[str, Any] = {
+    "Id": 5,
+    "Name": "9mm over HTTP",
+    "CartridgeId": 2,
+    "ModelType": 0,
+    "ModelMode": 2,
+    "AIModelConfig": {
+        "OpenAI_EndpointUrl": "http://192.168.1.9:1234/v1/chat/completions",
+        "OpenAI_Model": "qwen2-vl",
+    },
 }
 
 _DEFAULTS: dict[str, Any] = {
@@ -257,6 +273,14 @@ def test_survey_flags_an_mlnet_only_model(tmp_path: Path) -> None:
     assert MLNET_WARNING.format(name="9mm Base Model") in found.warnings
 
 
+def test_survey_flags_an_openai_mode_model(tmp_path: Path) -> None:
+    """Classifying over HTTP is app-wide here, so the row alone can't carry it."""
+    root = _write_install(tmp_path / "legacy", models=[_MODEL_OPENAI])
+    found = survey(root)
+    assert OPENAI_MODE_WARNING.format(name="9mm over HTTP") in found.warnings
+    assert found.has_ai_config
+
+
 def test_survey_rejects_a_folder_that_is_not_an_installation(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         survey(tmp_path)
@@ -294,6 +318,55 @@ def test_import_brings_models_across_with_ownership_intact(tmp_path: Path, db: D
     assert community.model_mode == "convnext_small"
     assert community.community_model_uid == "12e3af83-9d6c-4f6c-b045-7a984420543d"
     assert Path(community.model_path or "").is_file()
+
+
+def test_import_accepts_an_openai_mode_model(tmp_path: Path, db: Database, config: Config) -> None:
+    """The whole import used to die here.
+
+    `ModelMode` 2 mapped to a literal "openai", which `ModelRepo` rejects, so
+    one such row aborted the transaction and nothing at all was imported —
+    the failure reported against a real install on PR #125.
+    """
+    root = _write_install(tmp_path / "legacy", models=[_MODEL_OWN, _MODEL_OPENAI])
+    _add_images(root, 5, ["GECO__1.jpg"])
+
+    result = import_installation(root, db=db, config=config, options=ImportOptions())
+
+    assert result.models_imported == 2
+    imported = _model(db, "9mm over HTTP")
+    # A retrainable shell: there is no model-row spelling of "classifies over
+    # HTTP", and the images are what the user actually wanted back.
+    assert imported.model_mode == "convnext_tiny"
+    assert is_trainable(imported)
+    assert result.images_copied == 1
+
+
+def test_one_unimportable_model_does_not_cost_the_others(
+    tmp_path: Path, db: Database, config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A single bad row is worth a warning, not an install's worth of images."""
+    root = _write_install(tmp_path / "legacy")
+    _add_images(root, 4, ["FC__1.jpg"])
+
+    real_create = ModelRepo.create
+
+    def refuse_one(self: ModelRepo, model: Any) -> Any:
+        if model.name == "9mm Base Model":
+            raise ValueError("Unsupported model_mode: 'nonsense'")
+        return real_create(self, model)
+
+    monkeypatch.setattr(ModelRepo, "create", refuse_one)
+    result = import_installation(root, db=db, config=config, options=ImportOptions())
+
+    assert result.models_imported == 1
+    assert MODEL_FAILED_WARNING.format(name="9mm Base Model", error="Unsupported model_mode: 'nonsense'") in (
+        result.warnings
+    )
+    names = {m.name for m in ModelRepo(db).list()}
+    assert "9mm Default" in names
+    # Rolled back to just before the failing row, counts included.
+    assert "9mm Base Model" not in names
+    assert result.images_copied == 1
 
 
 def test_import_copies_training_images(tmp_path: Path, db: Database, config: Config) -> None:
@@ -548,6 +621,44 @@ def test_ai_config_import(tmp_path: Path, db: Database, config: Config) -> None:
 
 def test_ai_config_import_reports_when_there_is_nothing_to_take(tmp_path: Path, db: Database, config: Config) -> None:
     root = _write_install(tmp_path / "legacy")
+    result = import_installation(
+        root,
+        db=db,
+        config=config,
+        options=ImportOptions(models=False, ai_config=True),
+    )
+    assert not result.ai_config_imported
+
+
+def test_ai_config_prefers_the_model_that_classified_over_http(tmp_path: Path, db: Database, config: Config) -> None:
+    """The legacy app writes the blob on every model, most of them blank.
+
+    Taking whichever is declared first would import an empty endpoint over the
+    one the user actually configured, and still report success.
+    """
+    blank = dict(_MODEL_OWN)
+    blank["AIModelConfig"] = {"OpenAI_EndpointUrl": "", "OpenAI_Model": "", "OpenAI_SystemPrompt": ""}
+    root = _write_install(tmp_path / "legacy", models=[blank, _MODEL_OPENAI])
+
+    result = import_installation(
+        root,
+        db=db,
+        config=config,
+        options=ImportOptions(models=False, ai_config=True),
+    )
+
+    assert result.ai_config_imported
+    api = Config(db).load().api
+    assert api["endpoint_url"] == "http://192.168.1.9:1234/v1/chat/completions"
+    assert api["model"] == "qwen2-vl"
+
+
+def test_ai_config_ignores_a_present_but_blank_blob(tmp_path: Path, db: Database, config: Config) -> None:
+    blank = dict(_MODEL_OWN)
+    blank["AIModelConfig"] = {"OpenAI_EndpointUrl": "", "OpenAI_Model": "", "ImageQuality": 90}
+    root = _write_install(tmp_path / "legacy", models=[blank])
+
+    assert not survey(root).has_ai_config
     result = import_installation(
         root,
         db=db,

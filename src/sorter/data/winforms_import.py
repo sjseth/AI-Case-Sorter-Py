@@ -37,6 +37,7 @@ import json
 import logging
 import os
 import shutil
+import sqlite3
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -55,7 +56,7 @@ from .config import (
     Config,
 )
 from .db import Database
-from .model_io import model_from_export_dict
+from .model_io import WINFORMS_MODELMODE_OPENAI, model_from_export_dict
 from .models import AIModelConfig, Model
 from .repository import (
     CartridgeRepo,
@@ -112,6 +113,18 @@ MLNET_WARNING = (
     "'{name}' has only an ML.NET checkpoint, which cannot classify here — "
     "it is imported without one so you can retrain it."
 )
+
+# Classifying over HTTP is app-wide here (AI Config mode), not a model-row
+# property, so the row comes across as a retrainable shell and its server
+# settings ride the separate AI Config tick.
+OPENAI_MODE_WARNING = (
+    "'{name}' classified over an HTTP server in the Windows app. Tick AI Config "
+    "to bring those server settings across; the model itself is imported so you "
+    "can retrain it locally."
+)
+
+# One unreadable row costs that row, not the whole import.
+MODEL_FAILED_WARNING = "Could not import '{name}': {error}"
 
 # Every item the user can tick, in the order the dialog shows them — roughly by
 # how much work each one saves.
@@ -172,6 +185,16 @@ class LegacyModel:
     @property
     def has_usable_checkpoint(self) -> bool:
         return self.checkpoint_kind == "torch" and self.checkpoint is not None
+
+    @property
+    def was_openai_mode(self) -> bool:
+        """True when the legacy row classified over HTTP rather than locally."""
+        mode = self.raw.get("ModelMode")
+        if isinstance(mode, bool):  # bool is an int; a True here is not mode 1
+            return False
+        if isinstance(mode, int):
+            return mode == WINFORMS_MODELMODE_OPENAI
+        return isinstance(mode, str) and mode.strip().lower() == "openai"
 
 
 @dataclass
@@ -316,8 +339,20 @@ def _count_images(directory: Path) -> int:
 
 
 def _legacy_ai_config(row: dict[str, Any]) -> dict[str, Any] | None:
+    """One model's `AIModelConfig`, or None when there is nothing worth taking.
+
+    "Present" is not enough: the legacy app writes the blob on every model, so
+    an install's first row is usually an all-blank one. Treating that as the
+    config would let it win over the model that actually holds the endpoint and
+    report a successful import that changed nothing.
+    """
     value = row.get("AIModelConfig")
-    return value if isinstance(value, dict) and value else None
+    if not isinstance(value, dict) or not value:
+        return None
+    parsed = AIModelConfig.from_dict(value)
+    if not (parsed.endpoint_url or parsed.model or parsed.prompt):
+        return None
+    return value
 
 
 def survey(root: Path | str) -> LegacySurvey:
@@ -358,7 +393,9 @@ def survey(root: Path | str) -> LegacySurvey:
             headstamp_count=headstamp_counts.get(legacy_id, 0),
         )
         out.models.append(entry)
-        if kind == "mlnet":
+        if entry.was_openai_mode:
+            out.warnings.append(OPENAI_MODE_WARNING.format(name=entry.name))
+        elif kind == "mlnet":
             out.warnings.append(MLNET_WARNING.format(name=entry.name))
 
     defaults = raw.get("Defaults")
@@ -555,6 +592,77 @@ def _package_slots(raw_db: dict[str, Any], legacy_id: int) -> dict[str, list[str
     return out
 
 
+_COUNT_FIELDS = (
+    "models_imported",
+    "models_updated",
+    "headstamps_imported",
+    "parents_imported",
+    "slots_assigned",
+)
+
+
+def _merge_counts(into: ImportResult, delta: ImportResult) -> None:
+    for name in _COUNT_FIELDS:
+        setattr(into, name, getattr(into, name) + getattr(delta, name))
+
+
+def _import_one_model(
+    entry: LegacyModel,
+    raw_db: dict[str, Any],
+    *,
+    options: ImportOptions,
+    model_repo: ModelRepo,
+    cart_repo: CartridgeRepo,
+    headstamp_repo: HeadstampRepo,
+    parent_repo: HeadstampParentRepo,
+    settings_repo: SettingsRepo,
+    root: Path,
+    remembered: dict[str, int],
+    result: ImportResult,
+) -> int:
+    """Bring one legacy `Models` row across and return our model id.
+
+    Raises rather than warns: the caller runs this inside its own SAVEPOINT and
+    turns a failure into a skipped model.
+    """
+    model = model_from_export_dict(entry.raw)
+    model.name = entry.name
+    existing = _find_existing(entry, model, model_repo=model_repo, remembered=remembered)
+    model.cartridge_id = (
+        existing.cartridge_id if existing is not None else cart_repo.get_or_create(entry.cartridge_name).id
+    )
+    if existing is not None:
+        model.id = existing.id
+        model.name = existing.name
+        # The user's local API credentials outlive a re-import: the legacy
+        # row's are per-model and may well be blank.
+        model.ai_model_config = existing.ai_model_config
+        model.model_path = existing.model_path
+        model_repo.update(model)
+        saved_id = existing.id
+        result.models_updated += 1
+    else:
+        saved_id = model_repo.create(model).id
+        result.models_imported += 1
+    _remember_import(settings_repo, root, entry.legacy_id, saved_id)
+
+    if options.headstamps:
+        _import_headstamps(
+            entry,
+            saved_id,
+            raw_db,
+            headstamp_repo=headstamp_repo,
+            parent_repo=parent_repo,
+            result=result,
+        )
+        package = _package_slots(raw_db, entry.legacy_id)
+        if package:
+            settings_repo.set(f"{_PACKAGE_SLOTS_KEY}:{saved_id}", package)
+        if bool(entry.raw.get("UseParentClassificationsAtRuntime")):
+            settings_repo.set(f"{_USE_PARENT_RUNTIME_KEY}:{saved_id}", True)
+    return saved_id
+
+
 def _import_serial(defaults: dict[str, Any], settings_json: dict[str, Any], config: Config) -> None:
     """Port, baud, slot count and the board's init values.
 
@@ -611,14 +719,29 @@ def _import_image_processing(defaults: dict[str, Any], config: Config) -> bool:
     return touched
 
 
-def _import_ai_config(survey_in: LegacySurvey, config: Config) -> bool:
-    """The first `AIModelConfig` found on any model, into the app-level `api`.
+def _ai_config_candidates(survey_in: LegacySurvey, default_legacy_id: int = 0) -> list[LegacyModel]:
+    """Legacy models in the order their AI settings should be preferred.
 
     Per-model in the legacy app, app-level here (§4, "Active-model concept"), so
-    there is nothing better to do than take the first one that is filled in.
+    exactly one of them wins. A model set to OpenAI mode is the one that was
+    genuinely classifying over HTTP, so it outranks the legacy active model,
+    which outranks whatever happens to be declared first.
+    """
+
+    def rank(entry: LegacyModel) -> int:
+        if entry.was_openai_mode:
+            return 0
+        return 1 if entry.legacy_id == default_legacy_id else 2
+
+    return sorted(survey_in.models, key=rank)
+
+
+def _import_ai_config(survey_in: LegacySurvey, config: Config, default_legacy_id: int = 0) -> bool:
+    """The best `AIModelConfig` on any model, into the app-level `api`.
+
     `AIModelConfig.from_dict` already knows the legacy `OpenAI_*` key spellings.
     """
-    for entry in survey_in.models:
+    for entry in _ai_config_candidates(survey_in, default_legacy_id):
         raw = _legacy_ai_config(entry.raw)
         if raw is None:
             continue
@@ -659,6 +782,10 @@ def import_installation(
     DB writes run inside one transaction; the bulk file copies deliberately do
     not, since holding the SQLite write lock for the minutes a 12,000-image copy
     takes would block the whole app.
+
+    A model this app cannot accept is skipped with a warning rather than
+    failing the run — an install's worth of images is not worth losing to one
+    bad row.
     """
     root = Path(root)
     options = (options or ImportOptions()).normalized()
@@ -695,42 +822,32 @@ def import_installation(
             for entry in survey_in.models:
                 if progress:
                     progress(f"Importing '{entry.name}'…")
-                model = model_from_export_dict(entry.raw)
-                model.name = entry.name
-                existing = _find_existing(entry, model, model_repo=model_repo, remembered=remembered)
-                model.cartridge_id = (
-                    existing.cartridge_id if existing is not None else cart_repo.get_or_create(entry.cartridge_name).id
-                )
-                if existing is not None:
-                    model.id = existing.id
-                    model.name = existing.name
-                    # The user's local API credentials outlive a re-import: the
-                    # legacy row's are per-model and may well be blank.
-                    model.ai_model_config = existing.ai_model_config
-                    model.model_path = existing.model_path
-                    model_repo.update(model)
-                    saved_id = existing.id
-                    result.models_updated += 1
-                else:
-                    saved_id = model_repo.create(model).id
-                    result.models_imported += 1
+                # A nested transaction is a SAVEPOINT, so a row this app will
+                # not accept rolls back to just before itself. Counts go to a
+                # scratch result for the same reason — merged only once the
+                # row has actually committed.
+                delta = ImportResult()
+                try:
+                    with db.transaction():
+                        saved_id = _import_one_model(
+                            entry,
+                            raw_db,
+                            options=options,
+                            model_repo=model_repo,
+                            cart_repo=cart_repo,
+                            headstamp_repo=headstamp_repo,
+                            parent_repo=parent_repo,
+                            settings_repo=settings_repo,
+                            root=root,
+                            remembered=remembered,
+                            result=delta,
+                        )
+                except (ValueError, TypeError, sqlite3.Error) as exc:
+                    log.warning("winforms import: skipping model %r: %s", entry.name, exc)
+                    result.warnings.append(MODEL_FAILED_WARNING.format(name=entry.name, error=exc))
+                    continue
+                _merge_counts(result, delta)
                 imported[entry.legacy_id] = saved_id
-                _remember_import(settings_repo, root, entry.legacy_id, saved_id)
-
-                if options.headstamps:
-                    _import_headstamps(
-                        entry,
-                        saved_id,
-                        raw_db,
-                        headstamp_repo=headstamp_repo,
-                        parent_repo=parent_repo,
-                        result=result,
-                    )
-                    package = _package_slots(raw_db, entry.legacy_id)
-                    if package:
-                        settings_repo.set(f"{_PACKAGE_SLOTS_KEY}:{saved_id}", package)
-                    if bool(entry.raw.get("UseParentClassificationsAtRuntime")):
-                        settings_repo.set(f"{_USE_PARENT_RUNTIME_KEY}:{saved_id}", True)
 
         if options.serial:
             _import_serial(defaults, settings_json, config)
@@ -738,7 +855,7 @@ def import_installation(
         if options.image_processing:
             result.image_processing_imported = _import_image_processing(defaults, config)
         if options.ai_config:
-            result.ai_config_imported = _import_ai_config(survey_in, config)
+            result.ai_config_imported = _import_ai_config(survey_in, config, activate_legacy_id)
         if result.serial_imported or result.image_processing_imported or result.ai_config_imported:
             config.save()
 

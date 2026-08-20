@@ -628,7 +628,7 @@ Training images and headstamps belong to a model, so they are only available
 when **Models** is ticked. Anything this installation does not have is greyed
 out rather than offered.
 
-Two things are worth knowing before you run it:
+A few things are worth knowing before you run it:
 
 - **Models trained with the Windows app's older ML.NET pipeline cannot
   classify here.** They are still imported — with their headstamps and images
@@ -637,6 +637,14 @@ Two things are worth knowing before you run it:
 - **A model that came from the [Community](#community) stays read-only**, the
   same as one downloaded here: the trained model file belongs to whoever
   published it, so it is not trainable. Your own models stay trainable.
+- **A Windows model set to classify over an OpenAI server has no direct
+  equivalent here.** Classifying over HTTP is a whole-app setting in this app
+  ([AI Config](#ai-config)), not something a single model carries, so tick
+  **AI Config** to bring the endpoint, model and prompt across. The model
+  itself still comes over — with its headstamps and images — as one you can
+  train locally. The import says which models this applied to.
+- **One model that cannot be imported does not stop the rest.** It is
+  skipped, the reason is listed at the end, and everything else still lands.
 
 Running the import a second time is safe. A model already brought across is
 updated in place rather than duplicated, your slot assignments and sorting
