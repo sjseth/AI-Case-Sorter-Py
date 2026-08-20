@@ -174,8 +174,9 @@ def test_menus(window) -> None:
 
 
 def test_theme_section_hosts_the_theme_combo(window) -> None:
-    window.sidebar_buttons["Settings"].click()
-    window.settings_list.setCurrentRow(window.settings_list.count() - 1)
+    # By name, not by row: Theme stopped being the last section when "Import
+    # from Windows" was added, and this test is about the section's content.
+    window._open_settings_section("Theme")
 
     assert window.settings_list.currentItem().text() == "Theme"
     page = window.settings_pages.currentWidget()

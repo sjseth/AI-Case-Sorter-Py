@@ -254,6 +254,56 @@ sanctioned way for worker threads to update the UI.
   of SQLite) — model **ZIP** import/export; see the *Training & evaluation*
   entry below for what it does, kept there to stay next to the training
   workflow it feeds.
+- **`winforms_import.py`** — one-shot import of an existing **WinForms ("AI
+  Brass Sorter") installation**, so a user moving off the Windows app doesn't
+  rebuild their setup by hand (#98). The legacy app keeps everything in its
+  *install directory* — `Data/ConfigDB.sjdb.json` (the whole database as one
+  JSON document, BOM-prefixed), `Data/Settings.json`, `training/images/<id>/`
+  and `training/models/<id>.zip` — and **nothing in the registry**:
+  `HKCU\Software\AICaseSorter` exists but is empty, the only value under
+  `HKCU\Software\SJSeth\...` is an MSI-authored `DesktopFolder`, and the
+  uninstall entry's `InstallLocation` is blank, so a custom install is found
+  by asking the user, not by reading a key.
+  `survey()` reports what a root offers without importing anything (it is what
+  populates the dialog's per-item counts and what keeps the first-run offer
+  silent); `import_installation()` does the work, per ticked item.
+  Two things it leans on and one it must not:
+  - Legacy `Models` rows are **the same PascalCase shape** as an export ZIP's
+    `ModelInfo`, so they go straight to `model_io.model_from_export_dict` —
+    `ModelType`/`ModelMode` int mapping and all — rather than being re-parsed.
+    `ModelType` 1/2 therefore lands as `ReadOnly`/`CommunityManaged`, i.e. a
+    community model stays non-trainable exactly as a download here would.
+    **This module is the only caller of `model_from_export_dict` with no clamp
+    of its own**, so every value in `_WINFORMS_MODELMODE_INT_TO_STR` has to be
+    a mode `ModelRepo` accepts — `test_model_io.py` pins that. `ModelMode` 2
+    (OpenAI) is the one with no equivalent to preserve: classifying over HTTP
+    is AI Config mode, the *absence* of an active model, so the row imports as
+    a retrainable ConvNeXt shell, `survey()` warns which model it was, and the
+    server settings ride the AI Config item instead. That item prefers the
+    OpenAI-mode model's `AIModelConfig` — the legacy app writes the blob on
+    every model and most are blank, so "first non-empty" picked the wrong one.
+  - **`training/models/<id>.zip` is a `torch.save` archive, not a ZIP of
+    anything** — it copies to `<id>.pth` verbatim. The legacy **ML.NET**
+    pipeline writes its models beside it under the same extension, so
+    `_checkpoint_kind` looks inside (`*/data.pkl` = torch,
+    `TransformerChain/` = ML.NET) before copying. An ML.NET-only model is
+    imported as a **shell** — metadata, headstamps and images, no checkpoint —
+    because the images are the expensive part and the `NoLocalCheckpointError`
+    path already explains a model that can't classify yet.
+  - **Never destructive to the source.** Files are copied; nothing in the
+    install directory is written, moved or removed. Re-running is idempotent:
+    a community UID match or the per-root `winforms_imported_models` settings
+    map updates the row in place, so slot assignments and templates survive
+    and images already copied are skipped.
+  - **One bad row costs that row.** Each model imports inside its own nested
+    `db.transaction()` (a SAVEPOINT), counted into a scratch `ImportResult`
+    merged only on success, so a legacy row this app refuses is skipped with a
+    warning instead of rolling back an install's worth of images.
+  Slot assignments are **inverted on the way in** — the legacy DB stores a slot
+  listing its headstamps (`SlotConfigs[].Config`), ours stores a slot on the
+  headstamp row. `Defaults.IP_*` maps to `image_proc.linescan` **only**: the
+  legacy pipeline has no Hough stage, so writing its numbers into ours would
+  silently detune a working crop.
 
 ### Filesystem (`sorter/paths.py` — top level, not under `data/`)
 - **`paths.py`** — single source of truth for the on-disk layout (see §6) and
@@ -638,7 +688,7 @@ modal), and never gate on `is_available()`.
 | **Train** | `train_page.py` | Feed→capture→classify→label→save loop; "Sort While Training"; launches training. |
 | **AI Config** | `ai_page.py` | HTTP server config (endpoint/key/model/prompt/encoding), headstamp manager, single-shot test. |
 | **Community** | `community_page.py` | Browse/search/download community models; share entry point. Auth-gated. |
-| **Settings** | `settings_{camera,serial,imageproc}.py` + `app.py`'s Theme section | Camera, Serial, Image Processing, Theme — listed in `SETTINGS_SECTIONS`, reached by name. |
+| **Settings** | `settings_{camera,serial,imageproc}.py` + `app.py`'s Theme section + `dialog_winforms_import.py` | Camera, Serial, Image Processing, Theme, Import from Windows — listed in `SETTINGS_SECTIONS`, reached by name. |
 
 Docks: `serial_monitor.py`, `history_view.py`, `help_viewer.py`, and the
 Themes panel in `app.py`. Dialogs are `dialog_*.py`.
