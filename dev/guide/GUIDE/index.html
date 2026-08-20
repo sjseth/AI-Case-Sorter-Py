@@ -1882,6 +1882,20 @@ model:</p>
   console for it. Closing the console mid-run asks first, and confirming
   cancels the run — the console is the only thing it reports to.</li>
 </ul>
+<p>The console <strong>opens with what the run is using</strong>: the PyTorch version, whether
+CUDA was found, which GPU (and how much memory it has) or that it is training
+on the CPU, then every setting the run was given. That block is the first
+thing to quote when a run is slower than expected or a result looks wrong.</p>
+<p>Every run is also written to a file, so the console closing doesn't lose it:
+<code>training-&lt;date&gt;.log</code> in the <code>logs</code> folder under your data folder (<strong>File →
+Open data folder</strong>), and the console's first line says exactly where. The last
+few runs are kept. Two shortcuts for sending one on:</p>
+<ul>
+<li><strong>Save log…</strong> on the console writes what you are looking at wherever you
+  choose;</li>
+<li><strong>Help → Export support package…</strong> puts the most recent run's log in the ZIP
+  as <code>training.log</code>, with your folder paths replaced by placeholders.</li>
+</ul>
 <p>Training needs PyTorch. If it isn't installed, the app offers to install it
 here.</p>
 <h2 id="ai-config">AI Config<a class="headerlink" href="#ai-config" title="Permanent link">&para;</a></h2>
@@ -2097,11 +2111,14 @@ a plain-text report — the app version and platform, the active model, run
 options, training configuration, image processing, serial and camera
 settings, and the AI Config setup.</p>
 <p><strong>Copy to clipboard</strong> gives you the text to paste on the community Discord
-when asking for help. <strong>Save package…</strong> writes a ZIP holding the same report
-plus a machine-readable <code>config.json</code>.</p>
+when asking for help. <strong>Save package…</strong> writes a ZIP holding the same report,
+a machine-readable <code>config.json</code>, and — if you have trained a model — the most
+recent run's log as <code>training.log</code>.</p>
 <p>It is safe to share: the API key is reported only as "set" or "not set",
 nothing is read from the sign-in cache, and file paths are shown relative to
-the data folder, so your home directory never appears.</p>
+the data folder, so your home directory never appears. The training log gets
+the same treatment: your folder paths are replaced by <code>&lt;data&gt;</code>, <code>&lt;app&gt;</code> and
+<code>&lt;home&gt;</code> before it goes in.</p>
 <h3 id="updates">Updates<a class="headerlink" href="#updates" title="Permanent link">&para;</a></h3>
 <p>The app checks for a new release shortly after it starts and, if there is
 one, offers it in the status bar. <strong>Help → Check for updates…</strong> asks
