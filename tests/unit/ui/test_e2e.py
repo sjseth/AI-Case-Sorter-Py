@@ -382,7 +382,10 @@ def test_demo_c_model_lifecycle(config, window, monkeypatch, tmp_path) -> None:
     select_model(page, created.id)
     page.ask_save_path = lambda _title, _name: str(archive)
     page.buttons["Export…"].click()
-    assert drain_until(window, archive.exists), "the export worker never finished"
+    # The notification, not the file: the archive lands on the worker thread
+    # while "Export complete" is still on its way through the bus.
+    assert drain_until(window, lambda: "Export complete" in window.notify.titles), "the export worker never finished"
+    assert archive.exists()
 
     # Import is a filter-bar button with no handle on the page, so it is called
     # by name; everything it goes on to ask is a replaced hook.
@@ -602,5 +605,5 @@ def test_demo_e_a_model_that_cannot_classify_still_lists_and_exports(config, win
     page.ask_save_path = lambda _title, _name: str(archive)
     page.buttons["Export…"].click()
 
-    assert drain_until(window, archive.exists)
-    assert window.notify.titles == ["Export complete"]
+    assert drain_until(window, lambda: window.notify.titles == ["Export complete"])
+    assert archive.exists()

@@ -843,11 +843,24 @@ def seed_exportable(config: Any, name: str, **fields: Any) -> Model:
 
 
 def export_to(page, window, model: Model, dest: Path) -> Path:
+    """Export `model` and wait for the export to be *reported*, not merely written.
+
+    Waiting on ``dest.exists()`` is a race: ``export_model`` finishes its atomic
+    ``os.replace`` on the worker thread, so the file appears while the
+    "Export complete" notification is still travelling back through the bus.
+    A caller that then reads ``notify`` sees nothing, and — worse — the next
+    helper to wait for "a new notification" is satisfied by this one, and
+    returns before *its* worker has finished. `_on_exported` is the completion.
+    """
     page.refresh()
     select(page, model.id)
     page.ask_save_path = lambda _title, _name: str(dest)
+    before = window.notify.titles.count("Export complete")
     page.export_selected()
-    assert drain_until(window, dest.exists), "export worker never finished"
+    assert drain_until(window, lambda: window.notify.titles.count("Export complete") > before), (
+        "export worker never finished"
+    )
+    assert dest.exists(), "the export reported success without writing the archive"
     return dest
 
 
@@ -857,6 +870,41 @@ def import_from(page, window, archive: Path, choice: str | None = None) -> None:
     before = len(window.notify.calls)
     page.import_archive()
     assert drain_until(window, lambda: len(window.notify.calls) > before), "import worker never finished"
+
+
+def test_export_to_waits_for_the_notification_not_the_archive(page, window, config, tmp_path, monkeypatch) -> None:
+    """`export_to` must not return while the export's own notification is in flight.
+
+    This is the macOS CI flake, made deterministic. The helper used to wait on
+    the archive appearing — which the *worker thread* satisfies before it posts
+    anything — so it could return with "Export complete" still travelling
+    through the bus. `import_from` then waits for "a notification that wasn't
+    there before", the export's late arrival satisfies it, and the import worker
+    is still running: the row it created reads back with `model_path` None.
+
+    The stub widens that window on purpose. The sleep is simulated slow work
+    inside the export, not the test waiting on an async result — `drain_until`
+    is still what does the waiting.
+    """
+    import time
+
+    from sorter.ui import models_page as models_page_module
+
+    def _slow_export(output_path, *_args, **_kwargs):
+        out = Path(output_path)
+        out.write_bytes(b"PK\x05\x06" + bytes(18))  # a valid empty zip
+        time.sleep(0.25)  # the archive exists; the notification is nowhere near
+        return out
+
+    monkeypatch.setattr(models_page_module, "export_model", _slow_export)
+    model = seed_exportable(config, "Shared", community_model_uid="uid-in-flight")
+
+    export_to(page, window, model, tmp_path / "shared.zip")
+
+    assert window.notify.titles[-1] == "Export complete"
+    settled = len(window.notify.calls)
+    window.bus.drain()
+    assert len(window.notify.calls) == settled, "a completion notification was still on the bus"
 
 
 def test_export_writes_a_real_archive(page, window, config, tmp_path) -> None:
