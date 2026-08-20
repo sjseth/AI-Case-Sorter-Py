@@ -273,6 +273,15 @@ sanctioned way for worker threads to update the UI.
     `ModelType`/`ModelMode` int mapping and all — rather than being re-parsed.
     `ModelType` 1/2 therefore lands as `ReadOnly`/`CommunityManaged`, i.e. a
     community model stays non-trainable exactly as a download here would.
+    **This module is the only caller of `model_from_export_dict` with no clamp
+    of its own**, so every value in `_WINFORMS_MODELMODE_INT_TO_STR` has to be
+    a mode `ModelRepo` accepts — `test_model_io.py` pins that. `ModelMode` 2
+    (OpenAI) is the one with no equivalent to preserve: classifying over HTTP
+    is AI Config mode, the *absence* of an active model, so the row imports as
+    a retrainable ConvNeXt shell, `survey()` warns which model it was, and the
+    server settings ride the AI Config item instead. That item prefers the
+    OpenAI-mode model's `AIModelConfig` — the legacy app writes the blob on
+    every model and most are blank, so "first non-empty" picked the wrong one.
   - **`training/models/<id>.zip` is a `torch.save` archive, not a ZIP of
     anything** — it copies to `<id>.pth` verbatim. The legacy **ML.NET**
     pipeline writes its models beside it under the same extension, so
@@ -286,6 +295,10 @@ sanctioned way for worker threads to update the UI.
     a community UID match or the per-root `winforms_imported_models` settings
     map updates the row in place, so slot assignments and templates survive
     and images already copied are skipped.
+  - **One bad row costs that row.** Each model imports inside its own nested
+    `db.transaction()` (a SAVEPOINT), counted into a scratch `ImportResult`
+    merged only on success, so a legacy row this app refuses is skipped with a
+    warning instead of rolling back an install's worth of images.
   Slot assignments are **inverted on the way in** — the legacy DB stores a slot
   listing its headstamps (`SlotConfigs[].Config`), ours stores a slot on the
   headstamp row. `Defaults.IP_*` maps to `image_proc.linescan` **only**: the
