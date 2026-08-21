@@ -147,7 +147,7 @@ SETTINGS_ACTIVITY = (SETTINGS, "Settings")
 # One line each, always set, saying only whether this entry is the live one.
 ACTIVITY_TOOLTIP_LIVE = "Classification uses this now"
 TRAIN_TOOLTIP_MUTED = "Activates when a local model is active — see Models"
-AI_CONFIG_TOOLTIP_MUTED = "Activates when 'Use AI Config' is selected on Models"
+AI_CONFIG_TOOLTIP_MUTED = "Activates when 'Use AI Config' or an OpenAI model is selected on Models"
 SIDEBAR_ICON_SIZE = 26
 # "Import from Windows" is last: it is a one-off errand, not a knob, and its
 # name is also a GUIDE.md heading (help_viewer slugifies section names
@@ -1675,16 +1675,19 @@ class QtMainWindow(QMainWindow):
         """The mode inks the Train / AI Config pair. **Neither is ever hidden**
         (JL: a hidden activity is one nobody finds).
 
-        Exactly one of the two is live — a trainable local model, or no active
-        model at all — and a community model makes it neither. The other goes
-        muted: still clickable, with the explainer behind it (train_page's
-        and ai_page's unavailable panels) saying why and what to do.
+        At most one of the two is live — a trainable local model makes it
+        Train, no active model or an active openai-mode model makes it AI
+        Config (both classify over HTTP, and the page edits whichever config
+        is in effect) — and a community model makes it neither. The other
+        goes muted: still clickable, with the explainer behind it
+        (train_page's and ai_page's unavailable panels) saying why and what
+        to do.
         """
-        from ..data.models import is_trainable
+        from ..data.models import is_openai_model, is_trainable
 
         model = self._active_model()
         train_live = is_trainable(model)
-        ai_live = model is None
+        ai_live = model is None or is_openai_model(model)
         self._set_activity_unavailable("Train", not train_live)
         self._set_activity_unavailable(AI_CONFIG_ACTIVITY, not ai_live)
         self.sidebar_buttons["Train"].setToolTip(ACTIVITY_TOOLTIP_LIVE if train_live else TRAIN_TOOLTIP_MUTED)
@@ -2141,11 +2144,19 @@ class QtMainWindow(QMainWindow):
         QMessageBox.warning(self, title, text)
 
     def _ai_credentials_missing(self) -> bool:
-        """AI Config mode can't classify without an API key and a model name.
+        """HTTP classification can't run without an API key and a model name.
 
-        Scoped to that mode: a local model never touches the HTTP client, so
-        an unset key there is no reason to refuse a run.
+        Scoped to the HTTP paths: a local model never touches the HTTP
+        client, so an unset key there is no reason to refuse a run. An
+        active openai-mode model is checked against **its own** config — the
+        same one `classify_active` will use — never the app-level one.
         """
+        from ..data.models import is_openai_model
+
+        model = classifier.active_model(self.db)
+        if is_openai_model(model):
+            cfg = model.ai_model_config if model is not None else None
+            return cfg is None or not (cfg.api_key and cfg.model)
         if classifier.uses_local_inference(self.db):
             return False
         api = self.config.api

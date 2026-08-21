@@ -398,3 +398,75 @@ def test_test_shot_needs_credentials(section, window) -> None:
     section.test_button.click()
 
     assert window.notify.calls and window.notify.calls[0][0] == "AI not configured"
+
+
+# ----- the active openai model as the config target ---------------------------
+
+
+def _seed_openai_model(config: Config, name: str = "HTTP model", **cfg: Any) -> int:
+    from sorter.data.models import AIModelConfig, Model
+    from sorter.data.repository import CartridgeRepo, ModelRepo
+
+    cart = CartridgeRepo(config.db).list()[0]
+    model = ModelRepo(config.db).create(
+        Model(name=name, cartridge_id=cart.id, model_mode="openai", ai_model_config=AIModelConfig(**cfg))
+    )
+    SettingsRepo(config.db).set_active_model_id(model.id)
+    return model.id
+
+
+def test_form_targets_the_active_openai_model(page, window, config) -> None:
+    """An active openai model keeps the page live — and rebinds the server
+    fields to *its* config, not the app-level one."""
+    _seed_openai_model(config, endpoint_url="http://model-box:9", model="qwen-vl")
+
+    page.refresh_mode()
+
+    assert page.is_available()
+    assert page.section.endpoint_edit.text() == "http://model-box:9"
+    assert page.section.model_edit.text() == "qwen-vl"
+    assert "HTTP model" in page.section.target_label.text()
+
+
+def test_save_writes_to_the_model_row_not_the_app_config(page, window, config) -> None:
+    from sorter.data.repository import ModelRepo
+
+    model_id = _seed_openai_model(config, endpoint_url="http://old")
+    page.refresh_mode()
+    app_endpoint_before = config.api["endpoint_url"]
+
+    page.section.endpoint_edit.setText("http://new-endpoint:8000")
+    page.section.model_edit.setText("gpt-5")
+    page.section.save()
+
+    saved = ModelRepo(config.db).get(model_id)
+    assert saved is not None
+    assert saved.ai_model_config.endpoint_url == "http://new-endpoint:8000"
+    assert saved.ai_model_config.model == "gpt-5"
+    # The app-level config the AI Config mode uses is untouched.
+    assert Config(config.db).load().api["endpoint_url"] == app_endpoint_before
+
+
+def test_refresh_keeps_unsaved_edits_while_the_target_is_unchanged(page, window, config) -> None:
+    """The old guarantee, kept per target: a mode/changed event for the same
+    target must not discard a half-typed endpoint."""
+    _seed_openai_model(config)
+    page.refresh_mode()
+
+    page.section.endpoint_edit.setText("http://half-typed")
+    page.refresh_mode()
+
+    assert page.section.endpoint_edit.text() == "http://half-typed"
+
+
+def test_deactivating_rebinds_the_app_level_settings(page, window, config) -> None:
+    _seed_openai_model(config, endpoint_url="http://model-box:9")
+    page.refresh_mode()
+    assert page.section.endpoint_edit.text() == "http://model-box:9"
+
+    SettingsRepo(config.db).clear_active_model()
+    page.refresh_mode()
+
+    assert page.is_available()
+    assert page.section.endpoint_edit.text() == str(config.api["endpoint_url"])
+    assert page.section.target_label.text() == ai_page.TARGET_GLOBAL_TEXT

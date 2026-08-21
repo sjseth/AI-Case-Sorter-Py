@@ -2,8 +2,10 @@
 
 Called from `RunController` so the run loop doesn't need to know which backend
 is active. **The active model alone decides the backend:**
-  - A model is active → local inference, always
-  - AI Config mode (no active model) → HTTP via `api_client.classify`
+  - A ConvNeXt model is active → local inference, always
+  - An openai-mode model is active → HTTP via `api_client.classify`, using
+    **that model's own** `ai_model_config` — never the app-level AI Config
+  - AI Config mode (no active model) → HTTP with the app-level config
 
 A local model whose checkpoint is missing raises `NoLocalCheckpointError`. It
 does **not** quietly become an HTTP classification. That fallback used to
@@ -32,7 +34,7 @@ import numpy as np
 
 from .. import paths
 from ..data.db import Database
-from ..data.models import Model
+from ..data.models import Model, is_openai_model
 from ..data.repository import ModelRepo, SettingsRepo
 from . import api_client, local_inference
 
@@ -71,20 +73,25 @@ def uses_local_inference(db: Database | None) -> bool:
     classify": a model with a missing checkpoint still routes locally, it
     just fails loudly. Callers that need to know whether it will actually
     work should ask `checkpoint_problem` first.
+
+    False for an openai-mode model: it classifies over HTTP, so it needs no
+    PyTorch (the torch gate keys off this) and no inference device.
     """
-    return active_model(db) is not None
+    model = active_model(db)
+    return model is not None and not is_openai_model(model)
 
 
 def checkpoint_problem(db: Database | None) -> str | None:
     """A user-facing explanation of why the active model can't classify.
 
-    None when there's nothing wrong — AI Config mode, or a local model whose
-    checkpoint is present. The UI uses this to refuse *before* the machine
-    feeds a case; `classify_active` raises the same text as a backstop for a
-    checkpoint that disappears mid-run.
+    None when there's nothing wrong — AI Config mode, an openai-mode model
+    (no checkpoint to miss), or a local model whose checkpoint is present.
+    The UI uses this to refuse *before* the machine feeds a case;
+    `classify_active` raises the same text as a backstop for a checkpoint
+    that disappears mid-run.
     """
     model = active_model(db)
-    if model is None or has_local_checkpoint(model):
+    if model is None or is_openai_model(model) or has_local_checkpoint(model):
         return None
     return _checkpoint_detail(model)
 
@@ -133,12 +140,17 @@ def classify_active(
     """Classify `image_bgr` using whichever backend the active model selects.
 
     Raises `NoLocalCheckpointError` when a local model is active but its
-    checkpoint is missing. Uses HTTP only in AI Config mode (which includes
-    `db is None`, for tests that don't need a database).
+    checkpoint is missing. Uses HTTP in AI Config mode (which includes
+    `db is None`, for tests that don't need a database) with the app-level
+    `api_cfg`, and for an active openai-mode model with **its own** config —
+    the passed `api_cfg` is deliberately ignored there, so the app-level AI
+    Config can never leak into a model that carries its own server settings.
     """
     model = active_model(db)
     if model is None:
         return api_client.classify(image_bgr, headstamps, api_cfg)
+    if is_openai_model(model):
+        return api_client.classify(image_bgr, headstamps, model.ai_model_config.to_dict())
 
     # `not model.model_path` is folded into the guard (redundant with
     # `has_local_checkpoint`'s own check) so the type checker can narrow

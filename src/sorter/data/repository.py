@@ -13,8 +13,8 @@ from typing import Any
 
 from .db import Database
 from .models import (
+    MODEL_MODES,
     SLOT_TEMPLATE_MODES,
-    SUPPORTED_MODEL_MODES,
     Cartridge,
     Headstamp,
     HeadstampParent,
@@ -135,7 +135,7 @@ class ModelRepo:
     # ---- write ---------------------------------------------------------------
 
     def create(self, model: Model) -> Model:
-        if model.model_mode not in SUPPORTED_MODEL_MODES:
+        if model.model_mode not in MODEL_MODES:
             raise ValueError(f"Unsupported model_mode: {model.model_mode!r}")
         cur = self.db.conn.execute(
             """
@@ -179,7 +179,7 @@ class ModelRepo:
     def update(self, model: Model) -> None:
         if not model.id:
             raise ValueError("Cannot update a model with no id")
-        if model.model_mode not in SUPPORTED_MODEL_MODES:
+        if model.model_mode not in MODEL_MODES:
             raise ValueError(f"Unsupported model_mode: {model.model_mode!r}")
         self.db.conn.execute(
             """

@@ -12,11 +12,18 @@ Two things worth knowing, both noted where they happen:
 Unlike the settings pages, this one saves on the **Save** button, not on edit:
 a half-typed endpoint must not become the live one.
 
-The page is a two-card stack, exactly as Train's is: the form when this is the
-backend that classifies (no active model), or — when a local model is doing it
-instead — a panel naming that model and offering the jump to the Models page.
-The sidebar entry is never hidden (app.py's ``_apply_mode_visibility``), so
-this page is what has to answer a click on the muted half of the pair.
+The page is a two-card stack, exactly as Train's is: the form when HTTP is
+what classifies — AI Config mode (no active model, app-level settings) or an
+active **openai-mode model** (that model's own ``ai_model_config``) — or, when
+a local ConvNeXt model is doing it instead, a panel naming that model and
+offering the jump to the Models page. The sidebar entry is never hidden
+(app.py's ``_apply_mode_visibility``), so this page is what has to answer a
+click on the muted half of the pair.
+
+The server fields therefore have a **target**: the active openai model's row,
+or the app-level ``config.api``. ``retarget()`` rebinds them only when the
+target actually changes, so a mode/changed event can't discard a half-typed
+endpoint (the old guarantee, kept per target).
 """
 
 from __future__ import annotations
@@ -44,6 +51,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..data.models import AIModelConfig, Model, is_openai_model
 from ..data.repository import ModelRepo
 from ..hardware.image_proc import apply_primer_mask, crop_headstamp
 from ..ml import api_client
@@ -64,11 +72,28 @@ LOCAL_MODEL_NOTICE_UNNAMED = (
 )
 MODELS_JUMP_TEXT = "Go to Models"
 NAME_HINT = "Add creates a headstamp; Rename applies the typed name to the selected one."
+# Caption over the server form saying whose settings these are — the whole
+# point of per-model configs is that the answer isn't always the same.
+TARGET_GLOBAL_TEXT = "App-level settings — used in AI Config mode (no active model)."
+TARGET_MODEL_TEXT = "Settings of the active OpenAI model “{name}” — saved on its model row."
 
 
 def ai_config_mode(win: Any) -> bool:
-    """AI Config mode = no active local model. Only then do these settings apply."""
+    """AI Config mode = no active local model. The app-level settings apply."""
     return win.config.settings.get_active_model_id() is None
+
+
+def openai_target(win: Any) -> Model | None:
+    """The active model, when it is an openai-mode one — the other HTTP target.
+
+    None in AI Config mode and for any ConvNeXt/community model. Read fresh on
+    every call, like ``active_model_name``.
+    """
+    model_id = win.config.settings.get_active_model_id()
+    if model_id is None:
+        return None
+    model = ModelRepo(win.config.db).get(model_id)
+    return model if is_openai_model(model) else None
 
 
 def active_model_name(win: Any) -> str | None:
@@ -88,6 +113,9 @@ class AiSection(QWidget):
         self._win = win
         # Guards the slot spin box while it is being set to follow the selection.
         self._syncing = False
+        # Which config the server fields are bound to: an openai model's row
+        # id, or None for the app-level ``config.api``. Set by ``retarget()``.
+        self._target_model_id: int | None = None
         # Attribute, not method, so tests can replace it (ty rejects
         # assigning over a method) — same pattern as the dialogs' notify.
         self.confirm: Callable[[str, str], bool] = self._ask
@@ -115,6 +143,12 @@ class AiSection(QWidget):
         box = QGroupBox("Server", self)
         column = QVBoxLayout(box)
         api = self._win.config.api
+
+        # Whose settings these are; ``retarget()`` keeps it truthful.
+        self.target_label = QLabel(TARGET_GLOBAL_TEXT, box)
+        self.target_label.setObjectName("mutedLabel")
+        self.target_label.setWordWrap(True)
+        column.addWidget(self.target_label)
 
         form = QFormLayout()
         self.endpoint_edit = QLineEdit(str(api.get("endpoint_url", "")), box)
@@ -178,10 +212,49 @@ class AiSection(QWidget):
             "image_scale": int(self.scale_spin.value()),
         }
 
+    def _populate(self, values: dict[str, Any]) -> None:
+        self.endpoint_edit.setText(str(values.get("endpoint_url", "")))
+        self.key_edit.setText(str(values.get("api_key", "")))
+        self.model_edit.setText(str(values.get("model", "")))
+        self.prompt_edit.setPlainText(str(values.get("prompt", "")))
+        self.quality_spin.setValue(int(values.get("image_quality", 100)))
+        self.scale_spin.setValue(int(values.get("image_scale", 100)))
+
+    def retarget(self) -> None:
+        """Bind the server fields to the active openai model, or the app config.
+
+        A no-op while the target is unchanged, so refreshes triggered by
+        unrelated mode/changed events keep a half-typed edit. Switching
+        targets repopulates wholesale — the fields then show the other
+        config, not a mix.
+        """
+        model = openai_target(self._win)
+        new_id = model.id if model is not None else None
+        if new_id == self._target_model_id:
+            return
+        self._target_model_id = new_id
+        if model is not None:
+            self._populate(model.ai_model_config.to_dict())
+            self.target_label.setText(TARGET_MODEL_TEXT.format(name=model.name))
+        else:
+            self._populate(dict(self._win.config.api))
+            self.target_label.setText(TARGET_GLOBAL_TEXT)
+
     def save(self) -> None:
-        self._win.config.api.update(self._field_values())
-        self._win.config.save()
-        self._win.set_status("AI settings saved.")
+        values = self._field_values()
+        if self._target_model_id is None:
+            self._win.config.api.update(values)
+            self._win.config.save()
+            self._win.set_status("AI settings saved.")
+            return
+        repo = ModelRepo(self._win.config.db)
+        model = repo.get(self._target_model_id)
+        if model is None:  # deleted underneath the open page
+            self._win.set_status("That model no longer exists — nothing saved.")
+            return
+        model.ai_model_config = AIModelConfig.from_dict(values)
+        repo.update(model)
+        self._win.set_status(f"AI settings saved to “{model.name}”.")
 
     # ----- headstamps ---------------------------------------------------------
 
@@ -498,13 +571,15 @@ class AiPage(QWidget):
         return self.stack.currentIndex() == 0
 
     def refresh_mode(self) -> None:
-        """Re-read the active model and the (model-scoped) headstamp list.
+        """Re-read the active model, the headstamp list, and the config target.
 
-        The server fields aren't model-scoped, so they are left alone — a mode
-        change must not discard an edit that hasn't been saved yet.
+        ``retarget()`` rebinds the server fields only when the target really
+        changed — a mode/changed event for the *same* target must not discard
+        an edit that hasn't been saved yet.
         """
         self.section.refresh_list()
-        if ai_config_mode(self._win):
+        self.section.retarget()
+        if ai_config_mode(self._win) or openai_target(self._win) is not None:
             self.stack.setCurrentIndex(0)
             return
         name = active_model_name(self._win)

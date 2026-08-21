@@ -1011,3 +1011,27 @@ def test_a_failed_camera_start_reaches_the_status_bar(window) -> None:
     assert "Settings" in window.statusBar().currentMessage()
     assert "Camera" in window.statusBar().currentMessage()
     assert window._camera_state[1] is False
+
+
+def test_an_openai_model_keeps_ai_config_live_and_train_muted(window, config) -> None:
+    """The mode pair's third state (PR #125 review): an active openai model
+    classifies over HTTP, so AI Config stays the live surface — editing that
+    model's own settings — while Train gets the openai explainer."""
+    from sorter.data.models import AIModelConfig, Model
+    from sorter.data.repository import CartridgeRepo, ModelRepo, SettingsRepo
+
+    cart = CartridgeRepo(config.db).list()[0]
+    model = ModelRepo(config.db).create(
+        Model(name="HTTP model", cartridge_id=cart.id, model_mode="openai", ai_model_config=AIModelConfig())
+    )
+    SettingsRepo(config.db).set_active_model_id(model.id)
+    mode_changed(window)
+
+    assert not window.sidebar_buttons["AI Config"].property("unavailable")
+    assert window.sidebar_buttons["Train"].property("unavailable")
+    assert window.ai_page.is_available()
+    assert "HTTP model" in window.ai_page.section.target_label.text()
+
+    window.sidebar_buttons["Train"].click()
+    assert not window.train_page.is_available()
+    assert "HTTP" in window.train_page.unavailable_title.text()

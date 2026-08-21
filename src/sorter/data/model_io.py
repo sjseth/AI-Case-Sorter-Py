@@ -38,7 +38,8 @@ from typing import Any
 
 from .. import paths
 from .models import (
-    SUPPORTED_MODEL_MODES,
+    MODEL_MODES,
+    OPENAI_MODEL_MODE,
     AIModelConfig,
     Headstamp,
     ImageProcessingConfig,
@@ -109,11 +110,9 @@ WINFORMS_MODELMODE_OPENAI = 2
 _WINFORMS_MODELMODE_INT_TO_STR = {
     0: "convnext_tiny",  # DeepLearning (ResNet50) — can't run, fall back
     1: "convnext_tiny",  # Inception           — fall back
-    # OpenAI has no model-row equivalent: classifying over HTTP is AI Config
-    # mode here, which is the *absence* of an active model (§4). Falling back
-    # keeps the row importable; `winforms_import` warns and carries the server
-    # settings across separately.
-    WINFORMS_MODELMODE_OPENAI: "convnext_tiny",
+    # "OpenAI API" is a first-class mode here too (PR #125 review): the row
+    # keeps its own AIModelConfig and classifies over HTTP when active.
+    WINFORMS_MODELMODE_OPENAI: OPENAI_MODEL_MODE,
     3: "convnext_large",
     4: "convnext_tiny",  # DeeperLearning (ResNet101) — fall back
     5: "convnext_tiny",  # Custom              — fall back
@@ -124,23 +123,23 @@ _WINFORMS_MODELMODE_INT_TO_STR = {
 
 
 def _normalize_model_mode(raw: Any) -> str:
-    """Accept the snake_case string or the legacy enum int.
+    """Accept the mode string or the legacy enum int.
 
-    Every branch lands in `SUPPORTED_MODEL_MODES`: `ModelRepo` rejects anything
-    else, and `winforms_import` hands the result straight to it.
+    Every branch lands in `MODEL_MODES`: `ModelRepo` rejects anything else,
+    and `winforms_import` hands the result straight to it.
     """
     if isinstance(raw, str):
         rl = raw.strip().lower()
         # Tolerate hyphenated/CamelCase variants
         # (`ConvNeXt-Tiny`, `convnext_tiny`, `ConvNeXtTiny`).
         rl = rl.replace("-", "_").replace(" ", "_")
-        if rl in SUPPORTED_MODEL_MODES:
+        if rl in MODEL_MODES:
             return rl
         # ConvNeXtTiny → convnext_tiny
         if rl.startswith("convnext") and not rl.startswith("convnext_"):
             tail = rl[len("convnext") :]
             candidate = f"convnext_{tail}"
-            if candidate in SUPPORTED_MODEL_MODES:
+            if candidate in MODEL_MODES:
                 return candidate
         return "convnext_tiny"
     if isinstance(raw, int):
@@ -505,7 +504,7 @@ def import_model(
         manifest = json.loads(zf.read(manifest_entry).decode("utf-8"))
 
         model = model_from_export_dict(manifest.get("ModelInfo") or {})
-        if model.model_mode not in SUPPORTED_MODEL_MODES:
+        if model.model_mode not in MODEL_MODES:
             model.model_mode = "convnext_tiny"
 
         # Ownership is decided by how the archive reached this machine, not by
