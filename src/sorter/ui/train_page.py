@@ -70,7 +70,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import paths
-from ..data.models import Model, is_openai_model, is_trainable
+from ..data.models import Model, is_openai_model, is_trainable, model_mode_label
 from ..data.repository import HeadstampRepo, ModelRepo, SettingsRepo
 from ..hardware import image_proc
 from ..ml import classifier, local_inference
@@ -373,7 +373,7 @@ class TrainPage(QWidget):
             self._update_buttons(model)
             return
 
-        self.active_label.setText(f"{model.name}  ({model.model_mode})")
+        self.active_label.setText(f"{model.name}  ({model_mode_label(model.model_mode)})")
         # The DB owns the headstamp list, but a filename on disk is a label the
         # user has actually used. Back-fill anything the DB is missing (a
         # pre-existing folder, an images-only import) so the field, the Sort

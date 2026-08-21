@@ -162,7 +162,9 @@ def test_rows_carry_the_facts_the_tk_cards_showed(page, config) -> None:
     row = names(page).index("Range brass")
     assert cell(page, row, "Cartridge") == cartridge.name
     assert cell(page, row, "Type") == "Standard"
-    assert cell(page, row, "Mode") == "convnext_small"
+    # The display label, not the stored identifier — the Windows app's
+    # Training Mode spelling.
+    assert cell(page, row, "Mode") == "ConvNeXt-Small"
     assert cell(page, row, "Images") == "0"
     assert cell(page, row, "Trained") == "no"
 
@@ -676,7 +678,7 @@ def editor(page, existing: Model | None = None) -> tuple[ModelEditorDialog, _Rec
 def test_the_editor_creates_a_model(page, config) -> None:
     dialog, notified = editor(page)
     dialog.name_edit.setText("  Range brass  ")
-    dialog.mode_combo.setCurrentText("convnext_small")
+    dialog.mode_combo.setCurrentText("ConvNeXt-Small")
     dialog.primer_spin.setValue(120)
     dialog.hide_primer_check.setChecked(False)
 
@@ -1037,11 +1039,14 @@ def test_editor_offers_openai_and_persists_it(page) -> None:
     from sorter.data.models import is_trainable
 
     dialog, _recorder = editor(page)
-    offered = [dialog.mode_combo.itemText(i) for i in range(dialog.mode_combo.count())]
-    assert "openai" in offered
+    offered_data = [dialog.mode_combo.itemData(i) for i in range(dialog.mode_combo.count())]
+    offered_text = [dialog.mode_combo.itemText(i) for i in range(dialog.mode_combo.count())]
+    assert "openai" in offered_data
+    # Shown with the user-facing spelling; the identifier is the item data.
+    assert "OpenAI" in offered_text
 
     dialog.name_edit.setText("HTTP model")
-    dialog.mode_combo.setCurrentText("openai")
+    dialog.mode_combo.setCurrentText("OpenAI")
     dialog.save()
 
     assert dialog.saved_id is not None

@@ -56,7 +56,7 @@ from PySide6.QtWidgets import (
 
 from .. import paths
 from ..data.model_io import ExportMode, export_model, find_update_target, import_model
-from ..data.models import Model, is_foreign_model, is_trainable
+from ..data.models import Model, is_foreign_model, is_trainable, model_mode_label
 from ..data.repository import (
     CartridgeRepo,
     HeadstampRepo,
@@ -545,7 +545,7 @@ class ModelsPage(QWidget):
                 ACTIVE_MARK if active else "",
                 cartridge_name,
                 describe_type(model),
-                model.model_mode,
+                model_mode_label(model.model_mode),
                 str(image_count),
                 trained,
                 formatting.format_datetime(model.last_training_date),
@@ -555,7 +555,7 @@ class ModelsPage(QWidget):
                 ACTIVE_MARK if active else "",
                 cartridge_name.casefold(),
                 describe_type(model).casefold(),
-                model.model_mode.casefold(),
+                model_mode_label(model.model_mode).casefold(),
                 image_count,
                 trained,
                 # Sort on the raw stored date, not the locale-formatted
@@ -663,7 +663,7 @@ class ModelsPage(QWidget):
             return
         model = self.models.get(active_id)
         if model is not None:
-            self._win.set_status(f"Active model: {model.name} ({model.model_mode}).")
+            self._win.set_status(f"Active model: {model.name} ({model_mode_label(model.model_mode)}).")
 
     # ----- create / edit / delete ---------------------------------------------
 

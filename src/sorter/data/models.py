@@ -34,6 +34,25 @@ OPENAI_MODEL_MODE = "openai"
 # `ModelRepo` validates against this, not `SUPPORTED_MODEL_MODES`.
 MODEL_MODES = (*SUPPORTED_MODEL_MODES, OPENAI_MODEL_MODE)
 
+# What the UI prints for a mode. Storage keeps the snake_case identifiers
+# (they are also the torchvision backbone names the trainer passes through);
+# these are the user-facing spellings, matching the Windows app's Training
+# Mode dropdown. `model_io._normalize_model_mode` accepts the labels back,
+# so one leaking into a manifest still round-trips.
+MODEL_MODE_LABELS = {
+    "convnext_tiny": "ConvNeXt-Tiny",
+    "convnext_small": "ConvNeXt-Small",
+    "convnext_base": "ConvNeXt-Base",
+    "convnext_large": "ConvNeXt-Large",
+    OPENAI_MODEL_MODE: "OpenAI",
+}
+
+
+def model_mode_label(mode: str) -> str:
+    """The user-facing spelling of a mode; unknown values print as stored."""
+    return MODEL_MODE_LABELS.get(mode, mode)
+
+
 MODEL_TYPES = ("Standard", "ReadOnly", "CommunityManaged")
 FEEDBACK_UPLOAD_MODES = ("Instant", "OnRunComplete", "Manual")
 
