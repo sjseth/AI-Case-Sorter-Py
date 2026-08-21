@@ -874,9 +874,26 @@ def import_installation(
                 progress=progress,
             )
         if entry.has_usable_checkpoint and entry.checkpoint is not None:
+            dest = paths.model_trained_path(model_id)
+            # Same skip rule as the images: a re-run must not pay a multi-
+            # hundred-MB copy for a checkpoint that hasn't changed. Size is
+            # the same cheap proxy — a retrained model virtually never lands
+            # on the identical byte count.
+            try:
+                unchanged = dest.exists() and dest.stat().st_size == entry.checkpoint.stat().st_size
+            except OSError:
+                unchanged = False
+            if unchanged:
+                # The row still has to point at it — belt-and-braces for a
+                # half-finished earlier run that copied but never recorded.
+                with db.transaction():
+                    saved = model_repo.get(model_id)
+                    if saved is not None and saved.model_path != str(dest):
+                        saved.model_path = str(dest)
+                        model_repo.update(saved)
+                continue
             if progress:
                 progress(f"Copying the trained model for '{entry.name}'…")
-            dest = paths.model_trained_path(model_id)
             try:
                 shutil.copy2(entry.checkpoint, dest)
             except OSError as exc:
