@@ -344,7 +344,7 @@ def test_demo_c_model_lifecycle(config, window, monkeypatch, tmp_path) -> None:
         dialog.notify = lambda title, text: pytest.fail(f"{title}: {text}")
         dialog.name_edit.setText("Demo model")
         dialog.cartridge_combo.setCurrentText("9x19")
-        dialog.mode_combo.setCurrentText("convnext_small")
+        dialog.mode_combo.setCurrentText("ConvNeXt-Small")
         dialog.save()
 
     script_dialog(monkeypatch, ModelEditorDialog, fill_editor)

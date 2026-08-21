@@ -262,7 +262,12 @@ sanctioned way for worker threads to update the UI.
   vocabulary: `SUPPORTED_MODEL_MODES` (the trainable ConvNeXt backbones —
   `train_page` assigns a mode straight into `training_config.model_name`, so
   `"openai"` must never join this tuple), `OPENAI_MODEL_MODE` and
-  `MODEL_MODES` (what `ModelRepo` accepts), `is_openai_model`.
+  `MODEL_MODES` (what `ModelRepo` accepts), `is_openai_model`, and
+  `model_mode_label` — the user-facing spellings ("ConvNeXt-Tiny",
+  "OpenAI", the Windows app's Training Mode names) that every UI surface
+  prints while storage keeps the snake_case identifiers; the editor combo
+  carries the identifier as item *data*, and `_normalize_model_mode`
+  accepts the labels back so one leaking into a manifest still round-trips.
 - **`model_io.py`** (`sorter/data/model_io.py` — grouped with the rest of
   persistence, not a separate layer: it's a model persisted to a ZIP instead
   of SQLite) — model **ZIP** import/export; see the *Training & evaluation*

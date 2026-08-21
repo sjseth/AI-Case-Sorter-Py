@@ -436,7 +436,7 @@ Two things can put classification on HTTP, and this page serves both:
 
 - **AI Config mode** — no active model at all. The screen edits the
   app-level server settings.
-- **An active OpenAI model** — a model whose type is `openai` on the
+- **An active OpenAI model** — a model whose training mode is **OpenAI** on the
   [Models](#models) page. Each OpenAI model carries its **own** server
   settings and its own headstamp list, so several can coexist — different
   cartridges, prompts, even different providers. While one is active this
@@ -474,7 +474,7 @@ this table, plus one synthetic row for AI Config mode.
 
 The table lists each model's name, whether it is active, its cartridge, type
 (yours or a community model), the mode it was built as — a ConvNeXt size, or
-`openai` for a model that classifies over an HTTP server — how many training
+**OpenAI** for a model that classifies over an HTTP server — how many training
 images it has, whether it has been trained, and when. Click a column heading
 to sort by it. An OpenAI model has nothing to train: activate it and the
 [AI Config](#ai-config) page becomes the place its server settings and
