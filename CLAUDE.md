@@ -42,8 +42,12 @@ runs fully without ever signing in — community features are the only auth-gate
 surface.
 
 Two ways to classify:
-- **AI Config mode** (no local model active): send the cropped image to an
-  OpenAI-compatible HTTP server (`/v1/chat/completions`).
+- **Over HTTP** (`/v1/chat/completions` on an OpenAI-compatible server) — two
+  spellings of the same backend: **AI Config mode** (no active model, one
+  app-level config) and an active **openai-mode model** (`model_mode =
+  "openai"`), which carries its *own* `AIModelConfig` and headstamp list so
+  several such models can coexist, exactly as the Windows app's "OpenAI API"
+  Training Mode does.
 - **Local model mode**: run a PyTorch **ConvNeXt** model locally. The model can
   be one the user trained on the Train page, a pretrained model downloaded from
   the community, or one imported from a ZIP — running locally does **not** require
@@ -234,7 +238,13 @@ sanctioned way for worker threads to update the UI.
   `ensure_initialized()` creates the DB, runs a one-shot import from legacy
   `data/config.json` (renaming it `.bak`), or seeds a default cartridge+model.
   Tables: `cartridges`, `models`, `headstamp_parents`, `headstamps`,
-  `slot_templates`, `settings`.
+  `slot_templates`, `settings`. One structural fix lives *outside* the
+  ladder: `_widen_model_mode_check` rebuilds `models` when its mode CHECK
+  predates `'openai'` — a CHECK can't be ALTERed, and the rebuild needs
+  `PRAGMA foreign_keys` toggled, which is a silent no-op inside the
+  transaction every ladder step runs in (with FKs on, `DROP TABLE models`
+  would cascade-delete every headstamp). Guarded structurally off
+  `sqlite_master`, like the DDL pass.
 - **`repository.py`** — `CartridgeRepo`, `ModelRepo`, `HeadstampRepo`,
   `HeadstampParentRepo`, `SlotTemplateRepo`, `SettingsRepo`. All SQL is
   **parameterized**. `SettingsRepo` is a typed key/value store (JSON-encoded
@@ -248,7 +258,11 @@ sanctioned way for worker threads to update the UI.
   and the sorting-template API (see below).
 - **`models.py`** — dataclasses: `Model`, `Headstamp`, `Cartridge`, `SlotTemplate`,
   `TrainingConfig`, `AIModelConfig`, `ImageProcessingConfig`, plus normalizers
-  (`normalize_upload_mode`, `SUPPORTED_MODEL_MODES`, `SLOT_TEMPLATE_MODES`).
+  (`normalize_upload_mode`, `SLOT_TEMPLATE_MODES`) and the mode/ownership
+  vocabulary: `SUPPORTED_MODEL_MODES` (the trainable ConvNeXt backbones —
+  `train_page` assigns a mode straight into `training_config.model_name`, so
+  `"openai"` must never join this tuple), `OPENAI_MODEL_MODE` and
+  `MODEL_MODES` (what `ModelRepo` accepts), `is_openai_model`.
 - **`model_io.py`** (`sorter/data/model_io.py` — grouped with the rest of
   persistence, not a separate layer: it's a model persisted to a ZIP instead
   of SQLite) — model **ZIP** import/export; see the *Training & evaluation*
@@ -276,12 +290,12 @@ sanctioned way for worker threads to update the UI.
     **This module is the only caller of `model_from_export_dict` with no clamp
     of its own**, so every value in `_WINFORMS_MODELMODE_INT_TO_STR` has to be
     a mode `ModelRepo` accepts — `test_model_io.py` pins that. `ModelMode` 2
-    (OpenAI) is the one with no equivalent to preserve: classifying over HTTP
-    is AI Config mode, the *absence* of an active model, so the row imports as
-    a retrainable ConvNeXt shell, `survey()` warns which model it was, and the
-    server settings ride the AI Config item instead. That item prefers the
-    OpenAI-mode model's `AIModelConfig` — the legacy app writes the blob on
-    every model and most are blank, so "first non-empty" picked the wrong one.
+    (OpenAI) maps to `"openai"`, a first-class mode here too, so the row
+    imports faithfully — its own `AIModelConfig` and headstamps included —
+    and needs no warning. The AI Config item still seeds the app-level
+    config, preferring the OpenAI-mode model's blob: the legacy app writes
+    one on every model and most are blank, so "first non-empty" picked the
+    wrong one.
   - **`training/models/<id>.zip` is a `torch.save` archive, not a ZIP of
     anything** — it copies to `<id>.pth` verbatim. The legacy **ML.NET**
     pipeline writes its models beside it under the same extension, so
@@ -329,10 +343,12 @@ sanctioned way for worker threads to update the UI.
 
 ### Active-model concept
 "Active model" = `settings.default_model_id`. When **absent**, the app is in
-**AI Config mode** (cloud HTTP classification, headstamps in a settings key).
-When **set**, that local model is active (Train live, local inference used,
-headstamps in the `headstamps` table). Activating a model posts
-`mode/changed`, which is what re-evaluates the mode pair (§5).
+**AI Config mode** (HTTP classification via the app-level `config.api`,
+headstamps in a settings key). When **set**, that model is active with its
+headstamps in the `headstamps` table — a ConvNeXt model classifies locally
+(Train live); an **openai-mode** model classifies over HTTP using its own
+`ai_model_config` (AI Config live, editing that model's settings). Activating
+a model posts `mode/changed`, which is what re-evaluates the mode pair (§5).
 
 ### Sorting templates
 A **sorting template** is a named snapshot of the Sort page's slot assignments, so
@@ -432,8 +448,11 @@ between them from the Sort page's template dropdown.
 
 ### Classification (`sorter/ml/`)
 - **`classifier.py`** — `classify_active`: **the active model alone picks the
-  backend.** A model is active → local inference; AI Config mode (no active
-  model) → HTTP. Passes the trained `image_size` through. A local model whose
+  backend.** A ConvNeXt model is active → local inference; an openai-mode
+  model is active → HTTP with **that model's own** `ai_model_config` (the
+  passed app-level `api_cfg` is deliberately ignored there); AI Config mode
+  (no active model) → HTTP with the app-level config. Passes the trained
+  `image_size` through. A local model whose
   checkpoint is missing raises `NoLocalCheckpointError` — it does **not**
   degrade to HTTP. That fallback existed and was a trap: a renamed data folder
   or an images-only community share left `model_path` unusable and the app
@@ -441,7 +460,9 @@ between them from the Sort page's template dropdown.
   surfacing only as a connection error naming a host the user wasn't knowingly
   using. Switching backends is the user's call, on the Models page. `active_model`
   / `uses_local_inference` / `has_local_checkpoint` / `checkpoint_problem`
-  expose the decision alone, so the UI can ask "does this need PyTorch?" and
+  expose the decision alone (`uses_local_inference` and `checkpoint_problem`
+  are both False/None for an openai model — no PyTorch, no checkpoint to
+  miss), so the UI can ask "does this need PyTorch?" and
   "can this model actually classify?" before starting a run — keep them in
   lock-step with `classify_active` or the install gate (§5) drifts from reality.
   `checkpoint_problem` also asks `torch_floor_problem`: a model records the
@@ -639,9 +660,12 @@ runs the bus drain loop. `run_worker(fn, on_done, on_error)` is the standard
 helper for offloading blocking work to a thread and marshaling the result back
 through the bus.
 
-**Neither of the mode pair is ever hidden**, and exactly one is *live*:
-Train ⟺ `models.is_trainable(active model)`, AI Config ⟺ no active model —
-so a community model leaves neither live. The other gets
+**Neither of the mode pair is ever hidden**, and at most one is *live*:
+Train ⟺ `models.is_trainable(active model)` (False for community *and* for
+openai-mode models), AI Config ⟺ no active model **or an active openai-mode
+model** (both classify over HTTP; the page's server fields bind to whichever
+config is in effect via `AiSection.retarget()`, so an openai model's settings
+are edited on its own row) — a community model leaves neither live. The other gets
 `_set_activity_unavailable`, which sets the dynamic property `unavailable`
 on the button — restyled `text_subtle` by `ui/theme.py` and re-inked by
 `_paint_sidebar_icon`, since a stylesheet can't reach a QIcon — and leaves

@@ -28,7 +28,6 @@ from sorter.data.winforms_import import (
     FIRST_RUN_SEEN_KEY,
     MLNET_WARNING,
     MODEL_FAILED_WARNING,
-    OPENAI_MODE_WARNING,
     ImportOptions,
     candidate_install_dirs,
     find_installation,
@@ -273,11 +272,11 @@ def test_survey_flags_an_mlnet_only_model(tmp_path: Path) -> None:
     assert MLNET_WARNING.format(name="9mm Base Model") in found.warnings
 
 
-def test_survey_flags_an_openai_mode_model(tmp_path: Path) -> None:
-    """Classifying over HTTP is app-wide here, so the row alone can't carry it."""
+def test_survey_does_not_warn_about_an_openai_mode_model(tmp_path: Path) -> None:
+    """ "openai" is a first-class mode now, so the row imports faithfully."""
     root = _write_install(tmp_path / "legacy", models=[_MODEL_OPENAI])
     found = survey(root)
-    assert OPENAI_MODE_WARNING.format(name="9mm over HTTP") in found.warnings
+    assert found.warnings == []
     assert found.has_ai_config
 
 
@@ -334,10 +333,12 @@ def test_import_accepts_an_openai_mode_model(tmp_path: Path, db: Database, confi
 
     assert result.models_imported == 2
     imported = _model(db, "9mm over HTTP")
-    # A retrainable shell: there is no model-row spelling of "classifies over
-    # HTTP", and the images are what the user actually wanted back.
-    assert imported.model_mode == "convnext_tiny"
-    assert is_trainable(imported)
+    # First-class: the row keeps its mode and its own server settings, so it
+    # classifies over HTTP here exactly as it did there (PR #125 review).
+    assert imported.model_mode == "openai"
+    assert not is_trainable(imported)
+    assert imported.ai_model_config.endpoint_url == "http://192.168.1.9:1234/v1/chat/completions"
+    assert imported.ai_model_config.model == "qwen2-vl"
     assert result.images_copied == 1
 
 

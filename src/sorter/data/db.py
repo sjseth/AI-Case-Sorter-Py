@@ -64,22 +64,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_slot_templates_name
 CREATE INDEX IF NOT EXISTS idx_slot_templates_scope ON slot_templates(model_id, mode);
 """
 
-SCHEMA_DDL = (
-    """
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;
-
-CREATE TABLE IF NOT EXISTS cartridges (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL UNIQUE
-);
-
+# Split out of SCHEMA_DDL for the same reason as SLOT_TEMPLATES_DDL: the
+# `_widen_model_mode_check` rebuild replays it (under a scratch table name), so
+# one copy means the rebuilt table cannot drift from the schema. The mode CHECK
+# stays in lock-step with models.MODEL_MODES — 'openai' classifies over an
+# OpenAI-compatible HTTP server, the rest are trainable ConvNeXt backbones.
+MODELS_DDL = """
 CREATE TABLE IF NOT EXISTS models (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   cartridge_id INTEGER NOT NULL REFERENCES cartridges(id) ON DELETE RESTRICT,
   model_mode TEXT NOT NULL
-    CHECK(model_mode IN ('convnext_tiny','convnext_small','convnext_base','convnext_large')),
+    CHECK(model_mode IN ('convnext_tiny','convnext_small','convnext_base','convnext_large','openai')),
   model_type TEXT NOT NULL DEFAULT 'Standard'
     CHECK(model_type IN ('Standard','ReadOnly','CommunityManaged')),
   community_model_uid TEXT,
@@ -104,7 +100,20 @@ CREATE TABLE IF NOT EXISTS models (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_models_cartridge ON models(cartridge_id);
+"""
 
+SCHEMA_DDL = (
+    """
+PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = WAL;
+
+CREATE TABLE IF NOT EXISTS cartridges (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE
+);
+"""
+    + MODELS_DDL
+    + """
 -- Parent classifications: named groups that child headstamps roll up into.
 -- Scoped per-model.
 CREATE TABLE IF NOT EXISTS headstamp_parents (
@@ -378,12 +387,64 @@ class Database:
         # DDL is idempotent (IF NOT EXISTS) so re-running on an existing DB is safe.
         _execute_script(conn, SCHEMA_DDL)
         self._migrate_schema()
+        # After the ladder, not in it: the rebuild needs `PRAGMA foreign_keys`
+        # toggled, which is a silent no-op inside any transaction — and every
+        # ladder step runs inside one (see _migrate_schema).
+        self._widen_model_mode_check()
 
         if was_fresh:
             if legacy_config_json and Path(legacy_config_json).exists():
                 self._migrate_from_json(Path(legacy_config_json))
             else:
                 self._seed_defaults()
+
+    def _widen_model_mode_check(self) -> None:
+        """Rebuild `models` when its mode CHECK predates the 'openai' mode.
+
+        SQLite cannot ALTER a CHECK constraint, so widening it is the
+        documented table-rebuild dance: create the current-DDL table under a
+        scratch name, copy every row, drop the old table, rename. Foreign
+        keys are switched off around it — with them on, `DROP TABLE models`
+        performs an implicit `DELETE FROM models`, and the children's
+        `ON DELETE CASCADE` would take every headstamp with it.
+
+        The guard is structural, like the DDL pass: the table's own
+        `sqlite_master` text says whether 'openai' is already admitted, so
+        this is idempotent with no ladder bookkeeping — a fresh database (or
+        one already rebuilt) is a no-op, and there is deliberately nothing
+        here that can run twice destructively. `foreign_key_check` before
+        commit turns a botched copy into a rollback instead of a corrupt DB.
+        """
+        conn = self.conn
+        row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='models'").fetchone()
+        sql = (row[0] or "") if row is not None else ""
+        if not sql or "'openai'" in sql or "model_mode" not in sql or "CHECK" not in sql.upper():
+            return
+
+        conn.execute("PRAGMA foreign_keys = OFF")
+        try:
+            with self.transaction():
+                conn.execute("DROP TABLE IF EXISTS models_rebuild")
+                _execute_script(
+                    conn,
+                    MODELS_DDL.replace("CREATE TABLE IF NOT EXISTS models (", "CREATE TABLE models_rebuild (").replace(
+                        "CREATE INDEX IF NOT EXISTS idx_models_cartridge ON models(cartridge_id);", ""
+                    ),
+                )
+                # Copy by the shared column set: `_migrate_schema` has already
+                # run, so a healthy table matches the DDL exactly — the
+                # intersection is belt-and-braces against a shape it missed.
+                shared = sorted(_columns(conn, "models") & _columns(conn, "models_rebuild"))
+                cols = ", ".join(shared)
+                conn.execute(f"INSERT INTO models_rebuild ({cols}) SELECT {cols} FROM models")
+                conn.execute("DROP TABLE models")
+                conn.execute("ALTER TABLE models_rebuild RENAME TO models")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_models_cartridge ON models(cartridge_id)")
+                problems = conn.execute("PRAGMA foreign_key_check").fetchall()
+                if problems:
+                    raise RuntimeError(f"models rebuild broke {len(problems)} foreign key reference(s)")
+        finally:
+            conn.execute("PRAGMA foreign_keys = ON")
 
     # ----- migration ----------------------------------------------------------
 

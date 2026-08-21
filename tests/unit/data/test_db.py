@@ -453,3 +453,111 @@ def test_model_mode_check_constraint(tmp_path: Path) -> None:
             "INSERT INTO models(name, cartridge_id, model_mode) VALUES (?, ?, ?)",
             ("bad-mode", cart_id, "resnet50"),
         )
+
+
+# ----- widening the model_mode CHECK for 'openai' -----------------------------
+
+
+def _write_pre_openai_db(path: Path) -> None:
+    """A database as a pre-openai build's DDL laid it down.
+
+    The load-bearing details: the four-mode CHECK on `models.model_mode`
+    (what `_widen_model_mode_check` exists to widen) and a child table whose
+    `ON DELETE CASCADE` references `models` — the rebuild must not fire it.
+    """
+    conn = sqlite3.connect(path, isolation_level=None)
+    conn.executescript(
+        """
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE cartridges (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE
+        );
+        CREATE TABLE models (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          cartridge_id INTEGER NOT NULL REFERENCES cartridges(id) ON DELETE RESTRICT,
+          model_mode TEXT NOT NULL
+            CHECK(model_mode IN ('convnext_tiny','convnext_small','convnext_base','convnext_large')),
+          model_type TEXT NOT NULL DEFAULT 'Standard'
+            CHECK(model_type IN ('Standard','ReadOnly','CommunityManaged')),
+          community_model_uid TEXT,
+          model_version INTEGER NOT NULL DEFAULT 1,
+          enable_image_processing INTEGER NOT NULL DEFAULT 1,
+          image_processing_json TEXT,
+          training_config_json TEXT,
+          ai_model_config_json TEXT,
+          use_primer_mask INTEGER NOT NULL DEFAULT 0,
+          hide_primer INTEGER NOT NULL DEFAULT 1,
+          primer_mask_size INTEGER NOT NULL DEFAULT 135,
+          last_training_date TEXT,
+          last_training_duration INTEGER NOT NULL DEFAULT 0,
+          trained_image_count INTEGER NOT NULL DEFAULT 0,
+          training_confusion_table TEXT,
+          feedback_loop_enabled INTEGER NOT NULL DEFAULT 0,
+          feedback_loop_confidence_floor INTEGER NOT NULL DEFAULT 95,
+          feedback_loop_upload_mode TEXT NOT NULL DEFAULT 'Manual',
+          model_path TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX idx_models_cartridge ON models(cartridge_id);
+        CREATE TABLE headstamps (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          model_id INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+          slot INTEGER NOT NULL DEFAULT 0,
+          parent_id INTEGER,
+          UNIQUE(model_id, name)
+        );
+        CREATE TABLE settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+        """
+    )
+    conn.execute("INSERT INTO cartridges(id, name) VALUES (1, '9mm')")
+    conn.execute("INSERT INTO models(id, name, cartridge_id, model_mode) VALUES (1, 'Kept', 1, 'convnext_small')")
+    conn.execute("INSERT INTO headstamps(name, model_id, slot) VALUES ('WIN', 1, 3)")
+    conn.execute("PRAGMA user_version = 5")
+    conn.close()
+
+
+def test_model_mode_check_is_widened_for_openai(tmp_path: Path) -> None:
+    """A pre-openai database is rebuilt so 'openai' rows can exist at all.
+
+    The dangerous part is what must NOT happen: the rebuild drops the old
+    `models` table with `headstamps` still cascading off it, so a slip in the
+    foreign-key handling silently deletes every headstamp.
+    """
+    path = tmp_path / "old.db"
+    _write_pre_openai_db(path)
+
+    db = Database(path)
+    db.ensure_initialized()
+
+    # The CHECK now admits openai — this used to raise IntegrityError.
+    from sorter.data.models import Model
+
+    created = ModelRepo(db).create(Model(name="HTTP model", cartridge_id=1, model_mode="openai"))
+    assert created.id > 0
+
+    kept = ModelRepo(db).get(1)
+    assert kept is not None and kept.name == "Kept" and kept.model_mode == "convnext_small"
+    # The cascade did not fire during the rebuild.
+    assert [h.name for h in HeadstampRepo(db).list_for_model(1)] == ["WIN"]
+    # Foreign keys are back on for the rest of the app's lifetime.
+    assert db.conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    db.close()
+
+
+def test_model_mode_widening_is_idempotent(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    _write_pre_openai_db(path)
+    db = Database(path)
+    db.ensure_initialized()
+    first_sql = db.conn.execute("SELECT sql FROM sqlite_master WHERE name='models'").fetchone()[0]
+    db.ensure_initialized()  # the guard sees 'openai' already admitted
+    assert db.conn.execute("SELECT sql FROM sqlite_master WHERE name='models'").fetchone()[0] == first_sql
+    assert ModelRepo(db).get(1) is not None
+    db.close()

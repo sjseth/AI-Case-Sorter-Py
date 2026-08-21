@@ -20,6 +20,20 @@ SUPPORTED_MODEL_MODES = (
     "convnext_large",
 )
 
+# A model that classifies over an OpenAI-compatible HTTP server instead of a
+# local checkpoint. The legacy app treats "OpenAI API" as a Training Mode peer
+# of the ConvNeXt sizes — several such models can coexist, each with its own
+# cartridge, headstamp list and `AIModelConfig` (endpoint/key/model/prompt) —
+# and this app mirrors that (PR #125 review). Deliberately NOT added to
+# `SUPPORTED_MODEL_MODES`: that tuple doubles as the list of trainable
+# backbones (`train_page` assigns `model_mode` straight into
+# `training_config.model_name`), and an openai model has nothing to train.
+OPENAI_MODEL_MODE = "openai"
+
+# Every mode a model row may persist: the trainable backbones plus openai.
+# `ModelRepo` validates against this, not `SUPPORTED_MODEL_MODES`.
+MODEL_MODES = (*SUPPORTED_MODEL_MODES, OPENAI_MODEL_MODE)
+
 MODEL_TYPES = ("Standard", "ReadOnly", "CommunityManaged")
 FEEDBACK_UPLOAD_MODES = ("Instant", "OnRunComplete", "Manual")
 
@@ -469,6 +483,16 @@ def is_foreign_model(model: Model | None) -> bool:
     return bool(model is not None and model.model_type in FOREIGN_MODEL_TYPES)
 
 
+def is_openai_model(model: Model | None) -> bool:
+    """True when `model` classifies over an OpenAI-compatible HTTP server.
+
+    Such a model has no checkpoint, needs no PyTorch, and carries its server
+    settings in its own `ai_model_config` — the AI Config page edits them
+    while the model is active.
+    """
+    return bool(model is not None and model.model_mode == OPENAI_MODEL_MODE)
+
+
 def is_trainable(model: Model | None) -> bool:
     """Can this model be trained (and have training images added) locally?
 
@@ -478,5 +502,8 @@ def is_trainable(model: Model | None) -> bool:
     model was built from, and the next published update would overwrite the
     result anyway. Users who want to build on someone else's model export it
     and import it back as their own.
+
+    Also False for an openai-mode model, whatever its ownership: there is no
+    local checkpoint to train — the "model" is an HTTP server configuration.
     """
-    return model is not None and not is_foreign_model(model)
+    return model is not None and not is_foreign_model(model) and not is_openai_model(model)

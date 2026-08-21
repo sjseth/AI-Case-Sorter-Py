@@ -70,7 +70,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import paths
-from ..data.models import CheckpointEnv, Model, is_trainable
+from ..data.models import CheckpointEnv, Model, is_openai_model, is_trainable
 from ..data.repository import HeadstampRepo, ModelRepo, SettingsRepo
 from ..hardware import image_proc
 from ..ml import classifier, local_inference
@@ -105,6 +105,13 @@ UNAVAILABLE_TEXT_AI = (
     "on the Models page to train one here."
 )
 UNAVAILABLE_TITLE_FOREIGN = "This model is managed by its publisher"
+UNAVAILABLE_TITLE_OPENAI = "This model classifies over HTTP"
+UNAVAILABLE_TEXT_OPENAI = (
+    "“{name}” is an OpenAI model: an HTTP server does the recognising, so "
+    "there is nothing on this machine to train.\n\nIts server settings and "
+    "headstamps live on the AI Config page. To train locally, activate or "
+    "create a ConvNeXt model on the Models page."
+)
 MODELS_JUMP_TEXT = "Open the Models page"
 
 
@@ -394,6 +401,9 @@ class TrainPage(QWidget):
         if model is None:
             self.unavailable_title.setText(UNAVAILABLE_TITLE_AI)
             self.unavailable_text.setText(UNAVAILABLE_TEXT_AI)
+        elif is_openai_model(model):
+            self.unavailable_title.setText(UNAVAILABLE_TITLE_OPENAI)
+            self.unavailable_text.setText(UNAVAILABLE_TEXT_OPENAI.format(name=model.name))
         else:
             self.unavailable_title.setText(UNAVAILABLE_TITLE_FOREIGN)
             self.unavailable_text.setText(FOREIGN_MODEL_TEXT.format(name=model.name))

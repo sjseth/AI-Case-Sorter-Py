@@ -1029,3 +1029,23 @@ def test_the_hint_line_is_left_to_what_a_row_cannot_carry(page, config) -> None:
     select_name(page, "Someone else's")
 
     assert page.hint_label.text() == FOREIGN_NOTICE
+
+
+def test_editor_offers_openai_and_persists_it(page) -> None:
+    """ "openai" is a first-class mode in Create/Edit Model (PR #125 review) —
+    the Windows app's "OpenAI API" Training Mode, imported or created here."""
+    from sorter.data.models import is_trainable
+
+    dialog, _recorder = editor(page)
+    offered = [dialog.mode_combo.itemText(i) for i in range(dialog.mode_combo.count())]
+    assert "openai" in offered
+
+    dialog.name_edit.setText("HTTP model")
+    dialog.mode_combo.setCurrentText("openai")
+    dialog.save()
+
+    assert dialog.saved_id is not None
+    saved = ModelRepo(page.db).get(dialog.saved_id)
+    assert saved is not None
+    assert saved.model_mode == "openai"
+    assert not is_trainable(saved)

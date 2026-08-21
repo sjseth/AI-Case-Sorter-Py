@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
 from ..data.db import Database
 from ..data.models import (
     FEEDBACK_UPLOAD_MODES,
-    SUPPORTED_MODEL_MODES,
+    MODEL_MODES,
     AIModelConfig,
     ImageProcessingConfig,
     Model,
@@ -103,8 +103,11 @@ class ModelEditorDialog(QDialog):
         form.addRow("Cartridge", self.cartridge_combo)
 
         self.mode_combo = QComboBox(self)
-        self.mode_combo.addItems(list(SUPPORTED_MODEL_MODES))
-        if existing is not None and existing.model_mode in SUPPORTED_MODEL_MODES:
+        # MODEL_MODES, not SUPPORTED_MODEL_MODES: "openai" is a legal mode —
+        # a model that classifies over an HTTP server (its settings live on
+        # the AI Config page while it is active) — it just isn't trainable.
+        self.mode_combo.addItems(list(MODEL_MODES))
+        if existing is not None and existing.model_mode in MODEL_MODES:
             self.mode_combo.setCurrentText(existing.model_mode)
         form.addRow("Model type", self.mode_combo)
 
@@ -178,7 +181,7 @@ class ModelEditorDialog(QDialog):
             self.notify("Missing cartridge", "Pick a cartridge first.")
             return
         mode = self.mode_combo.currentText()
-        if mode not in SUPPORTED_MODEL_MODES:
+        if mode not in MODEL_MODES:
             self.notify("Invalid model type", f"Unknown model: {mode}")
             return
 

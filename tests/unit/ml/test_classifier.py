@@ -128,3 +128,51 @@ def test_checkpoint_problem_explains_an_untrained_model(tmp_path: Path) -> None:
     assert "no trained model file" in problem
     # Must say it is NOT quietly switching backends.
     assert "AI Config" in problem
+
+
+# ----- openai-mode models -----------------------------------------------------
+
+
+def _activate_openai_model(db: Database, **config_kwargs) -> int:
+    from sorter.data.models import AIModelConfig, Model
+
+    cart_id = ModelRepo(db).list()[0].cartridge_id
+    model = ModelRepo(db).create(
+        Model(
+            name="HTTP model",
+            cartridge_id=cart_id,
+            model_mode="openai",
+            ai_model_config=AIModelConfig(**config_kwargs),
+        )
+    )
+    SettingsRepo(db).set_active_model_id(model.id)
+    return model.id
+
+
+def test_openai_model_routes_to_http_with_its_own_config(tmp_path: Path) -> None:
+    """The passed api_cfg is the app-level one — an openai model must ignore it.
+
+    Leaking the app-level config in would be the mirror image of the removed
+    HTTP fallback: cases silently classified against a server the active
+    model never named.
+    """
+    db = _seed_db(tmp_path)
+    _activate_openai_model(db, endpoint_url="http://model-server:9", api_key="k", model="qwen")
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    with patch("sorter.ml.classifier.api_client.classify", return_value=("FC", 88.0)) as m:
+        with patch("sorter.ml.classifier.local_inference.classify") as m_local:
+            result = classifier.classify_active(image, ["FC"], {"endpoint_url": "http://app-level"}, db)
+    assert result == ("FC", 88.0)
+    m_local.assert_not_called()
+    cfg = m.call_args.args[2]
+    assert cfg["endpoint_url"] == "http://model-server:9"
+    assert cfg["model"] == "qwen"
+
+
+def test_openai_model_needs_no_torch_and_has_no_checkpoint_problem(tmp_path: Path) -> None:
+    """`uses_local_inference` is what the torch gate keys off; `checkpoint_problem`
+    is what refuses Start. Both must wave an openai model through."""
+    db = _seed_db(tmp_path)
+    _activate_openai_model(db)
+    assert not classifier.uses_local_inference(db)
+    assert classifier.checkpoint_problem(db) is None

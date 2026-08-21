@@ -114,15 +114,6 @@ MLNET_WARNING = (
     "it is imported without one so you can retrain it."
 )
 
-# Classifying over HTTP is app-wide here (AI Config mode), not a model-row
-# property, so the row comes across as a retrainable shell and its server
-# settings ride the separate AI Config tick.
-OPENAI_MODE_WARNING = (
-    "'{name}' classified over an HTTP server in the Windows app. Tick AI Config "
-    "to bring those server settings across; the model itself is imported so you "
-    "can retrain it locally."
-)
-
 # One unreadable row costs that row, not the whole import.
 MODEL_FAILED_WARNING = "Could not import '{name}': {error}"
 
@@ -393,9 +384,9 @@ def survey(root: Path | str) -> LegacySurvey:
             headstamp_count=headstamp_counts.get(legacy_id, 0),
         )
         out.models.append(entry)
-        if entry.was_openai_mode:
-            out.warnings.append(OPENAI_MODE_WARNING.format(name=entry.name))
-        elif kind == "mlnet":
+        # An openai-mode row needs no warning: "openai" is a first-class mode
+        # here too, so it imports faithfully — config, headstamps and all.
+        if kind == "mlnet" and not entry.was_openai_mode:
             out.warnings.append(MLNET_WARNING.format(name=entry.name))
 
     defaults = raw.get("Defaults")
@@ -634,9 +625,12 @@ def _import_one_model(
     if existing is not None:
         model.id = existing.id
         model.name = existing.name
-        # The user's local API credentials outlive a re-import: the legacy
-        # row's are per-model and may well be blank.
-        model.ai_model_config = existing.ai_model_config
+        # The user's local API credentials outlive a re-import — unless they
+        # never entered any. A row first imported before "openai" was a mode
+        # here has a blank local config, and keeping that blank would discard
+        # the endpoint the legacy install actually holds.
+        if existing.ai_model_config.to_dict() != AIModelConfig().to_dict():
+            model.ai_model_config = existing.ai_model_config
         model.model_path = existing.model_path
         model_repo.update(model)
         saved_id = existing.id

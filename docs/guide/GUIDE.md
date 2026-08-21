@@ -429,14 +429,27 @@ here.
 The alternative to a local model: classification is sent to an
 OpenAI-compatible HTTP server, and this screen is where that server — and the
 headstamps it may answer with — is set up. It is Train's mirror in the
-sidebar: live whenever no local model is active, dimmed when one is.
+sidebar: live whenever classification runs over HTTP, dimmed when a local
+ConvNeXt model does the work.
+
+Two things can put classification on HTTP, and this page serves both:
+
+- **AI Config mode** — no active model at all. The screen edits the
+  app-level server settings.
+- **An active OpenAI model** — a model whose type is `openai` on the
+  [Models](#models) page. Each OpenAI model carries its **own** server
+  settings and its own headstamp list, so several can coexist — different
+  cartridges, prompts, even different providers. While one is active this
+  screen edits *that model's* settings, and a caption above the form says
+  so by name. This mirrors the Windows app, where "OpenAI API" is a
+  Training Mode and its configuration lives on the model.
 
 ### When AI Config isn't the one classifying
 
-Activate a local model and this screen swaps its form for a panel naming the
-model that is classifying instead, with a button straight to the
-[Models](#models) page. Select **Use AI Config** there to come back — the
-server settings are still exactly as you left them.
+Activate a local ConvNeXt model and this screen swaps its form for a panel
+naming the model that is classifying instead, with a button straight to the
+[Models](#models) page. Select **Use AI Config** — or an OpenAI model —
+there to come back; the server settings are still exactly as you left them.
 
 ### Setting up the server
 
@@ -460,9 +473,12 @@ this table, plus one synthetic row for AI Config mode.
 ### The model list
 
 The table lists each model's name, whether it is active, its cartridge, type
-(yours or a community model), the ConvNeXt size it was built as, how many
-training images it has, whether it has been trained, and when. Click a
-column heading to sort by it.
+(yours or a community model), the mode it was built as — a ConvNeXt size, or
+`openai` for a model that classifies over an HTTP server — how many training
+images it has, whether it has been trained, and when. Click a column heading
+to sort by it. An OpenAI model has nothing to train: activate it and the
+[AI Config](#ai-config) page becomes the place its server settings and
+headstamps live.
 
 The **Active** column marks the model the app currently classifies with:
 exactly one row reads **● ACTIVE** in the theme's action colour, and every
@@ -677,12 +693,9 @@ A few things are worth knowing before you run it:
 - **A model that came from the [Community](#community) stays read-only**, the
   same as one downloaded here: the trained model file belongs to whoever
   published it, so it is not trainable. Your own models stay trainable.
-- **A Windows model set to classify over an OpenAI server has no direct
-  equivalent here.** Classifying over HTTP is a whole-app setting in this app
-  ([AI Config](#ai-config)), not something a single model carries, so tick
-  **AI Config** to bring the endpoint, model and prompt across. The model
-  itself still comes over — with its headstamps and images — as one you can
-  train locally. The import says which models this applied to.
+- **A Windows model set to classify over an OpenAI server imports as an
+  OpenAI model here too**, keeping its own endpoint, prompt and headstamps.
+  Activate it and the [AI Config](#ai-config) page edits its settings.
 - **One model that cannot be imported does not stop the rest.** It is
   skipped, the reason is listed at the end, and everything else still lands.
 
