@@ -765,3 +765,18 @@ def test_first_run_offer_stays_silent_with_no_windows_app(
     monkeypatch.delenv("ProgramW6432", raising=False)
     monkeypatch.delenv("ProgramFiles(x86)", raising=False)
     assert should_offer_first_run(db) is None
+
+
+def test_reimport_skips_an_unchanged_checkpoint(tmp_path: Path, db: Database, config: Config) -> None:
+    """Same rule as the images: a re-run must not re-copy a multi-hundred-MB
+    checkpoint that hasn't changed (real-install validation, PR #125)."""
+    root = _write_install(tmp_path / "legacy", models=[_MODEL_COMMUNITY])
+    _torch_zip(root / "training" / "models" / "4.zip")
+
+    first = import_installation(root, db=db, config=config, options=ImportOptions())
+    second = import_installation(root, db=db, config=config, options=ImportOptions())
+
+    assert first.checkpoints_copied == 1
+    assert second.checkpoints_copied == 0
+    model = _model(db, "9mm Default")
+    assert model.model_path is not None and Path(model.model_path).is_file()
