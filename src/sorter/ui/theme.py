@@ -268,6 +268,43 @@ QTreeWidget#modelTable QHeaderView::section, QTreeWidget#headstampTable QHeaderV
 QWidget#rowActions {{ background: transparent; }}
 QTreeWidget#modelTable QPushButton {{ padding: 2px 8px; }}
 
+/* The Windows-import picker. The only tree in the app whose items are
+   checkable, so it needs the `::indicator` block the plain QCheckBox rules
+   below cannot reach — left to the platform style these all but vanish on a
+   dark surface and every row reads as a plain label. Same three states, same
+   `action` fill for "on", plus `indeterminate` for a model showing only part
+   of its branch. */
+QTreeWidget#importTree {{
+    background-color: {c["bg_input"]};
+    color: {c["text"]};
+    border: 1px solid {c["border"]};
+}}
+QTreeWidget#importTree::item {{ padding: 3px 4px; }}
+/* A row this install has nothing behind. Without this it reads as available:
+   the widget's own `color` wins over the palette's disabled group, so the
+   `QCheckBox:disabled` rule below has no equivalent effect here. */
+QTreeWidget#importTree::item:disabled {{ color: {c["text_subtle"]}; }}
+QTreeWidget#importTree::item:selected {{
+    background-color: {c["bg_card_sel"]};
+    color: {c["text_highlight"]};
+}}
+QTreeWidget#importTree::indicator {{
+    width: {INDICATOR_SIZE}px;
+    height: {INDICATOR_SIZE}px;
+    border: 1px solid {c["border_focus"]};
+    border-radius: 3px;
+    background-color: {c["bg_surface"]};
+}}
+QTreeWidget#importTree::indicator:disabled {{ border-color: {c["border"]}; }}
+QTreeWidget#importTree::indicator:indeterminate {{
+    border-color: {c["action"]};
+    background-color: {c["bg_card_sel"]};
+}}
+QTreeWidget#importTree::indicator:checked {{
+    background-color: {c["action"]};
+    border-color: {c["action"]};
+}}
+
 QFrame#slotCard {{
     background-color: {c["bg_card"]};
     border: 1px solid {c["border"]};

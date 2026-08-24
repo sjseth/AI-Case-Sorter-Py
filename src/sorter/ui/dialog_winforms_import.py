@@ -2,10 +2,23 @@
 
 Two ways in, one dialog. On first run `maybe_offer_first_run` opens it against
 whatever `winforms_import.find_installation` turned up; Settings → Import from
-Windows opens it against a folder the user picks. The checkbox list is the same
-either way — issue #98 asks for a per-item choice rather than an all-or-nothing
+Windows opens it against a folder the user picks. The picker is the same either
+way — issue #98 asks for a per-item choice rather than an all-or-nothing
 migration, so the dialog's job is to say what each item would cost and let the
 user decline any of it.
+
+**Why a tree and not a list of checkboxes.** A real install accumulates years of
+models, most of which the user has no interest in carrying forward (sjseth,
+reviewing #125: "I actually only wanted to import a couple models… they may have
+a lot of junk in the old system"). A flat "Models / Training images / Headstamps"
+triple can only answer all-or-nothing, so the choice is per model, and per model
+which of its images, headstamps and trained checkpoint come with it.
+
+The tree is also what makes the **inheritance** honest: those three hang off a
+model row, so they are its children rather than siblings — untick the model and
+its whole branch goes with it, which is a structure the user can see instead of
+a rule the dialog has to explain. There is deliberately no leaf for the model's
+own row: it is the branch.
 
 Threading follows CLAUDE.md §8: the import runs on a worker thread and only ever
 puts a message on a ``queue.Queue``; a main-thread ``QTimer`` drains it into the
@@ -26,7 +39,6 @@ from typing import Any
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -36,6 +48,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -44,8 +58,11 @@ from ..data import winforms_import
 from ..data.winforms_import import (
     ImportOptions,
     ImportResult,
+    LegacyModel,
     LegacySurvey,
+    ModelSelection,
 )
+from .community_page import format_size
 
 TITLE = "Import from the Windows app"
 # Settings section name — also a GUIDE.md heading, since help_viewer slugifies
@@ -68,6 +85,16 @@ _NOT_FOUND = (
     "If you have one somewhere else, choose its folder — the one containing "
     "'Data' and 'training'."
 )
+# Said on the model row itself, because it is the answer to "will this tread on
+# the models I already have here?" — and the answer is per model.
+NEW_MODEL = "new model here"
+UPDATES_MODEL = "updates '{name}'"
+# Short form of `winforms_import.MLNET_WARNING`, for the row itself; the full
+# sentence stays in the warning line under the tree.
+MLNET_MARK = "ML.NET model, retrain needed"
+
+# Stands in for an unticked model while totting up what the selection costs.
+_NOTHING = ModelSelection(images=False, headstamps=False, checkpoint=False)
 
 
 def _muted(text: str, parent: QWidget) -> QLabel:
@@ -78,7 +105,7 @@ def _muted(text: str, parent: QWidget) -> QLabel:
 
 
 def describe_item(key: str, found: LegacySurvey) -> tuple[str, str]:
-    """(label, hint) for one checkbox, with the counts this install would bring.
+    """(label, detail) for one top-level row, with what this install would bring.
 
     The counts are the whole point of surveying before importing: "Training
     images" alone says nothing, "12,255 images" tells the user why the copy is
@@ -86,12 +113,7 @@ def describe_item(key: str, found: LegacySurvey) -> tuple[str, str]:
     """
     if key == winforms_import.ITEM_MODELS:
         trainable = sum(1 for m in found.models if m.has_usable_checkpoint)
-        hint = f"{len(found.models)} model(s), {trainable} with a trained model file"
-        return "Models", hint
-    if key == winforms_import.ITEM_IMAGES:
-        return "Training images", f"{found.total_images} image(s) — the slowest part of the copy"
-    if key == winforms_import.ITEM_HEADSTAMPS:
-        return "Headstamps and slot assignments", f"{found.total_headstamps} headstamp(s), with their bin layout"
+        return "Models", f"{len(found.models)} in the Windows app, {trainable} with a trained model file"
     if key == winforms_import.ITEM_IMAGE_PROC:
         return "Image-processing settings", "Crop tuning from the Windows app"
     if key == winforms_import.ITEM_SERIAL:
@@ -99,6 +121,88 @@ def describe_item(key: str, found: LegacySurvey) -> tuple[str, str]:
     if key == winforms_import.ITEM_AI_CONFIG:
         return "AI Config", "Endpoint, model and prompt for classifying over HTTP"
     return key, ""
+
+
+def describe_model(entry: LegacyModel) -> tuple[str, str]:
+    """(label, detail) for one model's row.
+
+    Everything needed to decide whether this model is worth carrying forward,
+    on the row itself — the counts included, because "38 images" is exactly how
+    a user recognises an abandoned experiment without expanding anything. The
+    fate comes last and is the answer to "will this tread on what I have here".
+    """
+    fate = UPDATES_MODEL.format(name=entry.updates) if entry.updates else NEW_MODEL
+    detail = [entry.cartridge_name, f"{entry.image_count} image(s)", f"{entry.headstamp_count} headstamp(s)"]
+    if entry.has_usable_checkpoint:
+        detail.append(format_size(entry.checkpoint_bytes))
+    elif entry.checkpoint_kind == "mlnet":
+        # There *is* a checkpoint, it just can't classify here — without this
+        # the missing "Trained model file" row reads as "never trained".
+        detail.append(MLNET_MARK)
+    detail.append(fate)
+    return entry.name, " · ".join(detail)
+
+
+def describe_part(part: str, entry: LegacyModel) -> tuple[str, str]:
+    """(label, detail) for one model's images / headstamps / checkpoint row."""
+    if part == winforms_import.PART_IMAGES:
+        return "Training images", f"{entry.image_count}"
+    if part == winforms_import.PART_HEADSTAMPS:
+        return "Headstamps and slot assignments", f"{entry.headstamp_count}"
+    if part == winforms_import.PART_CHECKPOINT:
+        return "Trained model file", format_size(entry.checkpoint_bytes)
+    return part, ""
+
+
+def _state(checked: bool) -> Qt.CheckState:
+    return Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+
+
+def _children(item: QTreeWidgetItem) -> list[QTreeWidgetItem]:
+    return [item.child(i) for i in range(item.childCount())]
+
+
+def _set_branch(item: QTreeWidgetItem, state: Qt.CheckState) -> None:
+    """Set `item` and everything under it, skipping what the user can't reach.
+
+    A disabled row is one this install has nothing behind — carrying a tick into
+    it would make `selected_options` claim something that isn't there.
+    """
+    if not item.isDisabled():
+        item.setCheckState(0, state)
+    for child in _children(item):
+        _set_branch(child, state)
+
+
+def _refresh_ancestors(item: QTreeWidgetItem) -> None:
+    """Recompute every parent above `item` from the children it actually has."""
+    parent = item.parent()
+    while parent is not None:
+        states = {child.checkState(0) for child in _children(parent) if not child.isDisabled()}
+        if states == {Qt.CheckState.Checked}:
+            parent.setCheckState(0, Qt.CheckState.Checked)
+        elif states == {Qt.CheckState.Unchecked}:
+            parent.setCheckState(0, Qt.CheckState.Unchecked)
+        elif states:
+            parent.setCheckState(0, Qt.CheckState.PartiallyChecked)
+        parent = parent.parent()
+
+
+def available_parts(entry: LegacyModel) -> tuple[str, ...]:
+    """The parts this legacy model actually has something to offer for.
+
+    A part with nothing behind it gets no row at all rather than a disabled one:
+    every tick in the tree then means something, and the check propagation never
+    has to reason about a child the user cannot reach.
+    """
+    parts: list[str] = []
+    if entry.image_count:
+        parts.append(winforms_import.PART_IMAGES)
+    if entry.headstamp_count:
+        parts.append(winforms_import.PART_HEADSTAMPS)
+    if entry.has_usable_checkpoint:
+        parts.append(winforms_import.PART_CHECKPOINT)
+    return tuple(parts)
 
 
 class WinFormsImportDialog(QDialog):
@@ -125,7 +229,10 @@ class WinFormsImportDialog(QDialog):
         self.ask_directory: Callable[[], str | None] = self._ask_directory
 
         self.setWindowTitle(TITLE)
-        self.setMinimumWidth(520)
+        # Wide enough for a model row's second column — name, cartridge, counts,
+        # checkpoint size and what the import would do to the library. Narrower
+        # and the last of those elides, which is the half a user is deciding on.
+        self.setMinimumWidth(760)
         self._build_ui()
         self._reload_survey()
 
@@ -155,29 +262,43 @@ class WinFormsImportDialog(QDialog):
         line.setObjectName("sidebarSeparator")
         column.addWidget(line)
 
-        self.checkboxes: dict[str, QCheckBox] = {}
-        self.hints: dict[str, QLabel] = {}
-        # Ticked by default: the three that make up "my setup". The settings
-        # blocks are opt-in — they overwrite what the user may already have
-        # tuned here, and unlike a model there is no second copy to fall back on.
-        defaults = {
-            winforms_import.ITEM_MODELS: True,
-            winforms_import.ITEM_IMAGES: True,
-            winforms_import.ITEM_HEADSTAMPS: True,
-            winforms_import.ITEM_IMAGE_PROC: False,
-            winforms_import.ITEM_SERIAL: False,
-            winforms_import.ITEM_AI_CONFIG: False,
-        }
-        for key, checked in defaults.items():
-            box = QCheckBox("", self)
-            box.setChecked(checked)
-            self.checkboxes[key] = box
-            column.addWidget(box)
-            hint = _muted("", self)
-            hint.setContentsMargins(24, 0, 0, 4)
-            self.hints[key] = hint
-            column.addWidget(hint)
-        self.checkboxes[winforms_import.ITEM_MODELS].toggled.connect(self._sync_dependents)
+        self.tree = QTreeWidget(self)
+        self.tree.setObjectName("importTree")
+        self.tree.setHeaderHidden(True)
+        # Two columns: what it is, then what it would bring. One column would
+        # elide a model's counts away exactly when they matter — the name is
+        # what has to survive, so it gets a column of its own.
+        self.tree.setColumnCount(2)
+        self.tree.setMinimumHeight(240)
+        self.tree.itemChanged.connect(self._on_item_changed)
+        # Column 0 is sized to what is *visible*, and a model's parts are a
+        # level deeper than anything measured while its branch was closed —
+        # without this they open elided to "Training ima…".
+        self.tree.itemExpanded.connect(lambda _item: self.tree.resizeColumnToContents(0))
+        column.addWidget(self.tree, 1)
+
+        # Populated by `_reload_survey`; every row is addressed through these
+        # rather than by walking the tree, so a test can tick one model.
+        self.items: dict[str, QTreeWidgetItem] = {}
+        self.model_items: dict[int, QTreeWidgetItem] = {}
+        self.part_items: dict[tuple[int, str], QTreeWidgetItem] = {}
+
+        # Picking two models out of fifteen should not cost thirteen clicks.
+        select_row = QHBoxLayout()
+        select_row.addWidget(QLabel("Models:", self))
+        self.all_models_button = QPushButton("Select all", self)
+        self.all_models_button.clicked.connect(lambda: self._set_all_models(True))
+        self.no_models_button = QPushButton("Select none", self)
+        self.no_models_button.clicked.connect(lambda: self._set_all_models(False))
+        select_row.addWidget(self.all_models_button)
+        select_row.addWidget(self.no_models_button)
+        select_row.addStretch(1)
+        column.addLayout(select_row)
+
+        # What the current ticks add up to. A partial selection otherwise gives
+        # the user no idea what they have just signed up to wait for.
+        self.selection_label = _muted("", self)
+        column.addWidget(self.selection_label)
 
         self.warning_label = _muted("", self)
         self.warning_label.setObjectName("warningLabel")
@@ -204,63 +325,155 @@ class WinFormsImportDialog(QDialog):
     # ----- the source folder --------------------------------------------------
 
     def _reload_survey(self) -> None:
-        """Re-read the chosen folder and repaint every count."""
+        """Re-read the chosen folder and rebuild the tree from it."""
         self._survey = None
+        problem = ""
         if self._root is not None:
             try:
-                self._survey = winforms_import.survey(self._root)
+                # `db` is what lets each model row say whether it would create a
+                # model here or refresh one that already exists.
+                self._survey = winforms_import.survey(self._root, db=self._win.db)
             except (OSError, ValueError) as exc:
-                self.folder_label.setText(str(self._root))
-                self.warning_label.setText(str(exc))
-                self._set_items_enabled(False)
-                self.import_button.setEnabled(False)
-                return
+                problem = str(exc)
 
+        self._rebuild_tree()
         if self._survey is None:
-            self.folder_label.setText(_NOT_FOUND)
-            self.warning_label.setText("")
-            self._set_items_enabled(False)
+            self.folder_label.setText(str(self._root) if self._root is not None else _NOT_FOUND)
+            self.warning_label.setText(problem)
             self.import_button.setEnabled(False)
+            self._set_items_enabled(False)
             return
 
         self.folder_label.setText(str(self._root))
-        for key, box in self.checkboxes.items():
-            label, hint = describe_item(key, self._survey)
-            box.setText(label)
-            self.hints[key].setText(hint)
-        # Grey out what this install simply doesn't have, rather than offering
-        # a tick that would import nothing.
-        self.checkboxes[winforms_import.ITEM_MODELS].setEnabled(bool(self._survey.models))
-        self.checkboxes[winforms_import.ITEM_IMAGES].setEnabled(bool(self._survey.total_images))
-        self.checkboxes[winforms_import.ITEM_HEADSTAMPS].setEnabled(bool(self._survey.total_headstamps))
-        self.checkboxes[winforms_import.ITEM_IMAGE_PROC].setEnabled(self._survey.has_image_processing)
-        self.checkboxes[winforms_import.ITEM_SERIAL].setEnabled(self._survey.has_serial)
-        self.checkboxes[winforms_import.ITEM_AI_CONFIG].setEnabled(self._survey.has_ai_config)
-        for box in self.checkboxes.values():
-            if not box.isEnabled():
-                box.setChecked(False)
         self.warning_label.setText("\n".join(self._survey.warnings))
+        self._set_items_enabled(True)
         self.import_button.setEnabled(not self._survey.is_empty)
-        self._sync_dependents()
+        self._refresh_selection_label()
 
-    def _sync_dependents(self) -> None:
-        """Images and headstamps hang off a model row — no models, no either."""
-        if winforms_import.ITEM_MODELS not in self.checkboxes:
+    # ----- the tree -----------------------------------------------------------
+
+    def _rebuild_tree(self) -> None:
+        """Throw the rows away and build them from the current survey.
+
+        Signals stay blocked throughout: every `setCheckState` here would
+        otherwise re-enter `_on_item_changed` and propagate against a tree that
+        is only half built.
+        """
+        self.tree.blockSignals(True)
+        try:
+            self.tree.clear()
+            self.items = {}
+            self.model_items = {}
+            self.part_items = {}
+            found = self._survey
+            if found is None:
+                return
+
+            models_row = self._add_item(winforms_import.ITEM_MODELS, checked=bool(found.models))
+            models_row.setDisabled(not found.models)
+            for entry in found.models:
+                self._add_model(models_row, entry)
+            # Models open, each model closed: picking *which* models is the
+            # first job, and a 15-model install with every branch open would
+            # push the settings rows below the fold. Each model's own row
+            # already carries its counts, so nothing is hidden by this.
+            models_row.setExpanded(True)
+
+            # Opt-in, not ticked by default: these overwrite values the user may
+            # already have tuned here, and unlike a model there is no second copy
+            # to fall back on.
+            for key, available in (
+                (winforms_import.ITEM_IMAGE_PROC, found.has_image_processing),
+                (winforms_import.ITEM_SERIAL, found.has_serial),
+                (winforms_import.ITEM_AI_CONFIG, found.has_ai_config),
+            ):
+                row = self._add_item(key, checked=False)
+                # Nothing behind it, so nothing to offer — greyed out rather
+                # than a tick that would import nothing.
+                row.setDisabled(not available)
+            self.tree.resizeColumnToContents(0)
+        finally:
+            self.tree.blockSignals(False)
+
+    def _add_item(self, key: str, *, checked: bool) -> QTreeWidgetItem:
+        found = self._survey
+        assert found is not None  # only called from _rebuild_tree, past its guard
+        row = QTreeWidgetItem(self.tree, list(describe_item(key, found)))
+        row.setFlags(row.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        row.setCheckState(0, _state(checked))
+        self.items[key] = row
+        return row
+
+    def _add_model(self, parent: QTreeWidgetItem, entry: LegacyModel) -> None:
+        row = QTreeWidgetItem(parent, list(describe_model(entry)))
+        row.setFlags(row.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        row.setCheckState(0, Qt.CheckState.Checked)
+        self.model_items[entry.legacy_id] = row
+        for part in available_parts(entry):
+            leaf = QTreeWidgetItem(row, list(describe_part(part, entry)))
+            leaf.setFlags(leaf.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            leaf.setCheckState(0, Qt.CheckState.Checked)
+            self.part_items[(entry.legacy_id, part)] = leaf
+
+    def _on_item_changed(self, item: QTreeWidgetItem, column: int) -> None:
+        """Push a tick down the branch and recompute the ones above it.
+
+        Ticking a model means its whole branch; unticking it means none of it.
+        A parent left showing part of its branch is `PartiallyChecked`, which is
+        set here rather than through `ItemIsAutoTristate` so there is exactly one
+        place that decides what a parent's state means.
+        """
+        if column != 0:
             return
-        models_on = self.checkboxes[winforms_import.ITEM_MODELS].isChecked()
-        survey_in = self._survey
-        for key in (winforms_import.ITEM_IMAGES, winforms_import.ITEM_HEADSTAMPS):
-            box = self.checkboxes[key]
-            available = survey_in is not None and bool(
-                survey_in.total_images if key == winforms_import.ITEM_IMAGES else survey_in.total_headstamps
-            )
-            box.setEnabled(models_on and available)
-            if not box.isEnabled():
-                box.setChecked(False)
+        self.tree.blockSignals(True)
+        try:
+            state = item.checkState(0)
+            if state != Qt.CheckState.PartiallyChecked:
+                _set_branch(item, state)
+            _refresh_ancestors(item)
+        finally:
+            self.tree.blockSignals(False)
+        self._refresh_selection_label()
+
+    def _set_all_models(self, checked: bool) -> None:
+        models_row = self.items.get(winforms_import.ITEM_MODELS)
+        if models_row is None or models_row.isDisabled():
+            return
+        self.tree.blockSignals(True)
+        try:
+            _set_branch(models_row, _state(checked))
+        finally:
+            self.tree.blockSignals(False)
+        self._refresh_selection_label()
+
+    def _refresh_selection_label(self) -> None:
+        """Say what the current ticks add up to, in the units of the wait."""
+        found = self._survey
+        if found is None:
+            self.selection_label.setText("")
+            return
+        chosen = self.selected_options()
+        models = chosen.per_model or {}
+        images = sum(e.image_count for e in found.models if (models.get(e.legacy_id) or _NOTHING).images)
+        checkpoints = sum(
+            1 for e in found.models if e.has_usable_checkpoint and (models.get(e.legacy_id) or _NOTHING).checkpoint
+        )
+        if not models:
+            self.selection_label.setText("No models selected.")
+            return
+        parts = [f"{len(models)} of {len(found.models)} model(s)"]
+        if images:
+            parts.append(f"{images} image(s)")
+        if checkpoints:
+            parts.append(f"{checkpoints} trained model file(s)")
+        self.selection_label.setText("Will import: " + ", ".join(parts) + ".")
 
     def _set_items_enabled(self, enabled: bool) -> None:
-        for box in self.checkboxes.values():
-            box.setEnabled(enabled)
+        # The tree is one control: a running import must not let the user
+        # re-tick the selection it is halfway through acting on.
+        self.tree.setEnabled(enabled)
+        self.all_models_button.setEnabled(enabled)
+        self.no_models_button.setEnabled(enabled)
 
     def _choose_folder(self) -> None:
         chosen = self.ask_directory()
@@ -270,14 +483,38 @@ class WinFormsImportDialog(QDialog):
         self._reload_survey()
 
     def selected_options(self) -> ImportOptions:
+        """Read the tree back as an `ImportOptions`.
+
+        The per-model map is the authority on models; the three app-level flags
+        are set from it only so a summary or a log line reads sensibly.
+        """
+        per_model: dict[int, ModelSelection] = {}
+        for legacy_id, row in self.model_items.items():
+            if row.checkState(0) == Qt.CheckState.Unchecked:
+                continue
+            per_model[legacy_id] = ModelSelection(
+                images=self._part_checked(legacy_id, winforms_import.PART_IMAGES),
+                headstamps=self._part_checked(legacy_id, winforms_import.PART_HEADSTAMPS),
+                checkpoint=self._part_checked(legacy_id, winforms_import.PART_CHECKPOINT),
+            )
         return ImportOptions(
-            models=self.checkboxes[winforms_import.ITEM_MODELS].isChecked(),
-            training_images=self.checkboxes[winforms_import.ITEM_IMAGES].isChecked(),
-            headstamps=self.checkboxes[winforms_import.ITEM_HEADSTAMPS].isChecked(),
-            image_processing=self.checkboxes[winforms_import.ITEM_IMAGE_PROC].isChecked(),
-            serial=self.checkboxes[winforms_import.ITEM_SERIAL].isChecked(),
-            ai_config=self.checkboxes[winforms_import.ITEM_AI_CONFIG].isChecked(),
+            models=bool(per_model),
+            training_images=any(s.images for s in per_model.values()),
+            headstamps=any(s.headstamps for s in per_model.values()),
+            image_processing=self._item_checked(winforms_import.ITEM_IMAGE_PROC),
+            serial=self._item_checked(winforms_import.ITEM_SERIAL),
+            ai_config=self._item_checked(winforms_import.ITEM_AI_CONFIG),
+            per_model=per_model,
         )
+
+    def _part_checked(self, legacy_id: int, part: str) -> bool:
+        """Is this part ticked? False when the model has no such row to tick."""
+        row = self.part_items.get((legacy_id, part))
+        return row is not None and row.checkState(0) == Qt.CheckState.Checked
+
+    def _item_checked(self, key: str) -> bool:
+        row = self.items.get(key)
+        return row is not None and row.checkState(0) == Qt.CheckState.Checked
 
     # ----- running it ---------------------------------------------------------
 

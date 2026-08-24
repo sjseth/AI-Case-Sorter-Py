@@ -36,25 +36,69 @@ _MODEL = {
     "ModelType": 0,
     "ModelMode": 0,
 }
+# A second model, so "pick a couple out of the junk" has something to pick from.
+_MODEL_OTHER = {
+    "Id": 4,
+    "Name": "223 Remington",
+    "CartridgeId": 5,
+    "ModelType": 0,
+    "ModelMode": 0,
+}
 
 
-def _write_install(root: Path, *, images: list[str] | None = None, with_defaults: bool = True) -> Path:
+def _write_install(
+    root: Path,
+    *,
+    images: list[str] | None = None,
+    with_defaults: bool = True,
+    models: list[dict[str, Any]] | None = None,
+    images_by_id: dict[int, list[str]] | None = None,
+    headstamps: list[dict[str, Any]] | None = None,
+) -> Path:
+    """A synthetic legacy install. `images` is sugar for model 3's folder."""
     (root / "Data").mkdir(parents=True, exist_ok=True)
     document: dict[str, Any] = {
-        "Models": [_MODEL],
-        "Cartridges": [{"Id": 2, "Name": "9mm"}],
-        "Headstamps": [{"Id": 1, "Name": "GECO", "Model_Id": 3}],
+        "Models": models if models is not None else [_MODEL],
+        "Cartridges": [{"Id": 2, "Name": "9mm"}, {"Id": 5, "Name": "223"}],
+        "Headstamps": headstamps if headstamps is not None else [{"Id": 1, "Name": "GECO", "Model_Id": 3}],
         "HeadStampParents": [],
         "HeadStampParentLinks": [],
         "SlotConfigs": [],
         "Defaults": {"DefaultSerialPort": "COM3", "SlotQuantity": 8} if with_defaults else {},
     }
     (root / winforms_import.CONFIG_DB_NAME).write_text(json.dumps(document), encoding="utf-8-sig")
-    folder = root / "training" / "images" / "3"
-    folder.mkdir(parents=True, exist_ok=True)
-    for name in images or []:
-        (folder / name).write_bytes(b"\xff\xd8\xff\xe0jpeg-ish")
+    per_model = dict(images_by_id or {})
+    per_model.setdefault(3, list(images or []))
+    for legacy_id, names in per_model.items():
+        folder = root / "training" / "images" / str(legacy_id)
+        folder.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            (folder / name).write_bytes(b"\xff\xd8\xff\xe0jpeg-ish")
     return root
+
+
+def _label(item: Any) -> str:
+    """Both columns of a row — what it is, then what it would bring."""
+    return f"{item.text(0)} — {item.text(1)}"
+
+
+def _checked(item: Any) -> bool:
+    from PySide6.QtCore import Qt
+
+    return bool(item.checkState(0) == Qt.CheckState.Checked)
+
+
+def _partial(item: Any) -> bool:
+    from PySide6.QtCore import Qt
+
+    return bool(item.checkState(0) == Qt.CheckState.PartiallyChecked)
+
+
+def _set_checked(item: Any, checked: bool) -> None:
+    """Tick a row the way a click does — through the signal, so it propagates."""
+    from PySide6.QtCore import Qt
+
+    item.setCheckState(0, Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
 
 
 def _torch_zip(path: Path) -> None:
@@ -96,41 +140,136 @@ def _run_and_wait(qapp: Any, dialog: WinFormsImportDialog, seen: list[tuple[str,
 
 
 def test_counts_come_from_the_survey(qapp, window, tmp_path: Path) -> None:
+    """Each part row carries the count for the tick that decides it."""
     root = _write_install(tmp_path / "legacy", images=["GECO__1.jpg", "GECO__2.jpg"])
     dialog = WinFormsImportDialog(window, root, window)
     _quiet(dialog)
 
-    assert "2 image(s)" in dialog.hints[winforms_import.ITEM_IMAGES].text()
-    assert "1 headstamp(s)" in dialog.hints[winforms_import.ITEM_HEADSTAMPS].text()
+    assert _label(dialog.part_items[(3, winforms_import.PART_IMAGES)]) == "Training images — 2"
+    assert _label(dialog.part_items[(3, winforms_import.PART_HEADSTAMPS)]).endswith("— 1")
+    # And on the model's own row, so an abandoned experiment is recognisable
+    # without expanding it.
+    assert "2 image(s)" in _label(dialog.model_items[3])
     assert dialog.import_button.isEnabled()
     dialog.close()
 
 
-def test_items_the_installation_lacks_are_greyed_out(qapp, window, tmp_path: Path) -> None:
-    """Offering a tick that would import nothing is worse than not offering it."""
+def test_every_model_gets_its_own_branch(qapp, window, tmp_path: Path) -> None:
+    """The point of the tree: two models, picked apart from one another."""
+    root = _write_install(
+        tmp_path / "legacy",
+        models=[_MODEL, _MODEL_OTHER],
+        images_by_id={3: ["GECO__1.jpg"], 4: ["FC__1.jpg", "FC__2.jpg"]},
+        headstamps=[{"Id": 1, "Name": "GECO", "Model_Id": 3}],
+    )
+    dialog = WinFormsImportDialog(window, root, window)
+    _quiet(dialog)
+
+    assert set(dialog.model_items) == {3, 4}
+    assert "9mm Base Model" in _label(dialog.model_items[3])
+    # Model 4 has images but no headstamps, so it gets no headstamp row at all.
+    assert (4, winforms_import.PART_IMAGES) in dialog.part_items
+    assert (4, winforms_import.PART_HEADSTAMPS) not in dialog.part_items
+    assert (3, winforms_import.PART_HEADSTAMPS) in dialog.part_items
+    dialog.close()
+
+
+def test_a_part_the_model_has_nothing_for_gets_no_row(qapp, window, tmp_path: Path) -> None:
+    """A tick that would import nothing is worse than no tick at all."""
     root = _write_install(tmp_path / "legacy", with_defaults=False)
     dialog = WinFormsImportDialog(window, root, window)
     _quiet(dialog)
 
-    assert not dialog.checkboxes[winforms_import.ITEM_IMAGES].isEnabled()
-    assert not dialog.checkboxes[winforms_import.ITEM_IMAGES].isChecked()
-    assert not dialog.checkboxes[winforms_import.ITEM_SERIAL].isEnabled()
-    assert not dialog.checkboxes[winforms_import.ITEM_AI_CONFIG].isEnabled()
-    assert dialog.checkboxes[winforms_import.ITEM_HEADSTAMPS].isEnabled()
+    # No images on disk and no torch checkpoint — only headstamps to offer.
+    assert (3, winforms_import.PART_IMAGES) not in dialog.part_items
+    assert (3, winforms_import.PART_CHECKPOINT) not in dialog.part_items
+    assert (3, winforms_import.PART_HEADSTAMPS) in dialog.part_items
+    # Same rule one level up, for the app-level settings rows.
+    assert dialog.items[winforms_import.ITEM_SERIAL].isDisabled()
+    assert dialog.items[winforms_import.ITEM_AI_CONFIG].isDisabled()
     dialog.close()
 
 
-def test_unticking_models_disables_its_dependents(qapp, window, tmp_path: Path) -> None:
-    root = _write_install(tmp_path / "legacy", images=["GECO__1.jpg"])
+def test_unticking_a_model_takes_its_branch_with_it(qapp, window, tmp_path: Path) -> None:
+    """The inheritance is the tree's shape, not a rule the dialog polices."""
+    root = _write_install(
+        tmp_path / "legacy",
+        models=[_MODEL, _MODEL_OTHER],
+        images_by_id={3: ["GECO__1.jpg"], 4: ["FC__1.jpg"]},
+    )
     dialog = WinFormsImportDialog(window, root, window)
     _quiet(dialog)
-    assert dialog.checkboxes[winforms_import.ITEM_IMAGES].isEnabled()
 
-    dialog.checkboxes[winforms_import.ITEM_MODELS].setChecked(False)
+    _set_checked(dialog.model_items[3], False)
 
-    assert not dialog.checkboxes[winforms_import.ITEM_IMAGES].isEnabled()
-    assert not dialog.checkboxes[winforms_import.ITEM_HEADSTAMPS].isEnabled()
+    assert not _checked(dialog.part_items[(3, winforms_import.PART_IMAGES)])
+    assert _checked(dialog.part_items[(4, winforms_import.PART_IMAGES)])
+    # One of two models left ticked, so the parent says so.
+    assert _partial(dialog.items[winforms_import.ITEM_MODELS])
+    assert set(dialog.selected_options().per_model or {}) == {4}
     dialog.close()
+
+
+def test_unticking_the_models_row_clears_every_model(qapp, window, tmp_path: Path) -> None:
+    root = _write_install(tmp_path / "legacy", models=[_MODEL, _MODEL_OTHER], images=["GECO__1.jpg"])
+    dialog = WinFormsImportDialog(window, root, window)
+    _quiet(dialog)
+
+    _set_checked(dialog.items[winforms_import.ITEM_MODELS], False)
+
+    assert not any(_checked(row) for row in dialog.model_items.values())
+    assert dialog.selected_options().per_model == {}
+    assert not dialog.selected_options().any_selected()
+    dialog.close()
+
+
+def test_select_none_then_select_all_walks_the_whole_branch(qapp, window, tmp_path: Path) -> None:
+    """Two models out of fifteen must not cost thirteen clicks."""
+    root = _write_install(tmp_path / "legacy", models=[_MODEL, _MODEL_OTHER], images=["GECO__1.jpg"])
+    dialog = WinFormsImportDialog(window, root, window)
+    _quiet(dialog)
+
+    dialog._set_all_models(False)
+    assert dialog.selected_options().per_model == {}
+
+    dialog._set_all_models(True)
+    assert set(dialog.selected_options().per_model or {}) == {3, 4}
+    assert _checked(dialog.part_items[(3, winforms_import.PART_IMAGES)])
+    dialog.close()
+
+
+def test_a_model_can_come_without_its_checkpoint(qapp, window, tmp_path: Path) -> None:
+    """The 200 MB item is the one a user most wants to decline individually."""
+    root = _write_install(tmp_path / "legacy", images=["GECO__1.jpg"])
+    _torch_zip(root / "training" / "models" / "3.zip")
+    dialog = WinFormsImportDialog(window, root, window)
+    _quiet(dialog)
+
+    _set_checked(dialog.part_items[(3, winforms_import.PART_CHECKPOINT)], False)
+    chosen = dialog.selected_options()
+
+    assert chosen.per_model is not None
+    assert chosen.per_model[3].checkpoint is False
+    assert chosen.per_model[3].images is True
+    # The model is still coming, just not its checkpoint.
+    assert _partial(dialog.model_items[3])
+    dialog.close()
+
+
+def test_the_model_row_says_what_it_would_do_to_the_library(qapp, window, tmp_path: Path, monkeypatch) -> None:
+    """Will this tread on what I already have? — answered per model, up front."""
+    monkeypatch.setenv("CASESORTER_DATA_DIR", str(tmp_path / "appdata"))
+    root = _write_install(tmp_path / "legacy", images=["GECO__1.jpg"])
+    first = WinFormsImportDialog(window, root, window)
+    seen = _quiet(first)
+    assert "new model here" in _label(first.model_items[3])
+    _run_and_wait(qapp, first, seen)
+    first.close()
+
+    again = WinFormsImportDialog(window, root, window)
+    _quiet(again)
+    assert "updates '9mm Base Model'" in _label(again.model_items[3])
+    again.close()
 
 
 def test_a_folder_that_is_not_an_installation_says_so(qapp, window, tmp_path: Path) -> None:
@@ -151,7 +290,25 @@ def test_choose_folder_reloads_the_counts(qapp, window, tmp_path: Path) -> None:
     dialog._choose_folder()
 
     assert dialog.import_button.isEnabled()
-    assert "1 image(s)" in dialog.hints[winforms_import.ITEM_IMAGES].text()
+    assert _label(dialog.part_items[(3, winforms_import.PART_IMAGES)]) == "Training images — 1"
+    dialog.close()
+
+
+def test_the_selection_line_totals_what_is_ticked(qapp, window, tmp_path: Path) -> None:
+    root = _write_install(
+        tmp_path / "legacy",
+        models=[_MODEL, _MODEL_OTHER],
+        images_by_id={3: ["GECO__1.jpg"], 4: ["FC__1.jpg", "FC__2.jpg"]},
+    )
+    dialog = WinFormsImportDialog(window, root, window)
+    _quiet(dialog)
+    assert "2 of 2 model(s)" in dialog.selection_label.text()
+    assert "3 image(s)" in dialog.selection_label.text()
+
+    _set_checked(dialog.model_items[4], False)
+
+    assert "1 of 2 model(s)" in dialog.selection_label.text()
+    assert "1 image(s)" in dialog.selection_label.text()
     dialog.close()
 
 
@@ -159,8 +316,9 @@ def test_nothing_ticked_is_refused_rather_than_run(qapp, window, tmp_path: Path)
     root = _write_install(tmp_path / "legacy")
     dialog = WinFormsImportDialog(window, root, window)
     seen = _quiet(dialog)
-    for box in dialog.checkboxes.values():
-        box.setChecked(False)
+    dialog._set_all_models(False)
+    for key in (winforms_import.ITEM_IMAGE_PROC, winforms_import.ITEM_SERIAL, winforms_import.ITEM_AI_CONFIG):
+        _set_checked(dialog.items[key], False)
 
     dialog.start_import()
 
@@ -188,6 +346,50 @@ def test_import_lands_and_the_shell_is_refreshed(qapp, window, tmp_path: Path, m
     assert result.checkpoints_copied == 1
     assert any(m.name == "9mm Base Model" for m in ModelRepo(window.db).list())
     assert seen and seen[-1][0] == "Import complete"
+    dialog.close()
+
+
+def test_only_the_ticked_models_are_imported(qapp, window, tmp_path: Path, monkeypatch) -> None:
+    """sjseth's ask on #125: bring across a couple, leave the junk behind."""
+    monkeypatch.setenv("CASESORTER_DATA_DIR", str(tmp_path / "appdata"))
+    root = _write_install(
+        tmp_path / "legacy",
+        models=[_MODEL, _MODEL_OTHER],
+        images_by_id={3: ["GECO__1.jpg"], 4: ["FC__1.jpg", "FC__2.jpg"]},
+    )
+    dialog = WinFormsImportDialog(window, root, window)
+    seen = _quiet(dialog)
+    _set_checked(dialog.model_items[4], False)
+
+    _run_and_wait(qapp, dialog, seen)
+
+    result = dialog.result_summary
+    assert result is not None
+    assert result.models_imported == 1
+    assert result.images_copied == 1  # model 4's two images stayed behind
+    names = [m.name for m in ModelRepo(window.db).list()]
+    assert "9mm Base Model" in names
+    assert "223 Remington" not in names
+    dialog.close()
+
+
+def test_a_declined_checkpoint_is_not_copied(qapp, window, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CASESORTER_DATA_DIR", str(tmp_path / "appdata"))
+    root = _write_install(tmp_path / "legacy", images=["GECO__1.jpg"])
+    _torch_zip(root / "training" / "models" / "3.zip")
+    dialog = WinFormsImportDialog(window, root, window)
+    seen = _quiet(dialog)
+    _set_checked(dialog.part_items[(3, winforms_import.PART_CHECKPOINT)], False)
+
+    _run_and_wait(qapp, dialog, seen)
+
+    result = dialog.result_summary
+    assert result is not None
+    assert result.models_imported == 1
+    assert result.images_copied == 1
+    assert result.checkpoints_copied == 0
+    imported = next(m for m in ModelRepo(window.db).list() if m.name == "9mm Base Model")
+    assert not imported.model_path
     dialog.close()
 
 

@@ -370,8 +370,13 @@ def export_for_share(
     return zip_path, manifest_path
 
 
-def _unique_model_name(base: str, repo: ModelRepo) -> str:
-    """Append (n) until the name is unique across all models."""
+def unique_model_name(base: str, repo: ModelRepo) -> str:
+    """Append (n) until the name is unique across all models.
+
+    Public because `winforms_import` needs the same answer: importing a Windows
+    install onto a library that already holds a "9mm" must not leave the user
+    with two rows they cannot tell apart.
+    """
     existing = {m.name.lower() for m in repo.list()}
     if base.lower() not in existing:
         return base
@@ -557,7 +562,7 @@ def import_model(
             model_repo.update(saved)
         else:
             desired_name = model_name_override or model.name or "Imported"
-            model.name = _unique_model_name(desired_name, model_repo)
+            model.name = unique_model_name(desired_name, model_repo)
             saved = model_repo.create(model)
 
         # Decide target directories (per-model `<id>/images` and

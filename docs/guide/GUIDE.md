@@ -668,28 +668,49 @@ own; otherwise choose the folder yourself — the one containing `Data` and
 `training`. The same offer appears once, automatically, the first time you
 start this app on a computer that has the Windows app on it.
 
-You tick what comes across:
+You tick what comes across, in a tree:
 
-- **Models** — the model itself, including its trained model file where there
-  is one, so it can classify immediately without retraining.
-- **Training images** — usually the bulk of the data, and the slowest part of
-  the copy.
-- **Headstamps and slot assignments** — your headstamp list, parent
-  classifications, and which bin each one drops into.
+- **Models** — with one branch per model in the Windows app. Under each model:
+    - **Training images** — usually the bulk of the data, and the slowest part
+      of the copy.
+    - **Headstamps and slot assignments** — that model's headstamp list, parent
+      classifications, and which bin each one drops into.
+    - **Trained model file** — its size is shown, because this is the big one.
+      Take it and the model classifies immediately; leave it and the model comes
+      across as a shell you retrain on the [Train](#train) page.
 - **Image-processing settings** — the crop tuning from the Windows app.
 - **Serial / board settings** — port, baud rate and the board's init values.
 - **AI Config** — endpoint, model and prompt, if you classify over HTTP.
 
-Training images and headstamps belong to a model, so they are only available
-when **Models** is ticked. Anything this installation does not have is greyed
-out rather than offered.
+**Pick the models you actually want.** A Windows install that has been in use
+for a while usually holds models you have no interest in carrying forward, so
+every model is its own tick. **Select all** / **Select none** are there so
+choosing two out of fifteen is two clicks rather than thirteen, and the line
+under the tree totals what you have chosen — models, images and trained model
+files — before you start.
+
+Images, headstamps and the trained model file all belong to a model, so they sit
+*under* it: untick a model and its whole branch goes with it. There is no way to
+bring a model's images across without the model itself, because they land in its
+folder. A model showing a half-filled tick is one where you have kept some parts
+and not others.
+
+Anything this installation does not have is left out or greyed out rather than
+offered as a tick that would import nothing — a model with no images has no
+**Training images** row at all.
+
+Each model's row also says what importing it would **do to your library here**:
+either *new model here*, or *updates '…'* naming the model it would refresh
+instead of duplicating.
 
 A few things are worth knowing before you run it:
 
 - **Models trained with the Windows app's older ML.NET pipeline cannot
   classify here.** They are still imported — with their headstamps and images
   — but without a trained model file, so the [Train](#train) page is where
-  you pick them up. The import says which models this applied to.
+  you pick them up. Their row says *ML.NET model, retrain needed* and has no
+  **Trained model file** to tick, so you can decide before you import; the
+  summary at the end names the ones you did import.
 - **A model that came from the [Community](#community) stays read-only**, the
   same as one downloaded here: the trained model file belongs to whoever
   published it, so it is not trainable. Your own models stay trainable.
@@ -703,6 +724,14 @@ Running the import a second time is safe. A model already brought across is
 updated in place rather than duplicated, your slot assignments and sorting
 templates survive, and images already copied are skipped. The import never
 takes over an active model you have already chosen here.
+
+That also means you can import in passes — bring two models over, sort with
+them, then come back for more. And a model whose trained model file you declined
+the first time gets it on a later run if you tick it then.
+
+If a Windows model happens to share its name with a model you already have here,
+the imported one is named `… (2)` rather than leaving you with two rows you
+cannot tell apart. Your existing model is not touched.
 
 
 ## Getting help

@@ -284,8 +284,32 @@ sanctioned way for worker threads to update the UI.
   uninstall entry's `InstallLocation` is blank, so a custom install is found
   by asking the user, not by reading a key.
   `survey()` reports what a root offers without importing anything (it is what
-  populates the dialog's per-item counts and what keeps the first-run offer
-  silent); `import_installation()` does the work, per ticked item.
+  populates the dialog's counts and what keeps the first-run offer silent);
+  `import_installation()` does the work, per ticked item.
+  - **The selection is per model, not per category.** `ImportOptions.per_model`
+    maps a legacy model id to a `ModelSelection` (images / headstamps /
+    checkpoint), and `selection_for()` is the single place that resolves "what
+    do I bring for this model" — a real install holds years of models the user
+    doesn't want (sjseth on #125). Three states, and the difference is
+    load-bearing: **`None`** means no per-model choice was made, so every
+    surveyed model comes with the app-level flags (what every pre-tree caller
+    and every default `ImportOptions()` gets); **`{}`** means no models at all;
+    a populated map is the answer. The model's **row** is deliberately not a
+    selectable part — the images land in its folder, the headstamps hang off it,
+    the checkpoint is recorded on it — which is the inheritance the dialog's
+    tree makes structural instead of a rule (§5).
+  - **Model ids never collide, names can.** `ModelRepo.create` allocates the
+    rowid, so the legacy id survives only as a lookup key (`training/images/<id>`
+    and the `winforms_imported_models` map) and an id conflict with a local
+    model is impossible by construction. The *name* is the one real conflict, so
+    a newly-created row goes through `model_io.unique_model_name` — the same
+    resolution the ZIP path has always applied, made public for this caller.
+    An update (UID or remembered pairing) keeps the local name, so re-running
+    the import stays idempotent rather than growing `(2)`s.
+  - **`survey(root, db=...)`** additionally resolves, per model, whether
+    importing it would create a row or refresh one (`LegacyModel.updates`),
+    via the same `_find_existing` the import uses. Asked early purely so the
+    dialog can say so before the user commits; without a `db` it stays None.
   Two things it leans on and one it must not:
   - Legacy `Models` rows are **the same PascalCase shape** as an export ZIP's
     `ModelInfo`, so they go straight to `model_io.model_from_export_dict` —
@@ -308,7 +332,11 @@ sanctioned way for worker threads to update the UI.
     `TransformerChain/` = ML.NET) before copying. An ML.NET-only model is
     imported as a **shell** — metadata, headstamps and images, no checkpoint —
     because the images are the expensive part and the `NoLocalCheckpointError`
-    path already explains a model that can't classify yet.
+    path already explains a model that can't classify yet. That warning lives
+    on `LegacyModel.warning`, not in an install-wide list
+    (`LegacySurvey.warnings` derives from the models), so the *survey* reports
+    on the whole install — which is what informs the pick — while the *import*
+    reports only on the models the user actually took.
   - **Never destructive to the source.** Files are copied; nothing in the
     install directory is written, moved or removed. Re-running is idempotent:
     a community UID match or the per-root `winforms_imported_models` settings
@@ -803,6 +831,19 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   shipped and then reverted: JL lived with them and chose the bar. Don't
   reintroduce item widgets in these tables — `_pin_ai_row` and every sort
   destroy them, which is machinery the bar simply doesn't need.
+- **One checkable tree, and it is a picker, not a table.**
+  `dialog_winforms_import.py`'s `QTreeWidget#importTree` is the only tree in the
+  app whose items carry check state, which is why `theme.py` needs an
+  `::indicator` block keyed on it (the `QCheckBox::indicator` rules can't reach
+  an item view's own indicator). It is not an exception to the bar convention
+  above: check state is item *data*, not an embedded widget, so nothing is
+  destroyed by a rebuild. The hierarchy carries meaning — a model's images,
+  headstamps and checkpoint are its children because they cannot exist without
+  it — and check propagation is manual (`_set_branch` down, `_refresh_ancestors`
+  up, both under `blockSignals`) rather than `ItemIsAutoTristate`, so exactly
+  one place decides what a half-ticked parent means. Rows with nothing behind
+  them are **omitted**, not disabled, so propagation never has to reason about
+  a child the user can't reach.
 - **The notify/confirm seam.** Anything that would open a native modal —
   `win.notify`, a page's `confirm` / `ask_text` / `ask_open_path` /
   `ask_save_path` / `ask_import_choice` — is an **instance attribute**, not a

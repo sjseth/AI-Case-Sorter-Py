@@ -56,7 +56,7 @@ from .config import (
     Config,
 )
 from .db import Database
-from .model_io import WINFORMS_MODELMODE_OPENAI, model_from_export_dict
+from .model_io import WINFORMS_MODELMODE_OPENAI, model_from_export_dict, unique_model_name
 from .models import AIModelConfig, Model
 from .repository import (
     CartridgeRepo,
@@ -126,6 +126,24 @@ ITEM_IMAGE_PROC = "image_processing"
 ITEM_SERIAL = "serial"
 ITEM_AI_CONFIG = "ai_config"
 
+# The three things one model can bring across, each tickable on its own. The
+# model's **row** is deliberately not among them: the images land in its folder,
+# the headstamps hang off it and the checkpoint is recorded on it, so there is
+# no meaningful "import the images but not the model". That is the inheritance
+# the dialog's tree makes visible — untick a model and its whole branch goes.
+PART_IMAGES = "images"
+PART_HEADSTAMPS = "headstamps"
+PART_CHECKPOINT = "checkpoint"
+
+
+@dataclass(frozen=True)
+class ModelSelection:
+    """What to bring across for one legacy model."""
+
+    images: bool = True
+    headstamps: bool = True
+    checkpoint: bool = True
+
 
 @dataclass
 class ImportOptions:
@@ -134,6 +152,12 @@ class ImportOptions:
     `training_images` and `headstamps` are meaningless without `models` — the
     images land in a model's folder and the headstamps hang off a model row —
     so `normalized()` folds them off rather than making the dialog police it.
+
+    `per_model` is how the dialog says "these two models, and for that one skip
+    the 200 MB checkpoint". Leaving it **None** means every model the survey
+    found, each taking the three app-level flags above — which is what a caller
+    that doesn't care about per-model choice (and every pre-tree caller) gets.
+    An **empty** dict is a real answer, not a missing one: no models at all.
     """
 
     models: bool = True
@@ -142,6 +166,7 @@ class ImportOptions:
     image_processing: bool = False
     serial: bool = False
     ai_config: bool = False
+    per_model: dict[int, ModelSelection] | None = None
 
     def normalized(self) -> ImportOptions:
         if self.models:
@@ -155,9 +180,25 @@ class ImportOptions:
             ai_config=self.ai_config,
         )
 
+    def selection_for(self, legacy_id: int) -> ModelSelection | None:
+        """What to bring across for one legacy model, or None to skip it."""
+        if not self.models:
+            return None
+        if self.per_model is None:
+            # No per-model choice was made, so the app-level flags stand for
+            # every model. The checkpoint has no app-level flag of its own —
+            # before per-model selection existed it always came across.
+            return ModelSelection(
+                images=self.training_images,
+                headstamps=self.headstamps,
+                checkpoint=True,
+            )
+        return self.per_model.get(legacy_id)
+
     def any_selected(self) -> bool:
         n = self.normalized()
-        return any((n.models, n.image_processing, n.serial, n.ai_config))
+        models_wanted = n.models and (n.per_model is None or bool(n.per_model))
+        return any((models_wanted, n.image_processing, n.serial, n.ai_config))
 
 
 @dataclass
@@ -172,10 +213,40 @@ class LegacyModel:
     checkpoint: Path | None = None
     checkpoint_kind: str = "none"  # "torch" | "mlnet" | "none"
     headstamp_count: int = 0
+    # The local model this one would refresh instead of creating, when `survey`
+    # was given a `db` to check against. None means "a new model" — and so does
+    # a survey taken without a db, which is why the dialog is the only caller
+    # that passes one.
+    updates: str | None = None
+    # What needs saying about this model, if anything. Held per model rather
+    # than in one install-wide list so a warning about a model the user chose
+    # not to import doesn't follow them into the completion summary.
+    warning: str = ""
 
     @property
     def has_usable_checkpoint(self) -> bool:
         return self.checkpoint_kind == "torch" and self.checkpoint is not None
+
+    @property
+    def community_uid(self) -> str:
+        """The community UID on the legacy row, or "" for a purely local model.
+
+        Legacy rows are PascalCase; the snake_case spelling is accepted for the
+        same reason `model_from_export_dict` accepts it — a manifest that has
+        been round-tripped through this app once.
+        """
+        value = self.raw.get("CommunityModelUID") or self.raw.get("community_model_uid")
+        return str(value).strip() if value else ""
+
+    @property
+    def checkpoint_bytes(self) -> int:
+        """Size of a usable checkpoint, for a dialog that has to justify a wait."""
+        if not self.has_usable_checkpoint or self.checkpoint is None:
+            return 0
+        try:
+            return self.checkpoint.stat().st_size
+        except OSError:
+            return 0
 
     @property
     def was_openai_mode(self) -> bool:
@@ -202,7 +273,15 @@ class LegacySurvey:
     has_serial: bool = False
     has_image_processing: bool = False
     has_ai_config: bool = False
-    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def warnings(self) -> list[str]:
+        """Everything worth saying about this install, one line per model.
+
+        Derived from the models rather than accumulated alongside them, so a
+        caller importing a subset can filter to the ones it actually took.
+        """
+        return [m.warning for m in self.models if m.warning]
 
     @property
     def total_images(self) -> int:
@@ -346,13 +425,18 @@ def _legacy_ai_config(row: dict[str, Any]) -> dict[str, Any] | None:
     return value
 
 
-def survey(root: Path | str) -> LegacySurvey:
+def survey(root: Path | str, *, db: Database | None = None) -> LegacySurvey:
     """Read an install root and report what could be imported.
 
     Never raises for a merely-incomplete install: a missing `Settings.json`, an
     absent images folder or a model with no checkpoint are all normal and become
     counts of zero. A missing or unparseable `ConfigDB.sjdb.json` is the one
     hard error, because without it there is nothing to import at all.
+
+    Pass `db` to also resolve, per model, whether importing it would create a
+    new row or refresh one already here (`LegacyModel.updates`). That is the
+    same question `_find_existing` answers during the import, asked early so the
+    dialog can show the answer before the user commits to anything.
     """
     root = Path(root)
     config_path = root / CONFIG_DB_NAME
@@ -383,11 +467,18 @@ def survey(root: Path | str) -> LegacySurvey:
             checkpoint_kind=kind,
             headstamp_count=headstamp_counts.get(legacy_id, 0),
         )
-        out.models.append(entry)
         # An openai-mode row needs no warning: "openai" is a first-class mode
         # here too, so it imports faithfully — config, headstamps and all.
         if kind == "mlnet" and not entry.was_openai_mode:
-            out.warnings.append(MLNET_WARNING.format(name=entry.name))
+            entry.warning = MLNET_WARNING.format(name=entry.name)
+        out.models.append(entry)
+
+    if db is not None:
+        model_repo = ModelRepo(db)
+        remembered = _imported_map(SettingsRepo(db), root)
+        for entry in out.models:
+            found = _find_existing(entry, model_repo=model_repo, remembered=remembered)
+            entry.updates = found.name if found is not None else None
 
     defaults = raw.get("Defaults")
     defaults = defaults if isinstance(defaults, dict) else {}
@@ -425,7 +516,6 @@ def _remember_import(settings: SettingsRepo, root: Path, legacy_id: int, model_i
 
 def _find_existing(
     entry: LegacyModel,
-    model: Model,
     *,
     model_repo: ModelRepo,
     remembered: dict[str, int],
@@ -437,9 +527,12 @@ def _find_existing(
     is the same model, so re-importing it must not fork the user's slot layout.
     Failing that, an earlier run of *this* import against *this* root recorded
     the pairing, which is what makes running the import twice idempotent.
+
+    Takes the `LegacyModel` rather than a parsed `Model` so `survey` can ask the
+    question too, without building one just to read a UID off it.
     """
-    if model.community_model_uid:
-        found = model_repo.find_by_community_uid(model.community_model_uid)
+    if entry.community_uid:
+        found = model_repo.find_by_community_uid(entry.community_uid)
         if found is not None:
             return found
     remembered_id = remembered.get(str(entry.legacy_id))
@@ -601,7 +694,7 @@ def _import_one_model(
     entry: LegacyModel,
     raw_db: dict[str, Any],
     *,
-    options: ImportOptions,
+    selection: ModelSelection,
     model_repo: ModelRepo,
     cart_repo: CartridgeRepo,
     headstamp_repo: HeadstampRepo,
@@ -618,7 +711,7 @@ def _import_one_model(
     """
     model = model_from_export_dict(entry.raw)
     model.name = entry.name
-    existing = _find_existing(entry, model, model_repo=model_repo, remembered=remembered)
+    existing = _find_existing(entry, model_repo=model_repo, remembered=remembered)
     model.cartridge_id = (
         existing.cartridge_id if existing is not None else cart_repo.get_or_create(entry.cartridge_name).id
     )
@@ -636,11 +729,18 @@ def _import_one_model(
         saved_id = existing.id
         result.models_updated += 1
     else:
+        # Not an update, so this is a genuinely new row — and the library may
+        # already hold a model of the same name that has nothing to do with it
+        # (the user built one here before importing, or imported a second
+        # machine's install). Two indistinguishable "9mm"s is the one conflict
+        # an import can actually create; the ZIP path already resolves it the
+        # same way.
+        model.name = unique_model_name(entry.name, model_repo)
         saved_id = model_repo.create(model).id
         result.models_imported += 1
     _remember_import(settings_repo, root, entry.legacy_id, saved_id)
 
-    if options.headstamps:
+    if selection.headstamps:
         _import_headstamps(
             entry,
             saved_id,
@@ -768,6 +868,11 @@ def import_installation(
     Non-destructive to the source: every file is copied, nothing there is
     written, moved or removed.
 
+    `options.per_model` picks individual models, and per model which of its
+    images, headstamps and checkpoint come with it; a legacy install with years
+    of abandoned models in it is the normal case, not the exception. Models
+    absent from that map are not read at all.
+
     Re-running is safe. A model already brought across from this same root — or
     one already installed under the same community UID — is refreshed in place,
     so slot assignments and sorting templates survive and the library does not
@@ -784,7 +889,16 @@ def import_installation(
     root = Path(root)
     options = (options or ImportOptions()).normalized()
     survey_in = survey(root)
-    result = ImportResult(warnings=list(survey_in.warnings))
+    # Resolved once, so the DB pass and the copy pass below cannot disagree
+    # about what the user asked for. A model absent from this map is one they
+    # unticked, and is skipped entirely — including its warning, which would
+    # otherwise report on a model they deliberately left behind.
+    selections = {
+        entry.legacy_id: selection
+        for entry in survey_in.models
+        if (selection := options.selection_for(entry.legacy_id)) is not None
+    }
+    result = ImportResult(warnings=[e.warning for e in survey_in.models if e.warning and e.legacy_id in selections])
     if not options.any_selected():
         return result
 
@@ -812,36 +926,38 @@ def import_installation(
 
     with db.transaction():
         remembered = _imported_map(settings_repo, root)
-        if options.models:
-            for entry in survey_in.models:
-                if progress:
-                    progress(f"Importing '{entry.name}'…")
-                # A nested transaction is a SAVEPOINT, so a row this app will
-                # not accept rolls back to just before itself. Counts go to a
-                # scratch result for the same reason — merged only once the
-                # row has actually committed.
-                delta = ImportResult()
-                try:
-                    with db.transaction():
-                        saved_id = _import_one_model(
-                            entry,
-                            raw_db,
-                            options=options,
-                            model_repo=model_repo,
-                            cart_repo=cart_repo,
-                            headstamp_repo=headstamp_repo,
-                            parent_repo=parent_repo,
-                            settings_repo=settings_repo,
-                            root=root,
-                            remembered=remembered,
-                            result=delta,
-                        )
-                except (ValueError, TypeError, sqlite3.Error) as exc:
-                    log.warning("winforms import: skipping model %r: %s", entry.name, exc)
-                    result.warnings.append(MODEL_FAILED_WARNING.format(name=entry.name, error=exc))
-                    continue
-                _merge_counts(result, delta)
-                imported[entry.legacy_id] = saved_id
+        for entry in survey_in.models:
+            selection = selections.get(entry.legacy_id)
+            if selection is None:
+                continue
+            if progress:
+                progress(f"Importing '{entry.name}'…")
+            # A nested transaction is a SAVEPOINT, so a row this app will
+            # not accept rolls back to just before itself. Counts go to a
+            # scratch result for the same reason — merged only once the
+            # row has actually committed.
+            delta = ImportResult()
+            try:
+                with db.transaction():
+                    saved_id = _import_one_model(
+                        entry,
+                        raw_db,
+                        selection=selection,
+                        model_repo=model_repo,
+                        cart_repo=cart_repo,
+                        headstamp_repo=headstamp_repo,
+                        parent_repo=parent_repo,
+                        settings_repo=settings_repo,
+                        root=root,
+                        remembered=remembered,
+                        result=delta,
+                    )
+            except (ValueError, TypeError, sqlite3.Error) as exc:
+                log.warning("winforms import: skipping model %r: %s", entry.name, exc)
+                result.warnings.append(MODEL_FAILED_WARNING.format(name=entry.name, error=exc))
+                continue
+            _merge_counts(result, delta)
+            imported[entry.legacy_id] = saved_id
 
         if options.serial:
             _import_serial(defaults, settings_json, config)
@@ -855,7 +971,7 @@ def import_installation(
 
         # Only ever *adopt* the legacy app's active model, never override a
         # choice already made here — the import is an offer, not a takeover.
-        if options.models and settings_repo.get_active_model_id() is None:
+        if imported and settings_repo.get_active_model_id() is None:
             target = imported.get(activate_legacy_id)
             if target is not None:
                 settings_repo.set_active_model_id(target)
@@ -864,16 +980,17 @@ def import_installation(
     # ----- file copies, outside the write lock --------------------------------
     for entry in survey_in.models:
         model_id = imported.get(entry.legacy_id)
-        if model_id is None:
+        selection = selections.get(entry.legacy_id)
+        if model_id is None or selection is None:
             continue
         paths.ensure_model_subtree(model_id)
-        if options.training_images:
+        if selection.images:
             result.images_copied += _copy_images(
                 root / IMAGES_SUBDIR / str(entry.legacy_id),
                 paths.model_images_dir(model_id),
                 progress=progress,
             )
-        if entry.has_usable_checkpoint and entry.checkpoint is not None:
+        if selection.checkpoint and entry.has_usable_checkpoint and entry.checkpoint is not None:
             dest = paths.model_trained_path(model_id)
             # Same skip rule as the images: a re-run must not pay a multi-
             # hundred-MB copy for a checkpoint that hasn't changed. Size is

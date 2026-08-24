@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from sorter import paths
 from sorter.data.config import Config
 from sorter.data.db import Database
 from sorter.data.models import is_trainable
@@ -29,6 +30,7 @@ from sorter.data.winforms_import import (
     MLNET_WARNING,
     MODEL_FAILED_WARNING,
     ImportOptions,
+    ModelSelection,
     candidate_install_dirs,
     find_installation,
     import_installation,
@@ -270,6 +272,26 @@ def test_survey_flags_an_mlnet_only_model(tmp_path: Path) -> None:
     # message is one string owned by the module, and CodeQL reads a
     # `"ML.NET" in ...` test as a hostname allowlist check.
     assert MLNET_WARNING.format(name="9mm Base Model") in found.warnings
+
+
+def test_a_warning_about_a_skipped_model_is_not_reported(tmp_path: Path, db: Database, config: Config) -> None:
+    """The survey warns about the whole install; the import warns about the pick.
+
+    Telling a user their ML.NET model came across without a checkpoint, when
+    they deliberately unticked it, is a report on work that never happened.
+    """
+    root = _write_install(tmp_path / "legacy")  # _MODEL_OWN (3) + _MODEL_COMMUNITY (4)
+    _mlnet_zip(root / "training" / "models" / "4.zip")
+    assert MLNET_WARNING.format(name="9mm Default") in survey(root).warnings
+
+    result = import_installation(
+        root,
+        db=db,
+        config=config,
+        options=ImportOptions(per_model={3: ModelSelection()}),
+    )
+
+    assert result.warnings == []
 
 
 def test_survey_does_not_warn_about_an_openai_mode_model(tmp_path: Path) -> None:
@@ -690,6 +712,133 @@ def test_unticking_models_folds_off_its_dependents(tmp_path: Path, db: Database,
     assert result.images_copied == 0
     assert result.headstamps_imported == 0
     assert result.serial_imported
+
+
+def test_per_model_selection_imports_only_the_chosen_models(tmp_path: Path, db: Database, config: Config) -> None:
+    """A real install carries years of models the user has no interest in."""
+    root = _write_install(tmp_path / "legacy")
+    _add_images(root, 3, ["GECO__1.jpg"])
+    _add_images(root, 4, ["FC__1.jpg", "FC__2.jpg"])
+
+    result = import_installation(
+        root,
+        db=db,
+        config=config,
+        options=ImportOptions(per_model={3: ModelSelection()}),
+    )
+
+    assert result.models_imported == 1
+    assert result.images_copied == 1  # model 4 was not asked for
+    names = [m.name for m in ModelRepo(db).list()]
+    assert "9mm Base Model" in names
+    assert "9mm Default" not in names
+
+
+def test_an_empty_per_model_map_means_no_models(tmp_path: Path, db: Database, config: Config) -> None:
+    """`None` is "no per-model choice was made"; `{}` is a real answer."""
+    root = _write_install(tmp_path / "legacy")
+    before = len(ModelRepo(db).list())
+
+    options = ImportOptions(per_model={}, serial=True)
+    assert options.any_selected()  # serial still is
+
+    result = import_installation(root, db=db, config=config, options=options)
+
+    assert result.models_imported == 0
+    assert len(ModelRepo(db).list()) == before
+    assert result.serial_imported
+
+
+def test_a_model_can_be_imported_without_its_parts(tmp_path: Path, db: Database, config: Config) -> None:
+    """Model row yes, images/headstamps/checkpoint no — each declinable alone."""
+    root = _write_install(
+        tmp_path / "legacy",
+        models=[_MODEL_OWN],
+        headstamps=[{"Id": 1, "Name": "GECO", "Model_Id": 3}],
+    )
+    _add_images(root, 3, ["GECO__1.jpg"])
+    _torch_zip(root / "training" / "models" / "3.zip")
+
+    result = import_installation(
+        root,
+        db=db,
+        config=config,
+        options=ImportOptions(per_model={3: ModelSelection(images=False, headstamps=False, checkpoint=False)}),
+    )
+
+    assert result.models_imported == 1
+    assert result.images_copied == 0
+    assert result.headstamps_imported == 0
+    assert result.checkpoints_copied == 0
+    imported = _model(db, "9mm Base Model")
+    assert not imported.model_path
+    assert HeadstampRepo(db).list_for_model(imported.id) == []
+
+
+def test_declining_a_checkpoint_leaves_the_source_file_alone(tmp_path: Path, db: Database, config: Config) -> None:
+    root = _write_install(tmp_path / "legacy", models=[_MODEL_OWN])
+    checkpoint = root / "training" / "models" / "3.zip"
+    _torch_zip(checkpoint)
+    before = checkpoint.read_bytes()
+
+    import_installation(
+        root,
+        db=db,
+        config=config,
+        options=ImportOptions(per_model={3: ModelSelection(checkpoint=False)}),
+    )
+
+    assert checkpoint.read_bytes() == before
+    copied = [p for m in ModelRepo(db).list() for p in paths.model_trained_dir(m.id).glob("*.pth")]
+    assert copied == []
+
+
+def test_a_name_already_taken_here_is_not_duplicated(tmp_path: Path, db: Database, config: Config) -> None:
+    """The one conflict an import can create: two rows the user cannot tell apart.
+
+    Model ids never collide — `ModelRepo.create` allocates its own — so the name
+    is the whole of it, and it is resolved the way a ZIP import already resolves
+    it.
+    """
+    repo = ModelRepo(db)
+    mine = repo.list()[0]
+    mine.name = "9mm Base Model"
+    repo.update(mine)
+    root = _write_install(tmp_path / "legacy", models=[_MODEL_OWN])
+
+    result = import_installation(root, db=db, config=config, options=ImportOptions())
+
+    assert result.models_imported == 1
+    names = sorted(m.name for m in repo.list())
+    assert names == ["9mm Base Model", "9mm Base Model (2)"]
+    # And the pre-existing row is untouched — the import took the new name.
+    still_there = repo.get(mine.id)
+    assert still_there is not None
+    assert still_there.name == "9mm Base Model"
+
+
+def test_a_reimport_updates_rather_than_renaming(tmp_path: Path, db: Database, config: Config) -> None:
+    """Uniquifying must not turn idempotent re-runs into a pile of copies."""
+    root = _write_install(tmp_path / "legacy", models=[_MODEL_OWN])
+    import_installation(root, db=db, config=config, options=ImportOptions())
+    first = [m.name for m in ModelRepo(db).list()]
+
+    again = import_installation(root, db=db, config=config, options=ImportOptions())
+
+    assert again.models_imported == 0
+    assert again.models_updated == 1
+    assert [m.name for m in ModelRepo(db).list()] == first
+
+
+def test_survey_says_what_each_model_would_do_to_the_library(tmp_path: Path, db: Database, config: Config) -> None:
+    root = _write_install(tmp_path / "legacy", models=[_MODEL_OWN])
+
+    assert survey(root).models[0].updates is None  # no db asked, no answer
+    assert survey(root, db=db).models[0].updates is None
+
+    import_installation(root, db=db, config=config, options=ImportOptions())
+
+    assert survey(root, db=db).models[0].updates == "9mm Base Model"
 
 
 def test_nothing_ticked_is_a_no_op(tmp_path: Path, db: Database, config: Config) -> None:
