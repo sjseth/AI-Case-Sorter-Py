@@ -85,10 +85,10 @@ def checkpoint_problem(db: Database | None) -> str | None:
     """A user-facing explanation of why the active model can't classify.
 
     None when there's nothing wrong — AI Config mode, an openai-mode model
-    (no checkpoint to miss), or a local model whose checkpoint is present.
-    The UI uses this to refuse *before* the machine feeds a case;
-    `classify_active` raises the same text as a backstop for a checkpoint
-    that disappears mid-run.
+    (no checkpoint to miss), or a local model whose checkpoint is both present
+    and loadable by the installed PyTorch. The UI uses this to refuse *before*
+    the machine feeds a case; `classify_active` raises the same text as a
+    backstop for a checkpoint that disappears mid-run.
     """
     model = active_model(db)
     # An openai-mode model classifies over HTTP: no checkpoint to find, and
