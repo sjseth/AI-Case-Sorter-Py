@@ -42,7 +42,7 @@ dependencies = [
     # pyside6-addons (~175 MB of WebEngine/3D/Charts/Multimedia) that nothing
     # uses. QtAds (LGPL-2.1+) is the dock system; it pins the same Essentials
     # build, so the two versions move together.
-    "PySide6-Essentials==6.11.1",
+    "PySide6-Essentials==6.11.2",
     "pyside6-qtads==5.0.0.2",
     # Windows-only: enumerates friendly DirectShow camera names so the Camera
     # settings page can show real device names instead of just "Camera N".
