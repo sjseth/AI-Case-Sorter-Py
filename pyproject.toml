@@ -41,8 +41,10 @@ dependencies = [
     # The UI toolkit. Essentials, not the PySide6 meta-package: the meta adds
     # pyside6-addons (~175 MB of WebEngine/3D/Charts/Multimedia) that nothing
     # uses. QtAds (LGPL-2.1+) is the dock system; it pins the same Essentials
-    # build, so the two versions move together.
-    "PySide6-Essentials==6.11.2",
+    # build (==, not >=), so an Essentials bump is only resolvable once a
+    # pyside6-qtads built against that exact version exists on PyPI — check
+    # its requires_dist before accepting one, or the lock becomes unsolvable.
+    "PySide6-Essentials==6.11.1",
     "pyside6-qtads==5.0.0.2",
     # Windows-only: enumerates friendly DirectShow camera names so the Camera
     # settings page can show real device names instead of just "Camera N".
