@@ -44,7 +44,7 @@ dependencies = [
     # build (==, not >=), so an Essentials bump is only resolvable once a
     # pyside6-qtads built against that exact version exists on PyPI — check
     # its requires_dist before accepting one, or the lock becomes unsolvable.
-    "PySide6-Essentials==6.11.1",
+    "PySide6-Essentials==6.11.2",
     "pyside6-qtads==5.0.0.2",
     # Windows-only: enumerates friendly DirectShow camera names so the Camera
     # settings page can show real device names instead of just "Camera N".
