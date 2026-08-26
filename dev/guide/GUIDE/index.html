@@ -860,6 +860,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#import-from-windows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import from Windows
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1420,6 +1431,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#import-from-windows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import from Windows
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1519,7 +1541,8 @@ day, in the order you meet them.</p>
 <li><a href="#models">Models</a> — the model library: activate, edit, import, export.</li>
 <li><a href="#community">Community</a> — browse and install published models.</li>
 <li><a href="#settings">Settings</a> — <a href="#camera">Camera</a>, <a href="#serial">Serial</a>, <a href="#image-processing">Image
-  Processing</a> and <a href="#theme">Theme</a>.</li>
+  Processing</a>, <a href="#theme">Theme</a> and <a href="#import-from-windows">Import from
+  Windows</a>.</li>
 <li><a href="#getting-help">Getting help</a> — this guide, the <a href="#support-package">support
   package</a> and <a href="#updates">updates</a>.</li>
 </ul>
@@ -1902,12 +1925,25 @@ here.</p>
 <p>The alternative to a local model: classification is sent to an
 OpenAI-compatible HTTP server, and this screen is where that server — and the
 headstamps it may answer with — is set up. It is Train's mirror in the
-sidebar: live whenever no local model is active, dimmed when one is.</p>
+sidebar: live whenever classification runs over HTTP, dimmed when a local
+ConvNeXt model does the work.</p>
+<p>Two things can put classification on HTTP, and this page serves both:</p>
+<ul>
+<li><strong>AI Config mode</strong> — no active model at all. The screen edits the
+  app-level server settings.</li>
+<li><strong>An active OpenAI model</strong> — a model whose training mode is <strong>OpenAI</strong> on the
+  <a href="#models">Models</a> page. Each OpenAI model carries its <strong>own</strong> server
+  settings and its own headstamp list, so several can coexist — different
+  cartridges, prompts, even different providers. While one is active this
+  screen edits <em>that model's</em> settings, and a caption above the form says
+  so by name. This mirrors the Windows app, where "OpenAI API" is a
+  Training Mode and its configuration lives on the model.</li>
+</ul>
 <h3 id="when-ai-config-isnt-the-one-classifying">When AI Config isn't the one classifying<a class="headerlink" href="#when-ai-config-isnt-the-one-classifying" title="Permanent link">&para;</a></h3>
-<p>Activate a local model and this screen swaps its form for a panel naming the
-model that is classifying instead, with a button straight to the
-<a href="#models">Models</a> page. Select <strong>Use AI Config</strong> there to come back — the
-server settings are still exactly as you left them.</p>
+<p>Activate a local ConvNeXt model and this screen swaps its form for a panel
+naming the model that is classifying instead, with a button straight to the
+<a href="#models">Models</a> page. Select <strong>Use AI Config</strong> — or an OpenAI model —
+there to come back; the server settings are still exactly as you left them.</p>
 <h3 id="setting-up-the-server">Setting up the server<a class="headerlink" href="#setting-up-the-server" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Server</strong> — endpoint URL, API key, model name, the prompt (use
@@ -1927,9 +1963,12 @@ server settings are still exactly as you left them.</p>
 this table, plus one synthetic row for AI Config mode.</p>
 <h3 id="the-model-list">The model list<a class="headerlink" href="#the-model-list" title="Permanent link">&para;</a></h3>
 <p>The table lists each model's name, whether it is active, its cartridge, type
-(yours or a community model), the ConvNeXt size it was built as, how many
-training images it has, whether it has been trained, and when. Click a
-column heading to sort by it.</p>
+(yours or a community model), the mode it was built as — a ConvNeXt size, or
+<strong>OpenAI</strong> for a model that classifies over an HTTP server — how many training
+images it has, whether it has been trained, and when. Click a column heading
+to sort by it. An OpenAI model has nothing to train: activate it and the
+<a href="#ai-config">AI Config</a> page becomes the place its server settings and
+headstamps live.</p>
 <p>The <strong>Active</strong> column marks the model the app currently classifies with:
 exactly one row reads <strong>● ACTIVE</strong> in the theme's action colour, and every
 other row's Active cell is blank. To change it, select a row and press
@@ -2100,6 +2139,75 @@ the editor open so you can keep adjusting — <strong>Close</strong> ends the se
 <strong>Create new…</strong> saves under a name you pick, and a built-in is never
 overwritten either way. A theme can also be exported to a file and imported
 on another machine.</p>
+<h3 id="import-from-windows">Import from Windows<a class="headerlink" href="#import-from-windows" title="Permanent link">&para;</a></h3>
+<p>Copies your setup out of an installation of the Windows app (<strong>AI Brass
+Sorter</strong>) so you do not have to build it again here. <strong>Nothing in the Windows
+app is changed, moved or deleted</strong> — everything is copied, and that
+installation keeps working exactly as it did.</p>
+<p>If the Windows app is installed in the usual place, this page finds it on its
+own; otherwise choose the folder yourself — the one containing <code>Data</code> and
+<code>training</code>. The same offer appears once, automatically, the first time you
+start this app on a computer that has the Windows app on it.</p>
+<p>You tick what comes across, in a tree:</p>
+<ul>
+<li><strong>Models</strong> — with one branch per model in the Windows app. Under each model:<ul>
+<li><strong>Training images</strong> — usually the bulk of the data, and the slowest part
+  of the copy.</li>
+<li><strong>Headstamps and slot assignments</strong> — that model's headstamp list, parent
+  classifications, and which bin each one drops into.</li>
+<li><strong>Trained model file</strong> — its size is shown, because this is the big one.
+  Take it and the model classifies immediately; leave it and the model comes
+  across as a shell you retrain on the <a href="#train">Train</a> page.</li>
+</ul>
+</li>
+<li><strong>Image-processing settings</strong> — the crop tuning from the Windows app.</li>
+<li><strong>Serial / board settings</strong> — port, baud rate and the board's init values.</li>
+<li><strong>AI Config</strong> — endpoint, model and prompt, if you classify over HTTP.</li>
+</ul>
+<p><strong>Pick the models you actually want.</strong> A Windows install that has been in use
+for a while usually holds models you have no interest in carrying forward, so
+every model is its own tick. <strong>Select all</strong> / <strong>Select none</strong> are there so
+choosing two out of fifteen is two clicks rather than thirteen, and the line
+under the tree totals what you have chosen — models, images and trained model
+files — before you start.</p>
+<p>Images, headstamps and the trained model file all belong to a model, so they sit
+<em>under</em> it: untick a model and its whole branch goes with it. There is no way to
+bring a model's images across without the model itself, because they land in its
+folder. A model showing a half-filled tick is one where you have kept some parts
+and not others.</p>
+<p>Anything this installation does not have is left out or greyed out rather than
+offered as a tick that would import nothing — a model with no images has no
+<strong>Training images</strong> row at all.</p>
+<p>Each model's row also says what importing it would <strong>do to your library here</strong>:
+either <em>new model here</em>, or <em>updates '…'</em> naming the model it would refresh
+instead of duplicating.</p>
+<p>A few things are worth knowing before you run it:</p>
+<ul>
+<li><strong>Models trained with the Windows app's older ML.NET pipeline cannot
+  classify here.</strong> They are still imported — with their headstamps and images
+  — but without a trained model file, so the <a href="#train">Train</a> page is where
+  you pick them up. Their row says <em>ML.NET model, retrain needed</em> and has no
+  <strong>Trained model file</strong> to tick, so you can decide before you import; the
+  summary at the end names the ones you did import.</li>
+<li><strong>A model that came from the <a href="#community">Community</a> stays read-only</strong>, the
+  same as one downloaded here: the trained model file belongs to whoever
+  published it, so it is not trainable. Your own models stay trainable.</li>
+<li><strong>A Windows model set to classify over an OpenAI server imports as an
+  OpenAI model here too</strong>, keeping its own endpoint, prompt and headstamps.
+  Activate it and the <a href="#ai-config">AI Config</a> page edits its settings.</li>
+<li><strong>One model that cannot be imported does not stop the rest.</strong> It is
+  skipped, the reason is listed at the end, and everything else still lands.</li>
+</ul>
+<p>Running the import a second time is safe. A model already brought across is
+updated in place rather than duplicated, your slot assignments and sorting
+templates survive, and images already copied are skipped. The import never
+takes over an active model you have already chosen here.</p>
+<p>That also means you can import in passes — bring two models over, sort with
+them, then come back for more. And a model whose trained model file you declined
+the first time gets it on a later run if you tick it then.</p>
+<p>If a Windows model happens to share its name with a model you already have here,
+the imported one is named <code>… (2)</code> rather than leaving you with two rows you
+cannot tell apart. Your existing model is not touched.</p>
 <h2 id="getting-help">Getting help<a class="headerlink" href="#getting-help" title="Permanent link">&para;</a></h2>
 <h3 id="the-guide">The guide<a class="headerlink" href="#the-guide" title="Permanent link">&para;</a></h3>
 <p><code>F1</code>, or <strong>Help → User Guide</strong>, opens this guide in a panel at the section
