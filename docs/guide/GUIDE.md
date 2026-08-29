@@ -302,6 +302,32 @@ when the app offers to, and it will load. Nothing about this is recoverable
 by retrying, and a model that says this has not been damaged — it is simply
 newer than the software trying to open it.
 
+### Running out of brass
+
+When the collator runs dry mid-run, up to three cases are still riding the
+feed wheel — fed past the sensor but not yet dropped. The app notices the
+board waiting on brass that isn't coming (about six seconds of quiet at the
+feed gate), confirms nothing is mid-fall, and then **flushes the wheel**:
+each remaining case is walked to the camera, classified, and dropped into
+its own slot, exactly as if the hopper were still full. The run then ends on
+its own with the wheel empty, and the status bar says how many in-flight
+cases were placed.
+
+Two details worth knowing:
+
+- If brass keeps arriving during the flush — the "empty" was really the
+  collator pausing — the run notices and resumes at full speed by itself.
+  Topping up the hopper mid-run is fine.
+- This relies on the board's **feed sensor**. With the sensor disabled the
+  firmware feeds blind, the app can't tell an empty hopper from a full one,
+  and a run at the end of the brass classifies empty air until you press
+  Stop — exactly as before.
+
+A jam during the flush stops it immediately; whatever is still in the wheel
+stays there for you to clear. Deliberately so: at the end of the brass the
+app never feeds blind to shake a case loose, because that is how a case ends
+up in the wrong bin.
+
 ### Package mode
 
 Turning on **Package mode** in [Run options](#run-options) switches the grid
