@@ -306,30 +306,43 @@ def crop_headstamp(frame_bgr: np.ndarray, config: dict[str, Any]) -> np.ndarray:
 # A real case must be *absolutely* bright, not just circular: a focused but
 # EMPTY camera pocket still yields a clean circle (the pocket itself), so
 # circle detection alone reports phantom cases at the start and end of a run.
-# Calibrated on a live machine over a 250-frame sweep: empty-pocket frames
-# read a mean of ~12 inside the disc, the darkest real case 66, median 114 —
-# so 40 splits the populations with wide margin on both sides.
+# The default splits a dark pocket (mean ~12 empty, darkest real case 66 on
+# the machine it was calibrated on) with margin on both sides — but the right
+# value is rig-dependent: a shiny worn seat ring can read over 100 empty, so
+# the floor is a per-model setting (`case_min_brightness`, Settings → Image
+# Processing) and this is only its default.
 CASE_MIN_DISC_BRIGHTNESS = 40
 
 
-def case_present(frame_bgr: np.ndarray, config: dict[str, Any]) -> bool:
-    """Whether a case (not an empty, in-focus pocket) sits at the camera.
+def disc_brightness(frame_bgr: np.ndarray, detection: tuple[float, float, float]) -> float:
+    """Mean gray level inside 80% of the detected circle's radius.
 
-    Two gates: a circle must be detected at all, and the mean gray level
-    inside 80% of its radius must clear CASE_MIN_DISC_BRIGHTNESS. Used by the
-    end-of-brass flush to decide when the wheel has walked dry — deliberately
-    not part of the normal capture path, which stays permissive.
+    The number the Image Processing tab shows for tuning `case_min_brightness`:
+    capture the empty nest, read its brightness, set the floor above it; then
+    capture a case and confirm it reads clear of the floor.
     """
-    detection = hough_detect(frame_bgr, HoughParams.from_dict(config.get("hough", {})))
-    if detection is None:
-        return False
     cx, cy, r = detection
     gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
     mask = np.zeros(gray.shape, dtype=np.uint8)
     cv2.circle(mask, (int(cx), int(cy)), max(1, int(r * 0.8)), 255, -1)
     if not mask.any():
+        return 0.0
+    return float(gray[mask == 255].mean())
+
+
+def case_present(frame_bgr: np.ndarray, config: dict[str, Any]) -> bool:
+    """Whether a case (not an empty, in-focus pocket) sits at the camera.
+
+    Two gates: a circle must be detected at all, and the disc must clear the
+    configured brightness floor. Used by the end-of-brass flush to decide when
+    the wheel has walked dry — deliberately not part of the normal capture
+    path, which stays permissive.
+    """
+    detection = hough_detect(frame_bgr, HoughParams.from_dict(config.get("hough", {})))
+    if detection is None:
         return False
-    return float(gray[mask == 255].mean()) >= CASE_MIN_DISC_BRIGHTNESS
+    floor = int(config.get("case_min_brightness", CASE_MIN_DISC_BRIGHTNESS))
+    return disc_brightness(frame_bgr, detection) >= floor
 
 
 # ----- primer mask -------------------------------------------------------------
