@@ -301,6 +301,37 @@ def crop_headstamp(frame_bgr: np.ndarray, config: dict[str, Any]) -> np.ndarray:
     return hough_crop(frame_bgr, HoughParams.from_dict(config.get("hough", {})))
 
 
+# ----- case presence -----------------------------------------------------------
+
+# A real case must be *absolutely* bright, not just circular: a focused but
+# EMPTY camera pocket still yields a clean circle (the pocket itself), so
+# circle detection alone reports phantom cases at the start and end of a run.
+# Calibrated on a live machine over a 250-frame sweep: empty-pocket frames
+# read a mean of ~12 inside the disc, the darkest real case 66, median 114 —
+# so 40 splits the populations with wide margin on both sides.
+CASE_MIN_DISC_BRIGHTNESS = 40
+
+
+def case_present(frame_bgr: np.ndarray, config: dict[str, Any]) -> bool:
+    """Whether a case (not an empty, in-focus pocket) sits at the camera.
+
+    Two gates: a circle must be detected at all, and the mean gray level
+    inside 80% of its radius must clear CASE_MIN_DISC_BRIGHTNESS. Used by the
+    end-of-brass flush to decide when the wheel has walked dry — deliberately
+    not part of the normal capture path, which stays permissive.
+    """
+    detection = hough_detect(frame_bgr, HoughParams.from_dict(config.get("hough", {})))
+    if detection is None:
+        return False
+    cx, cy, r = detection
+    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+    mask = np.zeros(gray.shape, dtype=np.uint8)
+    cv2.circle(mask, (int(cx), int(cy)), max(1, int(r * 0.8)), 255, -1)
+    if not mask.any():
+        return False
+    return float(gray[mask == 255].mean()) >= CASE_MIN_DISC_BRIGHTNESS
+
+
 # ----- primer mask -------------------------------------------------------------
 
 
