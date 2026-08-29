@@ -719,8 +719,12 @@ class RunController:
                 # re-entry is safe because every flush cycle leaves the
                 # firmware's queue holding this case's slot, exactly the arm
                 # target the drop-port case needs on the next bare sort.
+                # "resume_after_flush" rather than "resume": this verdict came
+                # from case_present, so _loop holds it unvalidated until a
+                # normal sort actually completes — a mis-set brightness floor
+                # must not ping-pong the run between flush and resume forever.
                 self.bus.post("run/status", "Brass still flowing — resuming the run.")
-                return "resume"
+                return "resume_after_flush"
 
     def _loop(self) -> None:
         try:
@@ -735,16 +739,35 @@ class RunController:
                 self.bus.post("run/error", self._board_error("Initial feed timeout"))
                 return
 
+            # Set after a flush-streak resume, cleared by the next successful
+            # normal sort. A second dry feeder while it is still set means the
+            # camera keeps reporting cases the feeder cannot be supplying — a
+            # mis-tuned empty-nest brightness floor — and re-entering the
+            # flush would ping-pong the machine forever.
+            resume_unvalidated = False
             while not self._stop_event.is_set():
                 result = self.run_once()
                 self.bus.post("run/result", result)
                 if result.get("feeder_empty"):
-                    if self._handle_feeder_empty(result) == "resume":
-                        continue
-                    break
+                    if resume_unvalidated:
+                        self.bus.post(
+                            "run/error",
+                            "Feeder is empty but the camera still reports a case, so the "
+                            "end-of-brass flush cannot finish. Check the case brightness "
+                            "floor in Settings → Image Processing; cases may remain in "
+                            "the wheel.",
+                        )
+                        break
+                    action = self._handle_feeder_empty(result)
+                    if action == "stop":
+                        break
+                    resume_unvalidated = action == "resume_after_flush"
+                    continue
                 if result.get("error"):
                     self.bus.post("run/error", result["error"])
                     break
+                if result.get("ok"):
+                    resume_unvalidated = False
                 if result.get("halt"):
                     # Every slot for this headstamp is full — stop and notify.
                     self.bus.post(

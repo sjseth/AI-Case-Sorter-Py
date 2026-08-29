@@ -113,6 +113,14 @@ def test_case_present_rejects_a_dark_pocket_that_still_circles() -> None:
     assert image_proc.case_present(frame, {}) is False
 
 
+def test_case_present_floor_is_configurable_per_rig() -> None:
+    # A shiny worn seat ring can read over 100 empty — the floor has to be
+    # movable above whatever this rig's empty nest reads.
+    frame = _synthetic_headstamp()  # disc reads ~200
+    assert image_proc.case_present(frame, {"case_min_brightness": 150}) is True
+    assert image_proc.case_present(frame, {"case_min_brightness": 250}) is False
+
+
 def test_hough_detect_prefers_largest_circle_when_primer_is_also_present() -> None:
     """Synthetic frame with a brass disk and a smaller primer-like disk inside.
 

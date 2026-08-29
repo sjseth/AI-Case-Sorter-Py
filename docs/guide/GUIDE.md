@@ -322,6 +322,16 @@ Two details worth knowing:
   firmware feeds blind, the app can't tell an empty hopper from a full one,
   and a run at the end of the brass classifies empty air until you press
   Stop — exactly as before.
+- Knowing when the wheel has finished emptying relies on telling a case at
+  the camera from an **empty pocket** — and an empty, in-focus pocket still
+  looks like a circle to the detector. The tiebreaker is the **Case
+  brightness floor** in [Settings → Image Processing](#image-processing):
+  brass has to read brighter than it. Tune it once for your machine —
+  capture the empty nest, read the "disc brightness" number in the status
+  line, set the floor above it, then capture a case and confirm it reads
+  clear of the floor. A shiny, worn pocket can read bright enough to need a
+  floor well above the default; if the floor is set wrong the run tells you
+  so and stops rather than cycling the machine forever.
 
 A jam during the flush stops it immediately; whatever is still in the wheel
 stays there for you to clear. Deliberately so: at the end of the brass the

@@ -460,9 +460,40 @@ def test_flush_resumes_when_brass_keeps_flowing(tmp_path, monkeypatch) -> None:
         with patch("sorter.hardware.image_proc.case_present", return_value=True):
             action = ctrl._handle_feeder_empty(result)
 
-    assert action == "resume"
+    # "resume_after_flush", not plain "resume": this verdict rests on
+    # case_present, so the loop holds it unvalidated until a normal sort lands.
+    assert action == "resume_after_flush"
     # The false alarm cost exactly the resume-streak worth of flush cycles.
     assert rc.FLUSH_RESUME_CASES >= 2
+
+
+def test_a_lying_camera_cannot_ping_pong_the_flush(tmp_path, monkeypatch) -> None:
+    """Mis-tuned brightness floor: camera says "case" forever on an empty nest.
+
+    Without the guard the run would alternate flush → resume → dry → flush
+    with the motors running until someone pressed Stop. The loop must instead
+    end the run with an error naming the setting to fix.
+    """
+    from sorter.hardware import serial_broker
+
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.05)
+    ctrl, _, _ = _make_controller(tmp_path)
+    ctrl.broker.set_hopper(0)
+    errors: list[str] = []
+    stopped: list[object] = []
+    ctrl.bus.subscribe("run/error", errors.append)
+    ctrl.bus.subscribe("run/stopped", stopped.append)
+
+    with (
+        patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)),
+        patch("sorter.hardware.image_proc.case_present", return_value=True),
+    ):
+        ctrl._loop()  # runs to completion on this thread — no Stop press
+    ctrl.bus.drain()
+    ctrl.broker.stop()
+
+    assert errors and "brightness" in errors[0].lower()
+    assert stopped, "the loop must end the run, not spin forever"
 
 
 def test_stop_during_flush_aborts_without_blind_feeding(tmp_path, monkeypatch) -> None:
