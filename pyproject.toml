@@ -33,6 +33,7 @@ dependencies = [
     "requests==2.34.2",
     "msal==1.37.0",
     "platformdirs==4.11.5",
+    "msal==1.38.0",
     # PEP 440 parsing/ordering for the updater's version comparison.
     "packaging==26.3",
     # Schema migrations: sorter/data/db.py runs its migration steps through
