@@ -444,11 +444,6 @@ class Camera:
         if not self._cap.isOpened():
             self._cap = None
             return False
-        # MJPG unlocks the higher resolutions on USB webcams via V4L2 — the
-        # default YUYV format often refuses 1920x1080 or caps the FPS so
-        # low that the preview stutters. DirectShow on Windows already
-        # negotiates MJPG for most webcams; setting it again is harmless.
-        self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))  # ty: ignore[unresolved-attribute]  # opencv-python's bundled stubs omit VideoWriter_fourcc; it exists at runtime
         if sys.platform.startswith("linux"):
             # V4L2 auto-exposure defaults blow out the image once the LED
             # ring is on — operators end up dropping cameraledlevel to 2-3
@@ -461,6 +456,15 @@ class Camera:
             self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         if self.height:
             self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+        # MJPG unlocks the higher resolutions and frame rates on USB webcams —
+        # the default YUY2 format caps hard (the stock sorter camera falls to
+        # 5 fps at 1080p under YUY2, which reads as a strobing preview).
+        # ORDER MATTERS: this must come AFTER the resolution sets. On
+        # DirectShow a resolution change renegotiates the media type back to
+        # the default, silently undoing an earlier FOURCC set — bench-measured
+        # on the stock sorter camera: FOURCC-then-resolution lands YUY2@5fps,
+        # resolution-then-FOURCC holds MJPG@30fps.
+        self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))  # ty: ignore[unresolved-attribute]  # opencv-python's bundled stubs omit VideoWriter_fourcc; it exists at runtime
         return True
 
     def start_preview(self) -> bool:
