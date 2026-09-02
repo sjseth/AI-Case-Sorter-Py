@@ -397,6 +397,7 @@ class QtMainWindow(QMainWindow):
         self.bus.subscribe("run/assignment_changed", lambda _p: self._refresh_sort_grid())
         self.bus.subscribe("run/package_full", self._on_package_full)
         self.bus.subscribe("run/package_halt", self._on_package_halt)
+        self.bus.subscribe("run/out_of_brass", self._on_out_of_brass)
         self.bus.subscribe("serial/disconnected", self._on_serial_disconnected)
         # Headstamps, templates and the Train activity are all scoped to the
         # active model, so a mode switch re-reads every one of them.
@@ -2390,6 +2391,12 @@ class QtMainWindow(QMainWindow):
         data = payload if isinstance(payload, dict) else {}
         self.beep()
         self.set_status(f"Slot {data.get('slot')} batch full ({data.get('count')}). Reset it to refill.")
+
+    def _on_out_of_brass(self, payload: Any) -> None:
+        data = payload if isinstance(payload, dict) else {}
+        flushed = data.get("flushed", 0)
+        self.beep()
+        self.set_status(f"Out of brass — run finished. {flushed} in-flight case(s) were flushed to their slots.")
 
     def _on_package_halt(self, payload: Any) -> None:
         label = (payload or {}).get("label") if isinstance(payload, dict) else None

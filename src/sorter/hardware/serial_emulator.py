@@ -13,11 +13,20 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from . import serial_broker
+from .serial_broker import (
+    FEEDER_EMPTY_WAITS,
+    SORT_DONE,
+    SORT_EMPTY,
+    SORT_ERROR,
+    SORT_FAILED,
+)
+
 EMULATED_PORT = "Emulated"
 
 
 class EmulatorBroker:
-    def __init__(self, *, response_delay_s: float = 0.10) -> None:
+    def __init__(self, *, response_delay_s: float = 0.10, hopper: int | None = None) -> None:
         self.port = EMULATED_PORT
         self.baud = 9600
         self.require_serial_ready = False
@@ -25,6 +34,15 @@ class EmulatorBroker:
         self.firmware_version = "Emulator-1.0"
         self.is_connected = False
         self._response_delay_s = response_delay_s
+        # Simulated hopper: None = bottomless (the historical behavior). With
+        # a count, each bare-slot sort consumes one case; once it hits zero a
+        # bare sort answers "waiting for brass" once per delay tick — exactly
+        # what the firmware's prox-gated feed does on a dry hopper — until a
+        # `stop` cancels it (answered with `done`, as the real firmware does
+        # via FeedCycleComplete) or an `xf:` forces the feed through.
+        self._hopper = hopper
+        self._feed_waiting = False
+        self._state_lock = threading.Lock()
 
         self.on_done: list[Callable[[str], None]] = []
         self.on_ok: list[Callable[[str], None]] = []
@@ -46,6 +64,8 @@ class EmulatorBroker:
 
     def stop(self) -> None:
         self.is_connected = False
+        with self._state_lock:
+            self._feed_waiting = False
 
     def close(self) -> None:
         self.stop()
@@ -91,22 +111,62 @@ class EmulatorBroker:
         """Parity with SerialBroker.send_raw — the terminator is the caller's."""
         self.send_command(text.rstrip("\r\n"))
 
+    def set_hopper(self, count: int | None) -> None:
+        """Load the simulated hopper (None = bottomless again)."""
+        with self._state_lock:
+            self._hopper = count
+
     def _fire_response_for(self, cmd: str) -> None:
         lower = cmd.lower()
         if lower in ("ping", "version"):
             self._dispatch("ok")
             return
         if lower == "stop":
-            self._dispatch("ok")
+            # The firmware always answers `stop` with exactly one `done`:
+            # it sets FeedCycleComplete, and onFeedComplete prints even when
+            # idle. It also cancels a feed parked on a dry proximity gate.
+            with self._state_lock:
+                self._feed_waiting = False
+            self._dispatch("done")
             return
         if lower == "getconfig":
             self._dispatch('{"feedspeed":60,"sortspeed":70,"slotquantity":6}')
             return
-        if ":" in lower and not lower.startswith("xf:"):
+        if lower.startswith("xf:"):
+            # Forced feed: bypasses the proximity gate, so it completes even
+            # on an empty hopper (consuming a case when one is there).
+            with self._state_lock:
+                self._feed_waiting = False
+                if self._hopper is not None and self._hopper > 0:
+                    self._hopper -= 1
+            self._dispatch("done")
+            return
+        if ":" in lower:
             self._dispatch("ok")
             return
-        # xf:* (feed/force feed) and bare slot numbers complete with "done".
+        # Bare slot number: sort + prox-gated feed. Dry hopper -> the feed
+        # waits, printing "waiting for brass" once per delay tick until brass
+        # arrives or a stop/xf cancels it.
+        with self._state_lock:
+            if self._hopper is not None and self._hopper <= 0:
+                self._feed_waiting = True
+            else:
+                if self._hopper is not None:
+                    self._hopper -= 1
+                self._feed_waiting = False
+        if self._feed_waiting:
+            self._emit_waiting()
+            return
         self._dispatch("done")
+
+    def _emit_waiting(self) -> None:
+        with self._state_lock:
+            if not self._feed_waiting or not self.is_connected:
+                return
+        self._dispatch("waiting for brass")
+        timer = threading.Timer(self._response_delay_s, self._emit_waiting)
+        timer.daemon = True
+        timer.start()
 
     def _dispatch(self, line: str) -> None:
         for cb in list(self.on_received):
@@ -181,6 +241,103 @@ class EmulatorBroker:
 
     def sort_and_move(self, slot: int) -> bool:
         return self._send_and_await(str(int(slot)), self.on_done, 20.0)
+
+    def sort_and_move_watched(self, slot: int) -> tuple[str, str]:
+        """Parity with SerialBroker.sort_and_move_watched."""
+        done = threading.Event()
+        outcome = SORT_FAILED
+        detail = ""
+        waits = 0
+
+        def _done(_payload: str) -> None:
+            nonlocal outcome
+            outcome = SORT_DONE
+            done.set()
+
+        def _error(payload: str) -> None:
+            nonlocal outcome, detail
+            outcome = SORT_ERROR
+            detail = payload
+            done.set()
+
+        def _waiting(_payload: str) -> None:
+            nonlocal outcome, waits
+            waits += 1
+            if waits >= FEEDER_EMPTY_WAITS:
+                outcome = SORT_EMPTY
+                done.set()
+
+        def _abandon(_reason: str) -> None:
+            done.set()
+
+        registrations = (
+            (self.on_done, _done),
+            (self.on_error, _error),
+            (self.on_waiting, _waiting),
+            (self.on_disconnect, _abandon),
+        )
+        for handlers, handler in registrations:
+            handlers.append(handler)
+        try:
+            if not self.send_command(str(int(slot))):
+                return SORT_FAILED, ""
+            done.wait(timeout=20.0)
+            return outcome, detail
+        finally:
+            for handlers, handler in registrations:
+                try:
+                    handlers.remove(handler)
+                except ValueError:
+                    pass
+
+    def cancel_pending_feed(self) -> str:
+        """Parity with SerialBroker.cancel_pending_feed."""
+        done_count = 0
+        finished = threading.Event()
+        outcome = "clean"
+
+        def _done(_payload: str) -> None:
+            nonlocal done_count, outcome
+            done_count += 1
+            if done_count >= 2:
+                outcome = "resumed"
+                finished.set()
+
+        def _error(_payload: str) -> None:
+            nonlocal outcome
+            outcome = "failed"
+            finished.set()
+
+        def _abandon(_reason: str) -> None:
+            nonlocal outcome
+            outcome = "failed"
+            finished.set()
+
+        registrations = (
+            (self.on_done, _done),
+            (self.on_error, _error),
+            (self.on_disconnect, _abandon),
+        )
+        for handlers, handler in registrations:
+            handlers.append(handler)
+        try:
+            if not self.send_command("stop"):
+                return "failed"
+            # Read at call time so tests can shorten the listen window.
+            finished.wait(timeout=serial_broker.CANCEL_LISTEN_S)
+            return outcome
+        finally:
+            for handlers, handler in registrations:
+                try:
+                    handlers.remove(handler)
+                except ValueError:
+                    pass
+
+    def flush_sort_and_move(self, prev_slot: int, slot: int) -> bool:
+        """Parity with SerialBroker.flush_sort_and_move."""
+        if not self.send_command(f"sortto:{int(prev_slot)}"):
+            return False
+        return self._send_and_await(f"xf:{int(slot)}", self.on_done, 20.0)
 
     def move_sorter_to_slot(self, slot: int) -> None:
         self.send_command(f"sortto:{int(slot)}")

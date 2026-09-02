@@ -377,12 +377,137 @@ def test_cycle_once_names_the_disconnect_instead_of_a_feed_timeout(tmp_path) -> 
 def test_a_live_board_still_reports_a_timeout_as_a_timeout(tmp_path) -> None:
     # The distinction only means something if the timeout half survives: a
     # board that is connected but silent must not be blamed on the cable.
+    from sorter.hardware.serial_broker import SORT_FAILED
+
     ctrl, cfg, _ = _make_controller(tmp_path)
     cfg.set_run_confidence_floor(0)
     with (
         patch("sorter.ml.classifier.classify_active", return_value=("WIN", 90)),
-        patch.object(ctrl.broker, "sort_and_move", return_value=False),
+        patch.object(ctrl.broker, "sort_and_move_watched", return_value=(SORT_FAILED, "")),
     ):
         result = ctrl.run_once()
 
     assert result["error"] == "Sort timeout"
+
+
+# ----- end-of-brass flush -----------------------------------------------------
+
+
+def test_run_once_reports_a_dry_feeder_instead_of_a_timeout(tmp_path) -> None:
+    ctrl, _, _ = _make_controller(tmp_path)
+    ctrl.broker.set_hopper(0)
+    try:
+        with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)):
+            result = ctrl.run_once()
+    finally:
+        ctrl.broker.stop()  # kill the emulator's waiting chatter
+
+    assert result["ok"] is False
+    assert result["error"] is None, "a dry feeder is a state, not an error"
+    assert result["feeder_empty"] is True
+    assert result["slot"] == 3  # the classified-but-unsorted case's slot
+    assert result["prev_slot"] == 0  # nothing sorted before it
+
+
+def test_feeder_empty_flushes_the_wheel_and_ends_the_run(tmp_path, monkeypatch) -> None:
+    from sorter.hardware import serial_broker
+
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.05)
+    ctrl, _, _ = _make_controller(tmp_path)
+    ctrl.broker.set_hopper(0)
+    sent: list[str] = []
+    ctrl.broker.on_sent.append(sent.append)
+    ended: list[dict] = []
+    ctrl.bus.subscribe("run/out_of_brass", ended.append)
+
+    with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)):
+        result = ctrl.run_once()
+        assert result.get("feeder_empty") is True
+        # One straggler still in the wheel, then the camera comes up empty.
+        with patch(
+            "sorter.hardware.image_proc.case_present",
+            side_effect=[True, False],
+        ):
+            action = ctrl._handle_feeder_empty(result)
+    ctrl.bus.drain()
+
+    assert action == "stop"
+    assert ended and ended[0]["flushed"] == 2  # the pending case + the straggler
+    # The pending WIN sort was re-issued as a flush (arm to the previous sort's
+    # slot 0, forced feed queuing WIN's slot 3), the straggler flushed after
+    # it, and the close-out feed executed the final drop.
+    assert "stop" in sent
+    flush_cmds = [c for c in sent if c.startswith(("sortto:", "xf:"))]
+    assert flush_cmds[:2] == ["sortto:0", "xf:3"]
+    assert flush_cmds[2] == "sortto:3"  # the straggler's flush parks on WIN's slot
+    assert flush_cmds[-1] == "xf:0"  # final feed: execute the last queued drop
+
+
+def test_flush_resumes_when_brass_keeps_flowing(tmp_path, monkeypatch) -> None:
+    # Case after case arriving during the flush means the dry spell was a
+    # delivery gap, not the end of the hopper — the run must resume at full
+    # speed instead of walking the whole bowl at flush pace.
+    from sorter.control import run_controller as rc
+    from sorter.hardware import serial_broker
+
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.05)
+    ctrl, _, _ = _make_controller(tmp_path)
+    ctrl.broker.set_hopper(0)
+
+    with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)):
+        result = ctrl.run_once()
+        assert result.get("feeder_empty") is True
+        with patch("sorter.hardware.image_proc.case_present", return_value=True):
+            action = ctrl._handle_feeder_empty(result)
+
+    # "resume_after_flush", not plain "resume": this verdict rests on
+    # case_present, so the loop holds it unvalidated until a normal sort lands.
+    assert action == "resume_after_flush"
+    # The false alarm cost exactly the resume-streak worth of flush cycles.
+    assert rc.FLUSH_RESUME_CASES >= 2
+
+
+def test_a_lying_camera_cannot_ping_pong_the_flush(tmp_path, monkeypatch) -> None:
+    """Mis-tuned brightness floor: camera says "case" forever on an empty nest.
+
+    Without the guard the run would alternate flush → resume → dry → flush
+    with the motors running until someone pressed Stop. The loop must instead
+    end the run with an error naming the setting to fix.
+    """
+    from sorter.hardware import serial_broker
+
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.05)
+    ctrl, _, _ = _make_controller(tmp_path)
+    ctrl.broker.set_hopper(0)
+    errors: list[str] = []
+    stopped: list[object] = []
+    ctrl.bus.subscribe("run/error", errors.append)
+    ctrl.bus.subscribe("run/stopped", stopped.append)
+
+    with (
+        patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)),
+        patch("sorter.hardware.image_proc.case_present", return_value=True),
+    ):
+        ctrl._loop()  # runs to completion on this thread — no Stop press
+    ctrl.bus.drain()
+    ctrl.broker.stop()
+
+    assert errors and "brightness" in errors[0].lower()
+    assert stopped, "the loop must end the run, not spin forever"
+
+
+def test_stop_during_flush_aborts_without_blind_feeding(tmp_path, monkeypatch) -> None:
+    from sorter.hardware import serial_broker
+
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.05)
+    ctrl, _, _ = _make_controller(tmp_path)
+    ctrl.broker.set_hopper(0)
+
+    with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)):
+        result = ctrl.run_once()
+        assert result.get("feeder_empty") is True
+        ctrl._stop_event.set()  # operator presses Stop before the flush loop
+        with patch("sorter.hardware.image_proc.case_present", return_value=True):
+            action = ctrl._handle_feeder_empty(result)
+
+    assert action == "stop"

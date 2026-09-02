@@ -210,6 +210,11 @@ class ImageProcessingConfig:
     strategy: str = "hough"
     primer_mode: str = "hide"
     primer_radius: int = 135
+    # Minimum mean gray level inside the detected disc for a case to count as
+    # present (image_proc.case_present). Rig-dependent: a dark pocket reads
+    # ~12 empty, a shiny worn seat ring can read over 100 — the floor must sit
+    # between this rig's empty-nest reading and its darkest real case.
+    case_min_brightness: int = 40
     hough: dict[str, Any] = field(
         default_factory=lambda: {
             "dp": 2.0,
@@ -229,6 +234,7 @@ class ImageProcessingConfig:
             strategy=data.get("strategy", "hough"),
             primer_mode=data.get("primer_mode", "hide"),
             primer_radius=int(data.get("primer_radius", 135)),
+            case_min_brightness=int(data.get("case_min_brightness", 40)),
             hough=dict(data.get("hough", cls().hough)),
         )
 

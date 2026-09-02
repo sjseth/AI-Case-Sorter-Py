@@ -478,6 +478,25 @@ between them from the Sort page's template dropdown.
   A board command that doesn't complete is reported through `_board_error`,
   which asks the broker whether the link is still up before blaming a timeout
   — a dropped cable and a slow board otherwise read identically (#35).
+  **End-of-brass flush** (`_handle_feeder_empty`): a bare sort whose feed half
+  answers "waiting for brass" `FEEDER_EMPTY_WAITS` times in a row is a dry
+  hopper, not a timeout. The broker's `cancel_pending_feed()` kills the
+  waiting feed (catching the race where brass landed just before the stop —
+  two `done`s inside the listen window mean the sort completed for real and
+  the run resumes), then each in-flight case is re-issued as
+  `flush_sort_and_move(prev, slot)` — `sortto:` parks the arm where the bare
+  sort would have, `xf:` executes the drop without the gate — until
+  `image_proc.case_present` finds the camera empty and one final forced feed
+  drops the last case. `FLUSH_RESUME_CASES` consecutive real cases during the
+  flush mean the dry spell was a collator gap: the run resumes at full speed.
+  Posts `run/out_of_brass` `{"flushed": n}` when the wheel ends empty. Jams
+  mid-flush stop the sequence — never home-and-refeed blind at end of brass.
+  `case_present`'s brightness floor is per-rig (`case_min_brightness` on
+  `ImageProcessingConfig`, tuned in Settings → Image Processing — a shiny
+  pocket reads >100 empty where a dark one reads ~12), and a flush-streak
+  resume stays *unvalidated* until a normal sort completes: a second dry
+  feeder before that ends the run with an error naming the floor, so a
+  mis-tuned floor cannot ping-pong the machine between flush and resume.
 
 ### Classification (`sorter/ml/`)
 - **`classifier.py`** — `classify_active`: **the active model alone picks the
