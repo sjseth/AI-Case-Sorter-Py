@@ -173,8 +173,18 @@ Python that works but cannot be uninstalled from Settings.
 - The installer is unsigned, so SmartScreen will warn on first run. Signing
   (Azure Trusted Signing, or an OV/EV certificate) is the fix; until then,
   expect a "More info → Run anyway" step.
-- `casesorter.ico` in this folder is picked up as the shortcut icon if
-  present. It isn't in the repo yet — drop one in and shortcuts will use it.
+- `casesorter.ico` in this folder is the Start Menu shortcut's icon. It is
+  **generated, not drawn**: `tools/make_app_icons.py` renders it from the
+  launcher artwork in `src/sorter/ui/icons.py`, so the shortcut, the Linux menu
+  entry and the running window are all the same mark. Re-run that tool and
+  commit the result if the artwork changes; the shortcut code still guards on
+  `Test-Path`, so a missing file costs the icon and not the install.
+- The running app's taskbar button does **not** merge with the pinned
+  shortcut. Windows groups by AppUserModelID: the app sets its own (see
+  `sorter/ui/desktop_integration.py`), but writing the matching ID into the
+  `.lnk` needs `IPropertyStore`, which `WScript.Shell` cannot reach. Fixing it
+  means hand-rolled COM interop in PowerShell; the cost of not fixing it is two
+  taskbar entries carrying the same icon.
 - The updater reads `/releases/latest`, which excludes drafts and
   pre-releases, so tagging a pre-release won't push it to stable users.
 - There is no version string to bump. The version is derived from the git tag

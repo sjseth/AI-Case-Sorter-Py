@@ -11,10 +11,9 @@ machine's own identity (a cartridge case, a headstamp seen base-on) rather
 than generic glyphs; AI Config, Models, Community and Settings use familiar
 metaphors.
 
-``APP`` is the exception to "colored by the theme": it is the window and
-taskbar mark, drawn heavier and detail-free so it survives 16 px, and inked
-in one fixed neutral because a taskbar owns its own background
-(``app_icon``).
+The launcher mark at the foot of this file is the exception to every word of
+that: filled, full-colour and untouched by the palette, because the desktop
+draws it on a background of its own (``app_icon``, ``launcher_svg``).
 """
 
 from __future__ import annotations
@@ -23,7 +22,6 @@ from PySide6.QtCore import QByteArray, QRectF, Qt
 from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
-APP = "app"
 SORT = "sort"
 TRAIN = "train"
 AI_CONFIG = "ai_config"
@@ -43,16 +41,6 @@ def _svg(body: str) -> str:
 
 
 _SVGS: dict[str, str] = {
-    # The identity mark: a headstamp base-on, rim/primer ring/primer. Heavier
-    # strokes and no small detail at all -- this one has to survive 16 px in a
-    # taskbar, where the sidebar set's reticle and sparkle would turn to mud.
-    APP: _svg(
-        """
-        <circle cx="12" cy="12" r="8.9" stroke-width="2.6"/>
-        <circle cx="12" cy="12" r="4.2" stroke-width="2.2"/>
-        <circle cx="12" cy="12" r="1.5" fill="{color}" stroke="none"/>
-        """
-    ),
     # Upright cartridge case, with a forking arrow routing right into two bins.
     SORT: _svg(
         """
@@ -176,18 +164,96 @@ def icon(name: str, color: str, size: int) -> QIcon:
     return QIcon(pixmap(name, color, size))
 
 
-# The window icon deliberately does NOT follow the live palette: it is drawn on
-# the taskbar's background, not the app's, and that background is the desktop
-# theme's business. One fixed mid-gray reads on both a light and a dark bar
-# (~4:1 against white, ~5:1 against black) where either theme's text color
-# would vanish into one of them.
-APP_ICON_COLOR = "#808080"
-APP_ICON_SIZES = (16, 24, 32, 48, 64, 128)
+# ---------------------------------------------------------------------------
+# The launcher mark — the one icon an operating system shows
+# ---------------------------------------------------------------------------
+#
+# Everything above is themed line art drawn on our own surfaces. This is the
+# opposite by necessity: a taskbar tile, a Start Menu entry and a Dock tile are
+# drawn on a background the desktop owns, at sizes it picks, in a row of icons
+# that are all filled and saturated — where a mid-gray stroke drawing reads as
+# a disabled one. So the same motif (a headstamp base-on: rim, groove, primer
+# ring, primer) is redrawn filled, in brass on gunmetal, carrying its own
+# colors instead of the palette's.
+#
+# Two documents, and the threshold between them is the point: the groove and
+# primer ring that make the detailed mark a *case head* collapse into mud below
+# 48 px — rendered and looked at, not assumed — where three high-contrast discs
+# still read as one. Every consumer picks through :func:`launcher_svg`, so the
+# .ico, the hicolor PNGs and the .icns all switch at the same size.
+LAUNCHER_DETAIL_MIN = 48
+
+# The sizes the OS asset pipelines want between them: the Icon Theme Spec's
+# usual hicolor rungs, Windows' .ico set, and macOS's .icns set (which also
+# wants 1024 for @2x — `desktop_integration` adds it rather than putting a size
+# no other platform uses in the shared list).
+LAUNCHER_SIZES: tuple[int, ...] = (16, 24, 32, 48, 64, 128, 256, 512)
+
+_LAUNCHER_DETAILED = """\
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3E444D"/><stop offset="1" stop-color="#1E2228"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0.15" y1="0.05" x2="0.85" y2="0.95">
+      <stop offset="0" stop-color="#F5DE9C"/><stop offset="0.5" stop-color="#C89C48"/>
+      <stop offset="1" stop-color="#7E581B"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0.2" y1="0.12" x2="0.8" y2="0.9">
+      <stop offset="0" stop-color="#DCB868"/><stop offset="0.55" stop-color="#B0863A"/>
+      <stop offset="1" stop-color="#6E4E17"/>
+    </linearGradient>
+    <linearGradient id="primer" x1="0.25" y1="0.15" x2="0.75" y2="0.85">
+      <stop offset="0" stop-color="#F6E3AD"/><stop offset="1" stop-color="#B08432"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#plate)"/>
+  <circle cx="256" cy="256" r="172" fill="url(#rim)"/>
+  <circle cx="256" cy="256" r="140" fill="none" stroke="#241A06" stroke-width="14"/>
+  <circle cx="256" cy="256" r="133" fill="url(#face)"/>
+  <circle cx="256" cy="256" r="78" fill="#241A06"/>
+  <circle cx="256" cy="256" r="64" fill="url(#primer)"/>
+  <circle cx="256" cy="256" r="22" fill="#241A06"/>
+</svg>
+"""
+
+_LAUNCHER_SIMPLE = """\
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect x="8" y="8" width="496" height="496" rx="104" fill="#272C33"/>
+  <circle cx="256" cy="256" r="184" fill="#D4A94F"/>
+  <circle cx="256" cy="256" r="96" fill="#2A1E06"/>
+  <circle cx="256" cy="256" r="70" fill="#E8CB84"/>
+</svg>
+"""
+
+
+def launcher_svg(size: int) -> str:
+    """The launcher artwork to use at ``size`` px — detailed, or the small cut."""
+    return _LAUNCHER_DETAILED if size >= LAUNCHER_DETAIL_MIN else _LAUNCHER_SIMPLE
+
+
+def launcher_pixmap(size: int) -> QPixmap:
+    """The launcher mark at exactly ``size`` **physical** pixels.
+
+    Deliberately not :func:`pixmap`, which bakes the screen's device pixel
+    ratio in: right for a widget, wrong for a file on disk, where the size in
+    the path (``48x48/apps/…``) is a promise about how many pixels are in it.
+    """
+    canvas = QPixmap(size, size)
+    canvas.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(canvas)
+    try:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        document = QByteArray(launcher_svg(size).encode("utf-8"))
+        QSvgRenderer(document).render(painter, QRectF(0, 0, size, size))
+    finally:
+        painter.end()
+    return canvas
 
 
 def app_icon() -> QIcon:
-    """The window/taskbar icon — the headstamp mark, at every size a shell asks for."""
+    """The window/taskbar icon — the launcher mark at every size a shell asks for."""
     result = QIcon()
-    for size in APP_ICON_SIZES:
-        result.addPixmap(pixmap(APP, APP_ICON_COLOR, size))
+    for size in LAUNCHER_SIZES:
+        result.addPixmap(launcher_pixmap(size))
     return result

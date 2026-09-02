@@ -947,6 +947,50 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   offers to install it, and only when there is a display. It deliberately
   warns rather than exits — the `;wayland` fallback means a missing library
   costs that limitation, not the launch.
+- **Desktop integration** (`desktop_integration.py`) is what puts the app in
+  the OS's own launcher, and it is three unrelated mechanisms behind one name
+  because each platform answers "which application is this window?" its own
+  way — none of them `setWindowIcon`. `run_app` calls it in three beats:
+  `prepare_process()` **before** the `QApplication` (Qt reads `RESOURCE_NAME`
+  once, when it builds the first window's `WM_CLASS`), `apply_identity()`
+  after, and `ensure()` once the window is up.
+  - **Linux** gets a freedesktop desktop entry in `$XDG_DATA_HOME/applications`
+    plus hicolor PNG rungs, written at launch because there is no Linux
+    installer to write them. Portability across distributions is **not**
+    detection: GNOME, KDE Plasma, Xfce, Cinnamon, MATE and LXQt all read the
+    same two specs, so the only distro-aware line is a best-effort
+    `update-desktop-database` nudge. `tests/integration/test_desktop_entry.py`
+    runs the real `desktop-file-validate` over what it writes — a warning
+    there is a failure, because each one names a desktop-side consequence.
+  - **The matching key differs by desktop, so all three are set to `APP_ID`.**
+    GNOME/KDE read `_GTK_APPLICATION_ID` / `_KDE_NET_WM_DESKTOP_FILE` (Qt sets
+    both from `desktopFileName`); the lighter docks match `StartupWMClass`
+    against `WM_CLASS`, whose instance half Qt takes from `RESOURCE_NAME` and
+    otherwise from `argv[0]`'s basename — which under `python -m sorter` is
+    the word `__main__`, matching nothing. That is why the env var exists.
+  - **macOS** gets a stub `.app` in `~/Applications` whose executable `exec`s
+    `start.sh`. `CFBundleIconFile` is a bundle property, unreachable from a
+    running process, so nothing short of a bundle can fix the Dock tile.
+  - **Windows** writes nothing here — `install-windows.ps1` already makes the
+    shortcut. What this contributes is the AppUserModelID, without which the
+    taskbar button belongs to `python.exe`.
+  - **All of it is best-effort and silent on failure**, and everything it
+    writes lands **outside** both the app folder and the data root: the
+    updater replaces the first wholesale (§7) and deleting the second is the
+    documented reset (§6), and a menu entry should survive both.
+    `CASESORTER_NO_DESKTOP_ENTRY=1` opts out.
+- **One launcher mark, generated everywhere but one.** `icons.py`'s launcher
+  block is the exception to palette-only theming: filled and full-colour,
+  because the desktop draws it on a background of its own, where themed
+  mid-gray line art reads as disabled. Two documents with a threshold
+  (`LAUNCHER_DETAIL_MIN`) — the groove and primer ring that make it a case head
+  turn to mud below 48 px, so the small rungs carry a simplified cut, and every
+  consumer picks through `launcher_svg()` so the `.ico`, the hicolor tree and
+  the `.icns` all switch at the same size. Only **one** file is committed:
+  `installer/casesorter.ico`, because `install-windows.ps1` reads it before any
+  Python of ours runs. Rebuild it with `tools/make_app_icons.py` (whose
+  `--preview` renders a contact sheet — look at it) and commit the result;
+  everything else is generated at launch from the same SVG.
 - **Tests** live in `tests/unit/ui/` and run **offscreen, with no display
   server and no Xvfb** (§8). `conftest.py` supplies `qapp`, a real
   SQLite-backed `config`, `window_factory`/`window`, plus `seed_model` and

@@ -91,3 +91,33 @@ def test_powershell_script_has_no_unpaired_quotes_per_line() -> None:
         if line.count('"') % 2 != 0:
             bad.append(n)
     assert not bad, f"odd number of double quotes on line(s): {bad}"
+
+
+# ---------------------------------------------------------------------------
+# The shortcut icon
+# ---------------------------------------------------------------------------
+#
+# install-windows.ps1 sets the Start Menu shortcut's IconLocation to
+# installer/casesorter.ico *if it is there* -- a deliberate `Test-Path` guard,
+# so a missing file costs the icon silently rather than failing the install.
+# That is the right behavior and the reason the asset needs a test: it went
+# missing for the whole life of the guard without anything noticing.
+
+
+def test_the_shortcut_icon_exists() -> None:
+    assert (INSTALLER / "casesorter.ico").is_file(), (
+        "installer/casesorter.ico is missing -- rebuild it with tools/make_app_icons.py"
+    )
+
+
+def test_the_shortcut_icon_carries_every_size_the_shell_asks_for() -> None:
+    """Explorer picks a member per surface: 16 in a title bar, 32 in a shortcut,
+    256 in the large-icon view. A single-size .ico gets scaled into all of them.
+    """
+    pytest.importorskip("PIL")
+    from PIL import Image
+
+    with Image.open(INSTALLER / "casesorter.ico") as image:
+        sizes = {size[0] for size in image.info["sizes"]}
+
+    assert {16, 32, 48, 256} <= sizes, f"casesorter.ico carries only {sorted(sizes)}"
