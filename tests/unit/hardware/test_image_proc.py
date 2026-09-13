@@ -80,6 +80,47 @@ def test_crop_handles_tiny_image_gracefully() -> None:
     assert _is_480x480_bgr(out)
 
 
+# ----- case presence (end-of-brass flush) -------------------------------------
+
+
+def test_case_present_accepts_a_bright_case() -> None:
+    frame = _synthetic_headstamp()
+    assert image_proc.case_present(frame, {}) is True
+
+
+def test_case_present_rejects_a_frame_with_no_circle() -> None:
+    # Featureless frame: nothing for HoughCircles to find.
+    frame = np.zeros((640, 640, 3), dtype=np.uint8)
+    assert image_proc.case_present(frame, {}) is False
+
+
+def test_case_present_rejects_a_dark_pocket_that_still_circles() -> None:
+    """An empty, in-focus pocket yields a clean circle but a dark interior.
+
+    This is the phantom-capture failure mode the brightness gate exists for:
+    circle detection alone cannot tell an empty pocket from a case, because
+    the pocket itself is round. The gate demands absolute brightness inside
+    the disc, which only real brass provides.
+    """
+    size, radius = 640, 180
+    frame = np.zeros((size, size, 3), dtype=np.uint8)
+    # A crisp bright RING (the pocket edge) around a near-black interior —
+    # plenty of gradient for Hough, nowhere near the brightness floor inside.
+    cv2.circle(frame, (size // 2, size // 2), radius, (200, 200, 200), 6)
+    cv2.circle(frame, (size // 2, size // 2), radius - 6, (12, 12, 12), -1)
+    detection = image_proc.hough_detect(frame, image_proc.HoughParams())
+    assert detection is not None, "the pocket ring must circle-detect for this test to mean anything"
+    assert image_proc.case_present(frame, {}) is False
+
+
+def test_case_present_floor_is_configurable_per_rig() -> None:
+    # A shiny worn seat ring can read over 100 empty — the floor has to be
+    # movable above whatever this rig's empty nest reads.
+    frame = _synthetic_headstamp()  # disc reads ~200
+    assert image_proc.case_present(frame, {"case_min_brightness": 150}) is True
+    assert image_proc.case_present(frame, {"case_min_brightness": 250}) is False
+
+
 def test_hough_detect_prefers_largest_circle_when_primer_is_also_present() -> None:
     """Synthetic frame with a brass disk and a smaller primer-like disk inside.
 

@@ -798,6 +798,167 @@ def test_awaiting_leaves_no_handler_behind(broker: SerialBroker) -> None:
     assert len(broker.on_disconnect) == before
 
 
+# ----- end-of-brass: watched sort / cancel / flush ----------------------------
+#
+# The firmware facts these lean on (verified against the pinned firmware
+# above): a scheduled feed on a dry proximity gate prints "waiting for brass"
+# once per second; `stop` cancels that wait and always answers with exactly
+# one `done` (FeedCycleComplete makes onFeedComplete print even when idle);
+# `xf:` bypasses the gate entirely; `sortto:` answers `ok`.
+
+
+def _writable(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> _WritableSerial:
+    fake = _WritableSerial()
+    monkeypatch.setattr(broker, "_sp", fake)
+    return fake
+
+
+def _feed_when_registered(broker: SerialBroker, handlers: list, lines: list[str]) -> threading.Thread:
+    """Feed `lines` once the awaiting side has registered its handler."""
+
+    def _run() -> None:
+        for _ in range(2000):
+            if handlers:
+                break
+            time.sleep(0.001)
+        for line in lines:
+            _feed(broker, line)
+
+    t = threading.Thread(target=_run)
+    t.start()
+    return t
+
+
+def test_watched_sort_reports_done(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _writable(broker, monkeypatch)
+    t = _feed_when_registered(broker, broker.on_done, ["waiting for brass\n", "done\n"])
+    try:
+        assert broker.sort_and_move_watched(4) == (serial_broker.SORT_DONE, "")
+    finally:
+        t.join()
+    assert fake.written == [b"4\n"]
+
+
+def test_watched_sort_reports_an_empty_feeder(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    _writable(broker, monkeypatch)
+    lines = ["waiting for brass\n"] * serial_broker.FEEDER_EMPTY_WAITS
+    t = _feed_when_registered(broker, broker.on_waiting, lines)
+    started = time.monotonic()
+    try:
+        outcome, _ = broker.sort_and_move_watched(4)
+    finally:
+        t.join()
+    assert outcome == serial_broker.SORT_EMPTY
+    # The whole point: an empty hopper is a state, not a 20-second timeout.
+    assert time.monotonic() - started < 5.0
+
+
+def test_watched_sort_reports_a_board_error_with_its_line(
+    broker: SerialBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _writable(broker, monkeypatch)
+    t = _feed_when_registered(broker, broker.on_error, ["error:feed overtravel detected\n"])
+    try:
+        outcome, detail = broker.sort_and_move_watched(4)
+    finally:
+        t.join()
+    assert outcome == serial_broker.SORT_ERROR
+    assert detail == "error:feed overtravel detected"
+
+
+def test_watched_sort_fails_fast_on_a_dead_link(broker: SerialBroker) -> None:
+    broker.is_connected = True
+    broker._mark_disconnected("unplugged")
+    started = time.monotonic()
+    assert broker.sort_and_move_watched(4) == (serial_broker.SORT_FAILED, "")
+    assert time.monotonic() - started < 1.0
+
+
+def test_watched_sort_below_the_limit_is_not_an_empty_verdict(
+    broker: SerialBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # One or two waits can be a case still falling from the collator; the
+    # verdict needs the full run of them. Fewer + a done = a normal sort.
+    _writable(broker, monkeypatch)
+    lines = ["waiting for brass\n"] * (serial_broker.FEEDER_EMPTY_WAITS - 1) + ["done\n"]
+    t = _feed_when_registered(broker, broker.on_waiting, lines)
+    try:
+        assert broker.sort_and_move_watched(4) == (serial_broker.SORT_DONE, "")
+    finally:
+        t.join()
+
+
+def test_cancel_with_only_the_stop_ack_is_clean(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The firmware answers `stop` with one `done` even when idle. One done in
+    # the window = the wait died dry = safe to flush.
+    _writable(broker, monkeypatch)
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.2)
+    t = _feed_when_registered(broker, broker.on_done, ["done\n"])
+    try:
+        assert broker.cancel_pending_feed() == "clean"
+    finally:
+        t.join()
+
+
+def test_cancel_with_two_dones_means_the_feed_won_the_race(
+    broker: SerialBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Brass landed on the sensor just before the stop: the waiting feed fires
+    # first and its real done arrives ahead of the stop's ack. The sort
+    # completed for real — the run must resume, not flush.
+    _writable(broker, monkeypatch)
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 2.0)
+    started = time.monotonic()
+    t = _feed_when_registered(broker, broker.on_done, ["done\n", "done\n"])
+    try:
+        assert broker.cancel_pending_feed() == "resumed"
+    finally:
+        t.join()
+    # Two dones exit the window early rather than sitting it out.
+    assert time.monotonic() - started < 1.5
+
+
+def test_cancel_with_an_error_is_failed(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    _writable(broker, monkeypatch)
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.5)
+    t = _feed_when_registered(broker, broker.on_error, ["error:feed stallguard\n"])
+    try:
+        assert broker.cancel_pending_feed() == "failed"
+    finally:
+        t.join()
+
+
+def test_cancel_sends_the_stop_and_total_silence_is_clean(
+    broker: SerialBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _writable(broker, monkeypatch)
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.05)
+    assert broker.cancel_pending_feed() == "clean"
+    assert fake.written == [b"stop\n"]
+
+
+def test_flush_writes_the_sortto_then_the_forced_feed(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _writable(broker, monkeypatch)
+    t = _feed_when_registered(broker, broker.on_done, ["ok\n", "done\n"])
+    try:
+        assert broker.flush_sort_and_move(2, 5) is True
+    finally:
+        t.join()
+    # sortto: parks the arm where the cancelled bare sort would have; xf:
+    # then executes the drop as a zero-travel forced feed.
+    assert fake.written == [b"sortto:2\n", b"xf:5\n"]
+
+
+def test_flush_aborts_on_a_board_error(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A jam mid-flush must stop the sequence before anything drops blind.
+    _writable(broker, monkeypatch)
+    t = _feed_when_registered(broker, broker.on_error, ["ok\n", "error:feed overtravel detected\n"])
+    try:
+        assert broker.flush_sort_and_move(2, 5) is False
+    finally:
+        t.join()
+
+
 # ----- auto-connect probe candidates (#36 follow-up) ----------------------------
 #
 # macOS lists pseudo-ports (Bluetooth headsets, the debug console) that can
