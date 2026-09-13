@@ -28,7 +28,7 @@ classifiers = [
 dependencies = [
     "pyserial==3.5",
     "opencv-python-headless==5.0.0.93",
-    "numpy==2.5.2",
+    "numpy==2.5.3",
     "Pillow==12.3.0",
     "requests==2.34.2",
     "msal==1.38.0",
