@@ -45,6 +45,27 @@ If the log ends with Qt failing to load the **xcb** platform plugin, install
 back to Wayland, where floating panels can't be moved or resized; without
 `libGL` or `glib` the app can't start at all.
 
+## It's not in my applications menu, or the icon is generic
+
+The entry is added on launch, so start the app once from `./start.sh` first —
+and note that it is skipped deliberately when there is no desktop session at
+all (over SSH, say), and when `CASESORTER_NO_DESKTOP_ENTRY` is set.
+
+If the entry is there but shows a blank or generic icon, the desktop is very
+likely still holding a cached one. Log out and back in. Failing that, check
+that the icons were written:
+
+```bash
+ls ~/.local/share/icons/hicolor/*/apps/io.github.sjseth.AICaseSorter.*
+```
+
+An empty result means the launch couldn't write to `~/.local/share` — the app
+treats that as cosmetic and starts anyway, so the reason is in `casesorter.log`
+at DEBUG rather than on screen. If the *running window* has the right icon but
+the taskbar shows it as a separate, unnamed entry, that is the same cache: the
+window is matched to the entry by name, and the desktop rebuilds that index
+when it next starts.
+
 ## The sorter is not detected
 
 Almost always something else is holding the serial port, or the port never

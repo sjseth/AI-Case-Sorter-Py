@@ -22,7 +22,6 @@ def _bytes(pixmap) -> bytes:
 
 def test_every_name_is_declared(qapp) -> None:
     assert set(icons.ICON_NAMES) == {
-        icons.APP,
         icons.SORT,
         icons.TRAIN,
         icons.AI_CONFIG,
@@ -68,19 +67,42 @@ def test_unknown_name_raises(qapp) -> None:
         icons.icon("nope", "#ffffff", SIDEBAR_SIZE)
 
 
-@pytest.mark.parametrize("size", [16, 32, 64])
-def test_the_application_mark_survives_taskbar_sizes(qapp, size: int) -> None:
-    pixmap = icons.pixmap(icons.APP, icons.APP_ICON_COLOR, size)
+@pytest.mark.parametrize("size", list(icons.LAUNCHER_SIZES))
+def test_the_launcher_mark_renders_at_every_size_it_ships(qapp, size: int) -> None:
+    pixmap = icons.launcher_pixmap(size)
 
     assert not pixmap.isNull()
     assert any(_bytes(pixmap))
+
+
+@pytest.mark.parametrize("size", list(icons.LAUNCHER_SIZES))
+def test_the_launcher_mark_is_exactly_the_size_asked_for(qapp, size: int) -> None:
+    """Physical pixels, not logical: these become files whose path states a size,
+    and a HiDPI ratio baked in here would make every one of them a lie."""
+    pixmap = icons.launcher_pixmap(size)
+
+    assert (pixmap.width(), pixmap.height()) == (size, size)
+
+
+def test_the_small_sizes_get_the_simplified_cut(qapp) -> None:
+    """Not a style preference: below the threshold the groove and primer ring
+    turn to mud, so those rungs carry different artwork — and must, or the .ico
+    and the hicolor tree quietly ship the unreadable one."""
+    assert icons.launcher_svg(icons.LAUNCHER_DETAIL_MIN - 1) != icons.launcher_svg(icons.LAUNCHER_DETAIL_MIN)
+    assert icons.launcher_svg(16) == icons.launcher_svg(32)
+    assert icons.launcher_svg(64) == icons.launcher_svg(512)
+
+
+def test_the_launcher_mark_carries_its_own_colors(qapp) -> None:
+    """The one icon the palette does not reach: the desktop draws it on a
+    background of its own, where a themed ink would vanish."""
+    for size in (16, 64):
+        assert icons.COLOR_TOKEN not in icons.launcher_svg(size)
 
 
 def test_the_application_icon_carries_every_size(qapp) -> None:
     icon = icons.app_icon()
 
     assert not icon.isNull()
-    for size in (16, 32, 64):
+    for size in icons.LAUNCHER_SIZES:
         assert not icon.pixmap(size, size).isNull()
-    # Fixed neutral, deliberately: a taskbar owns its own background.
-    assert icons.APP_ICON_COLOR in icons.svg_document(icons.APP, icons.APP_ICON_COLOR)
