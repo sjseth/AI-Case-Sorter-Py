@@ -314,7 +314,7 @@ jobs:
       # a cache-poisoning risk here is a supply-chain concern, not just a speed
       # tradeoff -- unlike the routine test matrix, which has no publish step
       # downstream.
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: false
 
