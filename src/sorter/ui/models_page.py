@@ -65,6 +65,7 @@ from ..data.repository import (
 )
 from . import formatting
 from .dialog_model_editor import ModelEditorDialog
+from .message_log import ERROR
 
 FILTER_TYPE_ALL = "All"
 FILTER_TYPE_STANDARD = "Standard"
@@ -827,7 +828,7 @@ class ModelsPage(QWidget):
 
     def _fail(self, title: str, exc: Exception) -> None:
         self._set_busy(False)
-        self._win.set_status(f"{title}: {exc}")
+        self._win.set_status(f"{title}: {exc}", level=ERROR)
         self._win.notify(title, str(exc))
 
     def _set_busy(self, busy: bool) -> None:

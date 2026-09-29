@@ -772,9 +772,13 @@ class CommunityPage(QWidget):
     def set_page_status(self, message: str) -> None:
         self.status_label.setText(str(message))
 
-    def _post_progress(self, message: str) -> None:
-        """Status for the window bar and the in-page label, from any thread."""
-        self._win.bus.post("status", message)
+    def _post_progress(self, message: str, *, topic: str = "status") -> None:
+        """Status for the window bar and the in-page label, from any thread.
+
+        ``topic`` is one of the window's status topics: ``status/progress`` for a
+        line the next one supersedes, ``status/error`` for a failure.
+        """
+        self._win.bus.post(topic, message)
         self._win.bus.post("community/status", message)
 
     # ----- download -----------------------------------------------------------
@@ -967,13 +971,16 @@ class CommunityPage(QWidget):
                 last[0] = pct
                 self._post_progress(
                     f"{self._batch_prefix()}Downloading {name}: {pct}% "
-                    f"({done / (1024 * 1024):.1f} / {total / (1024 * 1024):.1f} MB)"
+                    f"({done / (1024 * 1024):.1f} / {total / (1024 * 1024):.1f} MB)",
+                    topic="status/progress",
                 )
                 return
             megabytes = done / (1024 * 1024)
             if int(megabytes) != last[0]:
                 last[0] = int(megabytes)
-                self._post_progress(f"{self._batch_prefix()}Downloading {name}: {megabytes:.1f} MB")
+                self._post_progress(
+                    f"{self._batch_prefix()}Downloading {name}: {megabytes:.1f} MB", topic="status/progress"
+                )
 
         return report
 
@@ -986,7 +993,9 @@ class CommunityPage(QWidget):
             pct = int(step * 100 / total)
             if pct != last[0]:
                 last[0] = pct
-                self._post_progress(f"{self._batch_prefix()}Importing {name}: {pct}% ({step} / {total} files)")
+                self._post_progress(
+                    f"{self._batch_prefix()}Importing {name}: {pct}% ({step} / {total} files)", topic="status/progress"
+                )
 
         return report
 
@@ -1041,7 +1050,7 @@ class CommunityPage(QWidget):
         self._win.notify("Download complete", "Model imported.")
 
     def _on_download_failed(self, exc: Exception) -> None:
-        self._post_progress(f"Download failed: {exc}")
+        self._post_progress(f"Download failed: {exc}", topic="status/error")
         self._win.notify("Download failed", str(exc))
         # After the messaging: a failure must not strand the queued rest.
         self._finish_download()

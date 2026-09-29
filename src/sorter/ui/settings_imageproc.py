@@ -51,6 +51,7 @@ from ..hardware.image_proc import (
     hough_detect,
     overlay_detection,
 )
+from .message_log import ERROR
 
 PRIMER_MODES: tuple[tuple[str, str], ...] = (
     ("None", "none"),
@@ -361,7 +362,7 @@ class ImageProcSection(QWidget):
             # Give the LED + camera a moment to settle, then show the new brightness.
             QTimer.singleShot(LED_RECAPTURE_DELAY_MS, self, self.capture)
         except Exception as exc:
-            self._win.set_status(f"LED send failed: {exc}")
+            self._win.set_status(f"LED send failed: {exc}", level=ERROR)
 
     # ----- actions + preview -----------------------------------------------
 
@@ -409,7 +410,7 @@ class ImageProcSection(QWidget):
         self._reprocess()
 
     def _on_capture_error(self, exc: Exception) -> None:
-        self._win.set_status(f"Capture failed: {exc}")
+        self._win.set_status(f"Capture failed: {exc}", level=ERROR)
 
     def _reprocess(self) -> None:
         """Re-run the pipeline against the last captured frame — no re-capture."""

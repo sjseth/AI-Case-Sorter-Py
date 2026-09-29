@@ -554,6 +554,7 @@ def test_demo_d_the_guide_dock_toggles_from_the_view_menu(window) -> None:
         "Classification History",
         "User Guide panel",
         "Themes",
+        "Messages",
         "Re-dock panels",
     }
 

@@ -229,7 +229,7 @@ ads--CFloatingWidgetTitleBar {{
     margin: 3px;
 }}
 
-QPlainTextEdit#serialLog {{
+QPlainTextEdit#serialLog, QPlainTextEdit#messageLog {{
     background-color: {c["bg_input"]};
     color: {c["text"]};
     border: 1px solid {c["border"]};

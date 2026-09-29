@@ -9,8 +9,8 @@ day, in the order you meet them.
   menus that frame everything else.
 - [Panels](#panels) — the movable side and bottom panels:
   [Serial Monitor](#serial-monitor), [Classification
-  History](#classification-history), the guide you are reading, and
-  [Themes](#themes-panel).
+  History](#classification-history), the guide you are reading,
+  [Themes](#themes-panel) and [Messages](#messages).
 - [Sort dashboard](#sort-dashboard) — the main working screen: the current
   case, the slot cards, sorting templates and the run controls.
 - [Train](#train) — capture cases, label them, and train a model from them.
@@ -78,7 +78,10 @@ carries a button to the Models page to change it. Never a dead end.
 Along the bottom, from left to right:
 
 - **Messages** — what the app just did ("Auto-connected to COM3.", "Run
-  stopped."). This is where a refused action explains itself.
+  stopped."). This is where a refused action explains itself. It shows one
+  line, cut off at the window's edge, until the next replaces it — **click
+  it** to open the [Messages](#messages) panel, which keeps the recent ones
+  in full.
 - **● Camera** and **● Serial** — connection indicators. Green means
   connected, and the serial one names the port, speed and the firmware
   version it handshook with.
@@ -108,7 +111,7 @@ Along the bottom, from left to right:
 
 ## Panels
 
-Four panels can sit around your working screen. Each one can be moved,
+Five panels can sit around your working screen. Each one can be moved,
 tabbed together with another, torn off into its own floating window, or
 closed:
 
@@ -116,6 +119,7 @@ closed:
 - **Classification History** — on the right, closed by default.
 - **User Guide** — on the right, closed by default (this guide).
 - **Themes** — on the right, closed by default.
+- **Messages** — on the right, closed by default.
 
 **Moving a panel:** drag it by its *tab* — the small labelled tab at the
 edge of the panel, not its title. As you drag, blue drop indicators appear
@@ -184,6 +188,29 @@ what you were doing. **Edit theme…** opens the theme editor.
 
 This is the same list as [Settings → Theme](#theme); whichever you use, the
 other follows.
+
+### Messages
+
+Every message the status bar has shown this session, newest at the bottom,
+each with the time it appeared — the last 200 are kept. Open it from **View →
+Messages**, or by clicking the message in the status bar.
+
+This is where to read an error in full. The status bar cuts a long message off
+at the window's edge and replaces it with the next one; here it is kept whole,
+wrapped to the panel's width. Errors are marked `[error]` and printed in bold
+in the theme's error colour.
+
+A step that is still in progress ("Connecting to COM3…", "Classifying…") is
+replaced by whatever comes next, so a long run shows its latest step rather
+than four lines per case. An error is never replaced: the step it interrupted
+stays just above it.
+
+- Select any text and copy it as usual, or press **Copy all** to copy the
+  whole log — timestamps and `[error]` marks included — for a bug report.
+- **Clear** empties it.
+
+The panel is not saved: it starts empty each time the app does, so copy what
+you need before quitting.
 
 ## Sort dashboard
 

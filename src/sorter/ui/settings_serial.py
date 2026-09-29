@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 
 from ..hardware import serial_broker
 from ..hardware.serial_emulator import EMULATED_PORT, EmulatorBroker
+from .message_log import ERROR
 
 BAUD_CHOICES = (9600, 19200, 38400, 57600, 115200)
 
@@ -219,7 +220,7 @@ class SerialSection(QWidget):
         def _done(opened: bool) -> None:
             self.connect_button.setEnabled(True)
             if not opened:
-                win.set_status(f"Failed to open {port}.")
+                win.set_status(f"Failed to open {port}.", level=ERROR)
                 win._set_serial_indicator(f"Serial: failed to open {port}", connected=False)
                 return
             self._finish_connect(broker, port)
@@ -228,7 +229,7 @@ class SerialSection(QWidget):
 
     def _on_connect_error(self, exc: Exception) -> None:
         self.connect_button.setEnabled(True)
-        self._win.set_status(f"Connect error: {exc}")
+        self._win.set_status(f"Connect error: {exc}", level=ERROR)
 
     def _finish_connect(self, broker: Any, port: str) -> None:
         # _after_connect owns the init-on-startup push (shared with auto-connect).

@@ -55,6 +55,7 @@ from ..data.models import AIModelConfig, Model, is_openai_model
 from ..data.repository import ModelRepo
 from ..hardware.image_proc import apply_primer_mask, crop_headstamp
 from ..ml import api_client
+from .message_log import ERROR
 
 CROP_SIZE = 200
 NO_RESULT = "—"
@@ -507,7 +508,7 @@ class AiSection(QWidget):
         self._fail("Test failed", exc)
 
     def _fail(self, title: str, exc: Exception) -> None:
-        self._win.set_status(f"{title}: {exc}")
+        self._win.set_status(f"{title}: {exc}", level=ERROR)
         self._win.notify(title, str(exc))
 
     def _show_crop(self, frame: np.ndarray) -> None:

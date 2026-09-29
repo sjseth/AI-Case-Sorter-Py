@@ -216,7 +216,8 @@ handlers can safely touch widgets. Handler exceptions are **logged with their
 topic and then swallowed** — one broken subscriber must not stop the drain,
 but it no longer fails silently either (#32).
 Topics are slash-namespaced strings: `run/*`, `test/*`, `serial/*`,
-`training/*`, `mode/changed`, `feedback/*`, `community/*`. This is the **only**
+`training/*`, `mode/changed`, `feedback/*`, `community/*`, and `status` /
+`status/*` for the status bar (§5). This is the **only**
 sanctioned way for worker threads to update the UI.
 
 ---
@@ -700,8 +701,9 @@ objectName `sidebarSeparator`, coloured from the palette's `border` role by
 `ui/theme.py` alone, so a theme switch needs no hook). **Every entry is in the
 flow, with the stretch last**: Settings used to be pinned below the stretch
 and went off-screen on a short window — driving a `QStackedWidget` of pages, plus
-four **docks** — serial monitor (bottom), classification history, the user
-guide and the theme picker (right, all three closed until asked for) — a
+five **docks** — serial monitor (bottom), classification history, the user
+guide, the theme picker and the status-message log (right, all four closed
+until asked for) — a
 status bar (camera/serial indicators, an inference-device indicator —
 `refresh_device_indicator`, fed by `local_inference.device_description()`,
 warmed off-thread at startup by `_warm_device_indicator` and hidden in AI
@@ -797,8 +799,8 @@ modal), and never gate on `is_available()`.
 | **Community** | `community_page.py` | Browse/search/download community models; share entry point. Auth-gated. |
 | **Settings** | `settings_{camera,serial,imageproc}.py` + `app.py`'s Theme section + `dialog_winforms_import.py` | Camera, Serial, Image Processing, Theme, Import from Windows — listed in `SETTINGS_SECTIONS`, reached by name. |
 
-Docks: `serial_monitor.py`, `history_view.py`, `help_viewer.py`, and the
-Themes panel in `app.py`. Dialogs are `dialog_*.py`.
+Docks: `serial_monitor.py`, `history_view.py`, `help_viewer.py`,
+`messages_view.py`, and the Themes panel in `app.py`. Dialogs are `dialog_*.py`.
 
 ### Conventions, each one load-bearing
 
@@ -931,6 +933,16 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   top of the guide for an anchor it can't resolve. Every activity and Settings
   section has a topic, and `test_help.py` pins each one to a real
   heading — rename a heading and that test is what tells you.
+- **The status bar has a memory.** `set_status(message, level=, progress=)`
+  is the one writer of the status bar — nothing calls `showMessage` directly —
+  and it also appends to `status_log`, a UI-free `message_log.MessageLog` ring
+  (`MAX_ENTRIES`) that the Messages dock (`messages_view.py`) renders in full;
+  clicking the bar's message area opens it. Workers reach it through the bus:
+  `status` (info), `status/error`, `status/progress`, plus `run/error` /
+  `test/error`, which record at the `error` level. A line ending in "…" (or
+  marked `progress`) is a placeholder the next non-error line replaces, which
+  keeps a run's per-case steps from flushing the ring; mark a failure
+  `level=ERROR` at its call site, since the ring can't tell one from its text.
 - **Model-scoped image processing.** `settings_imageproc.py` reads and writes
   the **active model's** crop/primer values (`Model.image_processing`,
   `use_primer_mask`/`hide_primer`/`primer_mask_size`) and mirrors them into
