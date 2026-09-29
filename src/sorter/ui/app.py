@@ -83,6 +83,7 @@ from ..ml import classifier, local_inference
 from ..paths import app_data_dir
 from .ai_page import build_ai_page
 from .community_page import build_community_page
+from .dialog_headstamp_assign import HeadstampAssignDialog, build_headstamp_assign_dialog
 from .dialog_slot_assign import CATCH_ALL_HINT, SlotAssignDialog
 from .dialog_template import EditTemplateDialog, NewTemplateDialog
 from .dialog_winforms_import import (
@@ -334,6 +335,7 @@ class QtMainWindow(QMainWindow):
         self._is_running = False
         self._master_count = 0
         self._templates: list[Any] = []
+        self.headstamp_assign_dialog: HeadstampAssignDialog | None = None
         # The current case only — (display label, confidence, above the floor).
         self._current_result: tuple[str, float, bool] | None = None
         # The store-images disk-usage notice shows once per session, not per run.
@@ -661,6 +663,10 @@ class QtMainWindow(QMainWindow):
 
         header = QHBoxLayout()
         header.addWidget(self._muted_label("Slots", holder))
+        # The inverse of clicking a card: every headstamp, its slot set on the row (#129).
+        self.assign_by_headstamp_button = QPushButton("Assign by headstamp…", holder)
+        self.assign_by_headstamp_button.clicked.connect(self.open_headstamp_assign)
+        header.addWidget(self.assign_by_headstamp_button)
         header.addStretch(1)
         header.addWidget(self._muted_label("Sorted this run", holder))
         self.master_count_label = QLabel("0", holder)
@@ -1592,6 +1598,24 @@ class QtMainWindow(QMainWindow):
         dialog = SlotAssignDialog(self.config, int(slot), self)
         dialog.changed.connect(self._refresh_sort_grid)
         dialog.exec()
+        self._refresh_sort_grid()
+
+    def open_headstamp_assign(self) -> None:
+        """Every headstamp in one table; the cards repaint on each edit while it is open.
+
+        ``open()``, not ``exec()``: modal to the window but returning at once,
+        so a test can drive the dialog it leaves in ``headstamp_assign_dialog``.
+        """
+        dialog = build_headstamp_assign_dialog(self)
+        dialog.changed.connect(self._refresh_sort_grid)
+        dialog.finished.connect(self._on_headstamp_assign_closed)
+        self.headstamp_assign_dialog = dialog
+        dialog.open()
+
+    def _on_headstamp_assign_closed(self, _result: int) -> None:
+        dialog, self.headstamp_assign_dialog = self.headstamp_assign_dialog, None
+        if dialog is not None:
+            dialog.deleteLater()
         self._refresh_sort_grid()
 
     def _refresh_templates(self) -> None:

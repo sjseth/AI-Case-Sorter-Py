@@ -790,7 +790,7 @@ modal), and never gate on `is_available()`.
 ### Surfaces
 | Activity | File | Purpose |
 |-----|------|---------|
-| **Sort** | `app.py` (+ `slot_grid.py`, `dialog_slot_assign.py`) | Production sorting: the crop the classifier saw, the slot cards with live counts, sorting templates, Start/Stop/Manual feed, package-mode counters. |
+| **Sort** | `app.py` (+ `slot_grid.py`, `dialog_slot_assign.py`, `dialog_headstamp_assign.py`, `name_filter.py`) | Production sorting: the crop the classifier saw, the slot cards with live counts, sorting templates, Start/Stop/Manual feed, package-mode counters. Assignment is two dialogs over the same Config calls: bin-first (click a card) and headstamp-first ("Assign by headstamp…", every row's slot set from the keyboard); both filter through `name_filter`. |
 | **Models** | `models_page.py` | Model library: browse/filter/sort, create, edit, **activate**, import/export, delete. Synthetic "Use AI Config" row. |
 | **Train** | `train_page.py` | Feed→capture→classify→label→save loop; "Sort While Training"; launches training. |
 | **AI Config** | `ai_page.py` | HTTP server config (endpoint/key/model/prompt/encoding), headstamp manager, single-shot test. |
@@ -850,6 +850,9 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   shipped and then reverted: JL lived with them and chose the bar. Don't
   reintroduce item widgets in these tables — `_pin_ai_row` and every sort
   destroy them, which is machinery the bar simply doesn't need.
+  The headstamp-first assignment table (`dialog_headstamp_assign.py`) edits
+  its Slot column in place, and does it the same widget-free way: its own
+  key handling plus a `QStyledItemDelegate` spinbox, never `setCellWidget`.
 - **One checkable tree, and it is a picker, not a table.**
   `dialog_winforms_import.py`'s `QTreeWidget#importTree` is the only tree in the
   app whose items carry check state, which is why `theme.py` needs an

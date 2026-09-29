@@ -562,6 +562,7 @@ revisitable; "Open" = needs a decision.
 | Call | State | Where |
 |------|-------|-------|
 | Slot-assign editor moves a headstamp off its old slot in one step (Tk greys it out and needs an untick first) | Changed — same reachable states, one step fewer; "in slot #N" hint shown | #1, `dialog_slot_assign.py` |
+| Headstamp-first assignment view beside the per-bin editor (no Tk/WinForms equivalent): digits set the row's slot, auto-committed once unambiguous; package mode toggles membership rather than going read-only | Changed — new surface, same Config calls and templates as the per-bin editor | #129, `dialog_headstamp_assign.py` |
 | Settings persistence: Camera/Image Proc/Serial save-on-change vs Tk's explicit Save (AI Config kept Tk's Save button) | **Open — for Seth** (options a/b/c in "Open questions") | #2/#4 vs #3 |
 | Import ZIP offers three-way Update / Copy / Cancel (Tk: update-or-cancel only) | Changed — capability `model_io` always had; adds the "keep both" path | #5, `models_page.py` |
 | `Images…` disabled for foreign/community models (Tk disables nothing on the Models tab; refusal happened later in Train) | Changed — surfacing the ownership rule earlier | #5, `models_page.py` |

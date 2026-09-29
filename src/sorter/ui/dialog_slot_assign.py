@@ -14,7 +14,8 @@ Three routing modes:
 * **package** — many-to-many: the same headstamp may fill several bins.
 
 Finding a row in a long list: the filter matches every whitespace-separated
-word (``win 9`` finds ``WIN 9MM LUGER``), and Enter in it ticks or unticks the
+word (``win 9`` finds ``WIN 9MM LUGER``; ``name_filter``, shared with the
+headstamp-first view in ``dialog_headstamp_assign``), and Enter in it ticks or unticks the
 row when exactly one is left. Rows are ordered this slot's first, then the
 unassigned, then those in another slot — ranked when the dialog opens or the
 filter changes, never on a tick, so a row doesn't jump out from under the
@@ -39,6 +40,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from .name_filter import matching
 
 CATCH_ALL_HINT = "Anything we can't classify or that isn't mapped to a slot ends up here."
 PACKAGE_HINT = (
@@ -115,12 +118,12 @@ class SlotAssignDialog(QDialog):
 
         if self.slot == 0:
             self.hint_label.setText(CATCH_ALL_HINT)
-            for entry in self._matching(headstamps, needle):
+            for entry in matching(headstamps, needle):
                 self._add_row(entry["name"], checked=False, enabled=False)
         elif self.config.run_package_mode:
             self.hint_label.setText(PACKAGE_HINT)
             slot_map = self.config.package_slot_map()
-            for entry in self._ordered("headstamp", self._matching(headstamps, needle)):
+            for entry in self._ordered("headstamp", matching(headstamps, needle)):
                 name = entry["name"]
                 others = [s for s in sorted(slot_map) if s not in (0, self.slot) and name in slot_map[s]]
                 self._add_row(
@@ -142,7 +145,7 @@ class SlotAssignDialog(QDialog):
 
     def _render_parent_mode(self, parents: list[dict], headstamps: list[dict], needle: str) -> None:
         parents = sorted(parents, key=lambda p: p["name"].casefold())
-        for parent in self._ordered("parent", self._matching(parents, needle)):
+        for parent in self._ordered("parent", matching(parents, needle)):
             name = parent["name"]
             pid = int(parent["id"])
             self._add_assignable_row(
@@ -154,19 +157,13 @@ class SlotAssignDialog(QDialog):
         self._render_standard([h for h in headstamps if h["parent_id"] is None], needle)
 
     def _render_standard(self, headstamps: list[dict], needle: str) -> None:
-        for entry in self._ordered("headstamp", self._matching(headstamps, needle)):
+        for entry in self._ordered("headstamp", matching(headstamps, needle)):
             name = entry["name"]
             self._add_assignable_row(
                 name,
                 int(entry["slot"]),
                 lambda checked, n=name: self._toggle_headstamp(n, checked),
             )
-
-    @staticmethod
-    def _matching(entries: list[dict], needle: str) -> list[dict]:
-        """Entries whose name contains every whitespace-separated word of ``needle``."""
-        words = needle.casefold().split()
-        return [e for e in entries if all(w in e["name"].casefold() for w in words)]
 
     def _resort(self) -> None:
         """Rank every row by where it is assigned right now."""

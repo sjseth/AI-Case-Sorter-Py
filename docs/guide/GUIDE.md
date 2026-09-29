@@ -224,7 +224,9 @@ routed to a slot; the rest are your bins. A card shows:
 - every headstamp currently routed to it, listed in full — the card grows to
   fit the list rather than truncating it
 
-Above the grid: **Sorted this run** counts every case this run has sorted,
+Above the grid: **Assign by headstamp…** opens the
+[headstamp-first view](#assigning-by-headstamp) of the whole layout,
+**Sorted this run** counts every case this run has sorted,
 **Reset counts** zeroes the counters (the grid's and the per-bin ones)
 without touching your assignments, and the [template](#sorting-templates)
 picker names the layout the cards are showing.
@@ -250,6 +252,41 @@ word you type, in any order and ignoring case, so `win 9` finds
 `WIN 9MM LUGER`. When the filter leaves exactly one row, **Enter** ticks it
 (or unticks it, if it was ticked); otherwise Enter does nothing. Close the
 editor with **Esc** or **Close**.
+
+### Assigning by headstamp
+
+A card's editor answers "what goes in this bin?". Laying out a big model
+from scratch is the opposite question, asked once per headstamp: "which bin
+does this one go to?". **Assign by headstamp…**, above the slot grid, lists
+every headstamp in one table with the slot it is routed to (**—** means the
+Catch-All), so the whole layout is one pass at the keyboard:
+
+1. Type part of a name. The filter works as in the card editor — every word,
+   any order, ignoring case, so `win 9` finds `WIN 9MM LUGER`.
+2. Press **Enter** or **↓**. The cursor moves into the table, on the top
+   match.
+3. Type the slot number. It is saved straight away, and the slot cards behind
+   the window update as you go.
+4. Type the next name — any letter typed in the table starts a new search.
+
+**0**, **Delete** or **Backspace** sends a headstamp back to the Catch-All.
+The arrow keys move between rows, and double-clicking a slot (or **F2**)
+opens a number box for anyone who prefers the mouse.
+
+On a machine with 10 or more slots, a number that could still be the start
+of a longer one waits for you: with 16 slots, `1` waits for a second digit
+(`12`) or **Enter** (slot 1), while `2` to `9` are saved at once. **Esc** or
+**Backspace** takes a half-typed number back. A number the machine doesn't
+have is refused, with a note under the table.
+
+Like the card editor, this follows the routing the run will use. With parent
+classifications on, parent groups carry the slot and a **Contains** column
+lists each group's headstamps — the filter searches those too, so typing a
+headstamp's name finds the group it belongs to. In
+[package mode](#package-mode), where a headstamp can fill several slots,
+typing a slot number adds that slot to the row or takes it off again, and
+**0**, **Delete** or **Backspace** clears them all. Every change lands in the
+active [sorting template](#sorting-templates), just as a card edit does.
 
 ### Sorting templates
 
