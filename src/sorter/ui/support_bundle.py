@@ -26,11 +26,13 @@ from typing import Any
 from .. import __version__, paths
 from ..data.models import Model, is_foreign_model
 from ..data.repository import ModelRepo, SettingsRepo
+from ..hardware import serial_log
 from ..training import manager
 
 REPORT_MEMBER = "report.txt"
 CONFIG_MEMBER = "config.json"
 TRAINING_LOG_MEMBER = "training.log"
+SERIAL_LOG_MEMBER = "serial.log"
 
 # The masked spellings the report/JSON use for the API key. Tests assert on
 # these; nothing else may carry the key's value.
@@ -131,18 +133,18 @@ def collect_data(config: Any, db: Any) -> dict[str, Any]:
             "image_quality": api.get("image_quality"),
             "image_scale": api.get("image_scale"),
         },
-        "training_log": _training_log_summary(),
+        "training_log": _log_summary(manager.training_logs(), TRAINING_LOG_MEMBER),
+        "serial_log": _log_summary(serial_log.serial_logs(), SERIAL_LOG_MEMBER),
     }
 
 
-def _training_log_summary() -> dict[str, Any]:
-    """What the most recent training run left behind (issue #100).
+def _log_summary(logs: list[Path], member: str) -> dict[str, Any]:
+    """What the most recent training run (issue #100) or serial session left behind.
 
     The report names it; ``write_bundle`` puts the file itself in the ZIP. Only
     the newest — the whole point is "here is the run you are asking about",
     not an archive.
     """
-    logs = manager.training_logs()
     if not logs:
         return {"available": "none"}
     newest = logs[0]
@@ -151,7 +153,7 @@ def _training_log_summary() -> dict[str, Any]:
     except OSError:
         size = 0
     return {
-        "available": TRAINING_LOG_MEMBER,
+        "available": member,
         "file": newest.name,
         "size_bytes": size,
         "older_runs_kept": len(logs) - 1,
@@ -209,6 +211,7 @@ def render_report(data: dict[str, Any]) -> str:
         ("Camera", data["camera"], ""),
         ("AI Config (HTTP classification)", data["ai_config"], ""),
         ("Last training run", data["training_log"], ""),
+        ("Last serial log", data["serial_log"], ""),
     ]
     lines: list[str] = ["AI Case Sorter — support report"]
     for title, body, empty_text in sections:
@@ -226,9 +229,10 @@ def write_bundle(path: str | os.PathLike[str], config: Any, db: Any) -> Path:
     """Write the support ZIP atomically.
 
     ``report.txt`` + ``config.json``, plus ``training.log`` — the most recent
-    training run's console — when there is one (issue #100). The log is passed
-    through ``_redact_text`` on the way in, so the ZIP keeps the promise the
-    report makes: no absolute paths, nothing naming the machine.
+    training run's console (issue #100) — and ``serial.log`` — the most recent
+    serial traffic log — when there are any. Each log is passed through
+    ``_redact_text`` on the way in, so the ZIP keeps the promise the report
+    makes: no absolute paths, nothing naming the machine.
     """
     out = Path(path)
     data = collect_data(config, db)
@@ -237,18 +241,21 @@ def write_bundle(path: str | os.PathLike[str], config: Any, db: Any) -> Path:
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(REPORT_MEMBER, render_report(data))
             archive.writestr(CONFIG_MEMBER, json.dumps(data, indent=2))
-            log = _newest_training_log()
-            if log is not None:
-                archive.writestr(TRAINING_LOG_MEMBER, log)
+            for member, logs in (
+                (TRAINING_LOG_MEMBER, manager.training_logs()),
+                (SERIAL_LOG_MEMBER, serial_log.serial_logs()),
+            ):
+                log = _newest_log(logs)
+                if log is not None:
+                    archive.writestr(member, log)
         os.replace(tmp, out)
     finally:
         tmp.unlink(missing_ok=True)
     return out
 
 
-def _newest_training_log() -> str | None:
-    """The most recent training log, redacted. None when there isn't one."""
-    logs = manager.training_logs()
+def _newest_log(logs: list[Path]) -> str | None:
+    """The newest of ``logs``, redacted. None when there isn't one."""
     if not logs:
         return None
     try:

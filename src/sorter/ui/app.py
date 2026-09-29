@@ -79,6 +79,7 @@ from ..control.run_controller import RunController
 from ..hardware import serial_broker
 from ..hardware.camera import Camera
 from ..hardware.serial_emulator import EMULATED_PORT, EmulatorBroker
+from ..hardware.serial_log import SerialTrafficLog
 from ..ml import classifier, local_inference
 from ..paths import app_data_dir
 from .ai_page import build_ai_page
@@ -1081,6 +1082,9 @@ class QtMainWindow(QMainWindow):
         self.serial_monitor = build_serial_monitor(self)
         # Bottom, like Arduino IDE's monitor / VS Code's terminal (JL).
         self.serial_dock = self._build_dock("Serial Monitor", self.serial_monitor, ads.BottomDockWidgetArea)
+        # The same traffic, to a file while Settings → Serial has it switched on.
+        self.serial_log = SerialTrafficLog(enabled=bool(self.config.serial.get("log_traffic", False)))
+        self.serial_log.attach(self.bus)
 
     def _build_history_dock(self) -> None:
         self.history_view = build_history_view(self)
@@ -2488,6 +2492,7 @@ class QtMainWindow(QMainWindow):
             self.camera.stop()
         except Exception:
             pass
+        self.serial_log.close()
         try:
             self._save_window_state()
         except Exception:

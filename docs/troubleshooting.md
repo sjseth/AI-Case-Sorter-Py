@@ -13,7 +13,7 @@ paths relative to the data folder. Attach the logs described below too.
 
 ## Where the logs are
 
-Both live in the data folder's `logs/` directory — on Windows that is
+They live in the data folder's `logs/` directory — on Windows that is
 `%LOCALAPPDATA%\CaseSorter\logs`, on Linux and macOS
 `~/.local/share/CaseSorter/logs`. They answer different questions:
 
@@ -24,6 +24,15 @@ Both live in the data folder's `logs/` directory — on Windows that is
 - **`launch.log`** — the launcher: finding Python, syncing dependencies,
   applying an update, and anything the app printed. Rewritten on every start,
   with the previous one kept as `launch.prev.log`.
+- **`serial-<date-time>.log`** — every line sent to and received from the
+  board, timestamped. Only written while **Log serial traffic to a file** is
+  ticked on [Settings → Serial](guide/GUIDE.md#serial). It is off by default.
+
+**Reporting a board problem?** Tick **Log serial traffic to a file** first,
+reproduce the problem, then export the support package. The package's ZIP
+carries the newest serial log as `serial.log`. The Serial Monitor only holds
+what is on screen, while the file keeps the whole session, including the
+moments before you noticed.
 
 To collect more detail, start the app with `CASESORTER_LOG_LEVEL=DEBUG` set in
 the environment.

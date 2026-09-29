@@ -144,7 +144,9 @@ look when the machine does something unexpected.
   bench.
 - **Clear** empties the view. **Save…** writes what you are currently
   looking at to a text file — filtered lines are not written, so narrow the
-  view first if that's what you want to send.
+  view first if that's what you want to send. To keep the whole session on
+  disk as it happens, tick **Log serial traffic to a file** on
+  [Settings → Serial](#serial).
 - **Filter** hides every line that doesn't contain what you type, and the
   **RX** / **TX** / **Notes** toggles hide a whole direction (received,
   sent, and the monitor's own commentary). Filtering only hides: clear the
@@ -646,6 +648,17 @@ Connects the app to the sorting machine over the board's UART protocol.
 - **Initialize these settings on startup** pushes the board init settings
   below automatically on every connect, instead of only when you press "Push
   to board".
+- **Log serial traffic to a file** writes everything the
+  [Serial Monitor](#serial-monitor) shows (each line sent, each line
+  received, and the app's own notes) to a file. Each line is timestamped to
+  the millisecond. The file is `logs/serial-<date-time>.log` in the data
+  folder (**File → Open data folder**), with one file per session. Ticking or
+  unticking it takes effect immediately, with no restart and no reconnect.
+  Leave it off for everyday sorting and turn it on when you are chasing a
+  board problem or about to report one. The newest file goes into the
+  [support package](#support-package) automatically. The logs can't fill the
+  disk: a file that reaches 5 MB is continued in a new one, and each new file
+  clears out all but the ten before it.
 
 **Board init settings** covers the machine's tunables — feed and sort speed,
 homing offsets, motor current, debounce timing and the camera LED level —
@@ -788,13 +801,15 @@ settings, and the AI Config setup.
 **Copy to clipboard** gives you the text to paste on the community Discord
 when asking for help. **Save package…** writes a ZIP holding the same report,
 a machine-readable `config.json`, and — if you have trained a model — the most
-recent run's log as `training.log`.
+recent run's log as `training.log`. If you have
+[logged serial traffic](#serial), the newest serial log goes in as
+`serial.log`.
 
 It is safe to share: the API key is reported only as "set" or "not set",
 nothing is read from the sign-in cache, and file paths are shown relative to
-the data folder, so your home directory never appears. The training log gets
-the same treatment: your folder paths are replaced by `<data>`, `<app>` and
-`<home>` before it goes in.
+the data folder, so your home directory never appears. Both logs get the same
+treatment: your folder paths are replaced by `<data>`, `<app>` and
+`<home>` before they go in.
 
 ### Updates
 

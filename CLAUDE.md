@@ -363,6 +363,9 @@ sanctioned way for worker threads to update the UI.
   the authoritative answer when it is the one running, falling back to a
   `site-packages`/`dist-packages` path heuristic for anything that imports
   `sorter` another way (e.g. a test). `bootstrap.py`'s launch log records it.
+  `session_logs(prefix)` / `prune_session_logs(prefix, keep)` list and trim
+  the per-session `logs/<prefix><stamp>.log` files; the training and serial
+  logs share them.
 
 ### Community backend config (`sorter/community/appenv.py`)
 - **`appenv.py`** — developer overrides for the community backend, read from the
@@ -454,6 +457,18 @@ between them from the Sort page's template dropdown.
   and testing without hardware — including a mid-run link loss, via
   `simulate_disconnect()`, which is the only way to reach that path without
   unplugging a real board.
+- **`serial_log.py`** — `SerialTrafficLog`: the file copy of the serial
+  monitor's traffic, switched live by `config.serial["log_traffic"]` (Settings
+  → Serial; off by default). The window builds one beside the monitor and
+  `attach`es it to the same `serial/rx`/`serial/tx`/`serial/note` bus topics,
+  so the emulator's traffic is logged exactly like a board's. Writes run on
+  the drain (main) thread, buffered, with a flush at most once a second and
+  on switch-off and window close. One `logs/serial-<stamp>.log` per session
+  (re-enabling appends), rolled over past `MAX_SERIAL_LOG_BYTES` (5 MB), with
+  `MAX_SERIAL_LOGS` kept through `paths.prune_session_logs`. Best-effort, like
+  the training log: an I/O error switches it off with one warning and never
+  raises into a bus handler. Also owns `KIND_PREFIX` (`<-`/`->`/`--`), which
+  the monitor imports so the two read alike.
 - **`camera.py`** — `Camera`: `cv2.VideoCapture` with a background **grab thread**
   keeping the latest frame; platform backends (CAP_DSHOW on Windows w/ optional
   pygrabber for friendly names + resolution probing, CAP_V4L2 on Linux,
@@ -943,7 +958,8 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   render: API key as set/not set, paths relative to the data root, the auth
   cache never read. Add a field to `collect_data` and the redaction rule goes
   with it. The ZIP also carries the most recent `training-*.log` as
-  `training.log` (#100) — a raw file, so it gets its own rule: `_redact_text`
+  `training.log` (#100), and the most recent `serial-*.log` as `serial.log`
+  (#112 A18). Each is a raw file, so it gets its own rule: `_redact_text`
   swaps the data root, the app root and the home directory for `<data>`,
   `<app>` and `<home>` on the way in, because a log that kept absolute paths
   would be the hole in the promise the report makes.
@@ -1027,11 +1043,12 @@ and must never be committed.
 │       ├── feedback_images/ # below-threshold feedback queue (folder == queue)
 │       ├── reports/         # evaluator HTML reports
 │       └── trainedmodel/    # <model_id>.pth checkpoint
-├── logs/                  # app + launcher + installer + training logs (§7, §8)
+├── logs/                  # app + launcher + installer + training + serial logs (§4, §7, §8)
 │   ├── casesorter.log       # the app's own; DEBUG, rotating 1 MB x 3
 │   ├── launch.log           # this launch; previous kept as launch.prev.log
 │   ├── install-<stamp>.log  # one per install-windows.ps1 run
-│   └── training-<stamp>.log # one per training run; last few kept
+│   ├── training-<stamp>.log # one per training run; last few kept
+│   └── serial-<stamp>.log   # opt-in serial traffic, one per session; last few kept
 └── updates/               # staged app updates (§7)
     ├── pending/             # extracted tree awaiting the next launch
     ├── pending.json         # its metadata — a SIBLING, never inside pending/

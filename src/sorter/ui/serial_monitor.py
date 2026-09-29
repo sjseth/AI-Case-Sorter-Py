@@ -51,6 +51,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..hardware.serial_log import KIND_PREFIX
+
 # What a 16 MHz AVR's U2X divisor can actually hit inside 8N1's ±2% tolerance:
 # 230400 misses by -3.55%, and 250000 (16 MHz / 64) is exact despite looking odd.
 BAUD_RATES = (9600, 19200, 38400, 57600, 115200, 250000)
@@ -86,9 +88,8 @@ ZOOM_DEFAULT = 100
 ZOOM_STEP = 25
 SETTING_SERIAL_ZOOM = "ui.serial_zoom"
 
-# Line kinds -> the palette role they print in and the prefix they carry.
+# Line kinds -> the palette role they print in (the prefix is the file log's KIND_PREFIX).
 KIND_ROLE = {"rx": "text", "tx": "update", "note": "text_muted"}
-KIND_PREFIX = {"rx": "<- ", "tx": "-> ", "note": "-- "}
 
 # Dark-theme values, used only if the host window has no live palette yet.
 _FALLBACK = {
