@@ -38,6 +38,7 @@ from ..data import image_store
 from ..data.repository import HeadstampRepo
 from ..paths import model_images_dir
 from .dialog_image_preview import ImagePreviewDialog, bgr_to_pixmap
+from .formatting import escape_mnemonic
 
 _TILE_W = 140
 _THUMB = 120
@@ -446,15 +447,19 @@ class ModelImagesDialog(QDialog):
         dialog.exec()
 
     def _show_context(self, tile: _ThumbTile, pos: Any) -> None:
+        self.context_menu(tile).exec(tile.mapToGlobal(pos))
+
+    def context_menu(self, tile: _ThumbTile) -> QMenu:
+        """The tile's right-click menu, built but not shown — tests trigger its actions."""
         menu = QMenu(self)
         menu.addAction("Preview", lambda: self._open_preview(tile.path))
         reclass_menu = menu.addMenu("Reclassify to")
         reclass_menu.setEnabled(bool(self._headstamp_names))
         for name in self._headstamp_names:
-            reclass_menu.addAction(name, lambda n=name: self._reclassify_one(tile, n))
+            reclass_menu.addAction(escape_mnemonic(name), lambda n=name: self._reclassify_one(tile, n))
         menu.addSeparator()
         menu.addAction("Delete", lambda: self._delete_one(tile))
-        menu.exec(tile.mapToGlobal(pos))
+        return menu
 
     def _reclassify_one(self, tile: _ThumbTile, name: str) -> None:
         image_store.reclassify(tile.path, name)

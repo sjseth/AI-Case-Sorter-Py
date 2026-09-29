@@ -1,4 +1,6 @@
-"""App-wide date/time rendering — the OS's regional format, not a fixed policy.
+"""App-wide display-text rendering: dates/times, and names shown as button text.
+
+**Dates and times** follow the OS's regional format, not a fixed policy.
 
 JL's ask (live-testing, 2026-08-13): dates/times must follow the *regional*
 format the OS reports — Control Panel on Windows, ``LC_TIME`` on Linux —
@@ -15,6 +17,10 @@ display text (the Models table, the evaluator's report history) should sort
 on the raw value via ``parse()``, not on the locale-rendered string — a
 locale format doesn't sort chronologically in general (``8/3/26`` vs.
 ``12/1/25``).
+
+**Names** (headstamps, templates, models — anything data-driven) that become
+button, action or tab text go through ``escape_mnemonic``, so an ``&`` in
+``S&B 9MM LUGER`` is shown rather than eaten as a keyboard mnemonic.
 """
 
 from __future__ import annotations
@@ -86,3 +92,12 @@ def format_datetime(value: datetime | date | str | None) -> str:
         QTime(parsed.hour, parsed.minute, parsed.second),
     )
     return _locale().toString(qdt, QLocale.FormatType.ShortFormat)
+
+
+def escape_mnemonic(text: str) -> str:
+    """``text`` for a Qt button, action or tab label, where ``&`` marks a mnemonic.
+
+    Qt shows ``&&`` as a literal ``&``, so the widget's ``text()`` then reads
+    back escaped — key anything that needs the original on the name itself.
+    """
+    return text.replace("&", "&&")

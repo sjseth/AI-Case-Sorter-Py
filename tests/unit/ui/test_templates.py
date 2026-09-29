@@ -11,6 +11,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtGui import QKeySequence
+
 from sorter.ui.dialog_template import EditTemplateDialog, NewTemplateDialog
 from sorter.ui.slot_grid import EMPTY_HINT
 
@@ -141,6 +143,16 @@ def test_templates_cannot_be_switched_during_a_run(window, config, monkeypatch) 
 
 
 # ----- rename / delete -------------------------------------------------------
+
+
+def test_the_copy_option_shows_an_ampersand_in_the_template_name(window, config) -> None:
+    template = config.active_slot_template()
+    config.rename_slot_template(template.id, "Range & Match")
+
+    radio = new_dialog(window, config, "Next").copy_radio
+
+    assert radio.text() == "Copy the slot assignments from “Range && Match”"
+    assert QKeySequence.mnemonic(radio.text()).isEmpty()
 
 
 def test_renaming_the_active_template(window, config) -> None:

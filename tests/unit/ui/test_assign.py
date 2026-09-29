@@ -12,6 +12,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QLabel
 
@@ -65,6 +66,29 @@ def test_editor_lists_every_headstamp_of_the_active_model(config, editor) -> Non
 
     assert sorted(dialog.checkboxes) == [".223 LC", "9mm FC"]
     assert not any(box.isChecked() for box in dialog.checkboxes.values())
+
+
+def test_an_ampersand_in_a_name_is_shown_and_assigns_the_real_name(window, config, editor) -> None:
+    # Unescaped, checkbox text reads `&` as a mnemonic: "S&B" rendered as "SB" (#164).
+    seed_model(config, {"S&B 9MM LUGER": 0})
+    box = editor(2).checkboxes["S&B 9MM LUGER"]
+
+    assert box.text() == "S&&B 9MM LUGER"
+    assert QKeySequence.mnemonic(box.text()).isEmpty()
+
+    box.click()
+
+    assert stored_slots(config) == {"S&B 9MM LUGER": 2}
+    assert window.slot_grid.cards[2].names_label.text() == "S&B 9MM LUGER"
+
+
+def test_package_mode_assigns_an_ampersand_name_unescaped(config, editor) -> None:
+    seed_model(config, {"S&B 9MM LUGER": 0})
+    config.set_run_package_mode(True)
+
+    editor(3).checkboxes["S&B 9MM LUGER"].click()
+
+    assert config.slots_for_headstamp_package("S&B 9MM LUGER") == [3]
 
 
 def test_filter_narrows_the_rows(config, editor) -> None:

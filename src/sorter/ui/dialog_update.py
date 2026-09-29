@@ -83,7 +83,7 @@ PICKER_LOADING = "Loading releases…"
 PRERELEASE_LABEL = "Show prereleases"
 AUTO_CHECK_LABEL = "Check for updates on startup"
 
-PRIMARY_DOWNLOAD = "Download & install"
+PRIMARY_DOWNLOAD = formatting.escape_mnemonic("Download & install")
 PRIMARY_DOWNLOADING = "Downloading…"
 PRIMARY_RESTART = "Restart now"
 PRIMARY_RETRY = "Try again"

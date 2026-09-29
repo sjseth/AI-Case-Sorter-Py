@@ -863,6 +863,10 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   one place decides what a half-ticked parent means. Rows with nothing behind
   them are **omitted**, not disabled, so propagation never has to reason about
   a child the user can't reach.
+- **Data-driven button, action and tab text goes through
+  `formatting.escape_mnemonic`** — Qt reads `&` there as a mnemonic, so
+  `S&B` would render `SB` (#164). The widget's `text()` then reads back
+  escaped: key on the name, never on the text.
 - **The notify/confirm seam.** Anything that would open a native modal —
   `win.notify`, a page's `confirm` / `ask_text` / `ask_open_path` /
   `ask_save_path` / `ask_import_choice` — is an **instance attribute**, not a
