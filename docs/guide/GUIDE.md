@@ -232,8 +232,21 @@ Click any card except Catch-All to open its assignment editor. Tick a
 headstamp to route it to that slot; unticking sends it back to the
 Catch-All. Outside of [package mode](#package-mode) a headstamp can only be
 assigned to one slot at a time — ticking it here moves it off whichever slot
-it was in before, and the row tells you which one that was. A filter box
-narrows a long headstamp list by name.
+it was in before, and the row tells you which one that was.
+
+The list opens in three groups, alphabetical within each: what is already in
+this slot, then headstamps not in any slot yet, then those routed to another
+slot. Working through a big model, the unassigned part shrinks every time you
+reopen a card. In [package mode](#package-mode), where a headstamp can fill
+several slots, "routed to another slot" means any other slot, and the row
+lists which. The order is fixed while the editor is open — ticking a row
+doesn't move it — and is worked out again when you change the filter.
+
+The filter box has the cursor as soon as the editor opens. It matches every
+word you type, in any order and ignoring case, so `win 9` finds
+`WIN 9MM LUGER`. When the filter leaves exactly one row, **Enter** ticks it
+(or unticks it, if it was ticked); otherwise Enter does nothing. Close the
+editor with **Esc** or **Close**.
 
 ### Sorting templates
 
