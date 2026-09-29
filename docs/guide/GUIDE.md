@@ -102,7 +102,7 @@ Along the bottom, from left to right:
 - **File → Open data folder** opens the folder holding the database, your
   models, their training images and the logs. **Quit** closes the app.
 - **View** switches each [panel](#panels) on or off, and holds **Re-dock
-  panels**.
+  panels**. `Ctrl+K` toggles the [Serial Monitor](#serial-monitor).
 - **Help** holds this guide (`F1`), [Check for updates…](#updates), [Export
   support package…](#support-package), About and License.
 
@@ -136,6 +136,9 @@ restored the next time you start the app.
 Live traffic between the app and the board — every line it sends and every
 line the board answers, in the order it happened. It is the first place to
 look when the machine does something unexpected.
+
+`Ctrl+K` opens it and closes it again, from anywhere in the window —
+including while you are typing in its own command box.
 
 - The header shows the connection state, plus **Autoscroll**, **Timestamps**
   and **Pause**. Pausing holds new lines back and releases them when you

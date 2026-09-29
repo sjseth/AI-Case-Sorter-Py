@@ -1505,6 +1505,7 @@ class QtMainWindow(QMainWindow):
 
         toggle = self.serial_dock.toggleViewAction()
         toggle.setText("Serial Monitor")
+        toggle.setShortcut(QKeySequence("Ctrl+K"))  # the Windows app's binding
         self.menus["View"] = self.menuBar().addMenu("&View")
         self.menus["View"].addAction(toggle)
         history_toggle = self.history_dock.toggleViewAction()
