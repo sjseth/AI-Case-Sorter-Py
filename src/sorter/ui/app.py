@@ -1505,7 +1505,7 @@ class QtMainWindow(QMainWindow):
 
         toggle = self.serial_dock.toggleViewAction()
         toggle.setText("Serial Monitor")
-        toggle.setShortcut(QKeySequence("Ctrl+K"))  # the Windows app's binding
+        toggle.setShortcut(QKeySequence("Ctrl+Shift+M"))  # not the Windows app's Ctrl+K: delete-to-end-of-line on Linux
         self.menus["View"] = self.menuBar().addMenu("&View")
         self.menus["View"].addAction(toggle)
         history_toggle = self.history_dock.toggleViewAction()
