@@ -141,6 +141,20 @@ an app update. **Update now** installs it in place and keeps your slot
 assignments, sorting templates and the name you gave it. Dismissing it is
 fine — it returns next time you open the Sort screen.
 
+## An update fails its checksum
+
+The update dialog says the download *does not match the SHA-256 checksum
+GitHub published for it*. The file was discarded and nothing was staged or
+installed — the app you are running is untouched.
+
+Press **Try again**. A truncated or corrupted download is the usual cause, and
+a retry over a steadier connection fixes it. If it fails the same way every
+time, something between you and GitHub is changing the file: don't install
+that release by hand, and report it with `casesorter.log` attached — it
+records the checksum that was expected and the one that arrived. The Windows
+installer applies the same check and stops the same way; its
+`install-<timestamp>.log` holds the same two values.
+
 ## Resetting
 
 Deleting the data folder (**File → Open data folder**) resets the app to a

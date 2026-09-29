@@ -26,6 +26,12 @@ changes install on the same restart.
 Everything in the ``updates/`` tree lives under the data root, which is
 outside the app folder (see ``sorter/paths.py`` at the package top level).
 
+The download is hashed as it streams and checked against the ``digest``
+GitHub publishes on the release asset (#33). No digest, or one in an algorithm
+this code can't check, means the update proceeds on TLS alone -- logged, and
+reported to the dialog as "not verified". A digest that is present but
+garbled, or that doesn't match, refuses the update and leaves nothing staged.
+
 Environment overrides:
   ``CASESORTER_UPDATE_REPO``      — ``owner/repo`` to check (default: upstream)
   ``CASESORTER_UPDATE_API_BASE``  — GitHub API base, for testing
@@ -34,7 +40,10 @@ Environment overrides:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import logging
 import os
 import re
 import shutil
@@ -43,13 +52,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import requests
 from packaging.version import InvalidVersion, Version
 
 from .. import __version__, paths
+
+log = logging.getLogger(__name__)
 
 DEFAULT_REPO = "sjseth/AI-Case-Sorter-Py"
 DEFAULT_API_BASE = "https://api.github.com"
@@ -117,16 +128,22 @@ class UpdateInfo:
     notes: str = ""  # release body (markdown)
     size: int | None = None
     published_at: str = ""
+    # The asset's ``digest`` exactly as GitHub sent it (``"sha256:<hex>"``), or
+    # None when it sent none -- including for the source-archive fallback.
+    digest: str | None = None
 
 
 @dataclass(frozen=True)
 class PendingUpdate:
-    """A downloaded, verified update waiting for the next launch."""
+    """A downloaded, validated update waiting for the next launch."""
 
     version: str
     tag: str
     path: Path
     staged_at: str = ""
+    # True: matched GitHub's SHA-256. False: nothing to check against, so TLS
+    # only. None: staged by a version that didn't record it.
+    verified: bool | None = None
 
 
 # ----- version comparison -----------------------------------------------------
@@ -256,7 +273,7 @@ def _expected_asset_name(tag: str) -> str:
     return f"ai_case_sorter-{_strip_tag_prefix(tag)}.tar.gz"
 
 
-def _pick_asset(release: dict[str, Any], tag: str) -> tuple[str, int | None]:
+def _pick_asset(release: dict[str, Any], tag: str) -> tuple[str, int | None, str | None]:
     """Match the sdist by its exact name, not "any .tar.gz".
 
     A release also carries a wheel (``.whl``), which never matches this. But
@@ -267,6 +284,10 @@ def _pick_asset(release: dict[str, Any], tag: str) -> tuple[str, int | None]:
     asset isn't published, same as before -- a release with no assets still
     updates correctly, just without a baked-in version (see apply_update's
     ``_stamp_version``).
+
+    The digest comes from the same asset dict, so it always describes the URL
+    returned beside it. The fallback archive has none: GitHub generates it on
+    request and publishes no checksum for it.
     """
     expected = _expected_asset_name(tag)
     for asset in release.get("assets") or []:
@@ -274,9 +295,44 @@ def _pick_asset(release: dict[str, Any], tag: str) -> tuple[str, int | None]:
         url = asset.get("browser_download_url")
         if name == expected and url:
             size = asset.get("size")
-            return str(url), int(size) if isinstance(size, int) else None
+            digest = asset.get("digest")
+            return (
+                str(url),
+                int(size) if isinstance(size, int) else None,
+                None if digest is None else str(digest),
+            )
     repo = update_repo()
-    return f"https://github.com/{repo}/archive/refs/tags/{tag}.tar.gz", None
+    return f"https://github.com/{repo}/archive/refs/tags/{tag}.tar.gz", None, None
+
+
+DigestKind = Literal["sha256", "absent", "unsupported", "malformed"]
+
+_SHA256_HEX_RE = re.compile(r"[0-9a-fA-F]{64}")
+_ALGORITHM_RE = re.compile(r"[a-z0-9-]+")
+
+
+def classify_digest(digest: str | None) -> tuple[DigestKind, str]:
+    """What an asset's ``digest`` lets us check, and the value to check with.
+
+    Returns ``("sha256", <lowercase hex>)``, ``("absent", "")`` for a null or
+    empty field, ``("unsupported", <algorithm>)`` for a well-formed digest in
+    another algorithm -- both of which stage on TLS alone -- or
+    ``("malformed", "")`` for anything else, which ``stage_update`` refuses:
+    a digest GitHub *did* send but that can't be read is not the "none
+    published" case the fallback exists for.
+    """
+    text = "" if digest is None else str(digest).strip()
+    if not text:
+        return "absent", ""
+    algorithm, sep, value = text.partition(":")
+    algorithm = algorithm.lower()
+    if not sep or not value or not _ALGORITHM_RE.fullmatch(algorithm):
+        return "malformed", ""
+    if algorithm != "sha256":
+        return "unsupported", algorithm
+    if not _SHA256_HEX_RE.fullmatch(value):
+        return "malformed", ""
+    return "sha256", value.lower()
 
 
 def check_for_update(
@@ -332,7 +388,7 @@ def check_for_update(
     if not is_newer(version, cur):
         return None
 
-    asset_url, size = _pick_asset(release, tag)
+    asset_url, size, digest = _pick_asset(release, tag)
     return UpdateInfo(
         version=version,
         tag=tag,
@@ -340,6 +396,7 @@ def check_for_update(
         notes=str(release.get("body") or "").strip(),
         size=size,
         published_at=str(release.get("published_at") or ""),
+        digest=digest,
     )
 
 
@@ -413,7 +470,7 @@ def list_releases(
         if not tag or not _TAG_RE.fullmatch(tag):
             continue
         version = _strip_tag_prefix(tag)
-        asset_url, size = _pick_asset(release, tag)
+        asset_url, size, digest = _pick_asset(release, tag)
         out.append(
             UpdateInfo(
                 version=version,
@@ -422,6 +479,7 @@ def list_releases(
                 notes=str(release.get("body") or "").strip(),
                 size=size,
                 published_at=str(release.get("published_at") or ""),
+                digest=digest,
             )
         )
     return out
@@ -453,11 +511,13 @@ def pending_update() -> PendingUpdate | None:
     version = str(meta.get("version") or "")
     if not version:
         return None
+    verified = meta.get("verified")
     return PendingUpdate(
         version=version,
         tag=str(meta.get("tag") or version),
         path=payload,
         staged_at=str(meta.get("staged_at") or ""),
+        verified=verified if isinstance(verified, bool) else None,
     )
 
 
@@ -568,8 +628,12 @@ def _download(
     progress: Callable[[int, int | None], None] | None,
     session: requests.Session | None,
     timeout: int,
-) -> Path:
-    """Stream ``url`` to ``dest`` with an atomic ``.tmp`` → ``os.replace``."""
+) -> str:
+    """Stream ``url`` to ``dest`` with an atomic ``.tmp`` → ``os.replace``.
+
+    Returns the SHA-256 (hex) of what was written, hashed per chunk as it
+    streams rather than by reading the file back.
+    """
     _check_download_url(url)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".tmp")
@@ -588,6 +652,7 @@ def _download(
                 except ValueError:
                     total = None
             done = 0
+            sha256 = hashlib.sha256()
             with open(tmp, "wb") as fh:
                 for chunk in resp.iter_content(chunk_size=64 * 1024):
                     if not chunk:
@@ -596,6 +661,7 @@ def _download(
                     if done > MAX_ARCHIVE_BYTES:
                         raise UpdateError("Update download exceeded the size limit.")
                     fh.write(chunk)
+                    sha256.update(chunk)
                     if progress is not None:
                         progress(done, total)
     except requests.RequestException as exc:
@@ -606,7 +672,7 @@ def _download(
         raise
 
     os.replace(tmp, dest)
-    return dest
+    return sha256.hexdigest()
 
 
 def stage_update(
@@ -619,8 +685,17 @@ def stage_update(
     """Download and verify ``info``, leaving it staged for the next launch.
 
     The app folder is not touched. On any failure the previous staged update
-    (if any) is left intact and the partial work is cleaned up.
+    (if any) is left intact and the partial work is cleaned up -- a checksum
+    mismatch included, so a failed verify means ``pending/`` never appears.
     """
+    kind, expected = classify_digest(info.digest)
+    if kind == "malformed":
+        log.warning("Update %s: unreadable published digest %r; refusing it.", info.tag, info.digest)
+        raise UpdateError(
+            f"Release {info.tag} publishes a checksum that can't be read, so it can't be verified. "
+            "Refusing to install it."
+        )
+
     updates = paths.updates_dir()
     updates.mkdir(parents=True, exist_ok=True)
     archive = updates / "download.tar.gz"
@@ -628,7 +703,26 @@ def stage_update(
 
     shutil.rmtree(staging, ignore_errors=True)
     try:
-        _download(info.url, archive, progress, session, timeout)
+        actual = _download(info.url, archive, progress, session, timeout)
+        if kind == "sha256":
+            if not hmac.compare_digest(actual, expected):
+                log.warning(
+                    "Update %s failed its checksum: expected sha256:%s, got sha256:%s", info.tag, expected, actual
+                )
+                raise UpdateError(
+                    f"The download of {info.tag} does not match the SHA-256 checksum GitHub published for it, "
+                    "so it was discarded. Try again; if it keeps happening, report it."
+                )
+            log.info("Update %s: SHA-256 matches the published digest.", info.tag)
+        elif kind == "unsupported":
+            log.warning(
+                "Update %s: published digest is %s, which this version can't check; staging on TLS alone (sha256:%s).",
+                info.tag,
+                expected,
+                actual,
+            )
+        else:
+            log.warning("Update %s: no published digest; staging on TLS alone (sha256:%s).", info.tag, actual)
 
         # No is_tarfile() pre-check: it accepts plain/bz2/xz tars that
         # mode="r:gz" then rejects, so the friendly message below was
@@ -695,9 +789,17 @@ def stage_update(
                 "tag": info.tag,
                 "staged_at": staged_at,
                 "from_version": current_version(),
+                "verified": kind == "sha256",
+                "sha256": actual,
             },
             indent=2,
         ),
         encoding="utf-8",
     )
-    return PendingUpdate(version=info.version, tag=info.tag, path=pending_dir(), staged_at=staged_at)
+    return PendingUpdate(
+        version=info.version,
+        tag=info.tag,
+        path=pending_dir(),
+        staged_at=staged_at,
+        verified=kind == "sha256",
+    )

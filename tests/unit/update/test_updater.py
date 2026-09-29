@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import tarfile
@@ -766,3 +767,196 @@ def test_clear_pending(monkeypatch) -> None:
 
 def test_pending_update_none_without_metadata() -> None:
     assert updater.pending_update() is None
+
+
+# ----- digest verification (#33) ---------------------------------------------
+
+_HEX = "ab" * 32
+
+
+@pytest.mark.parametrize(
+    ("digest", "expected"),
+    [
+        (f"sha256:{_HEX}", ("sha256", _HEX)),
+        (f"sha256:{_HEX.upper()}", ("sha256", _HEX)),
+        (f"SHA256:{_HEX}", ("sha256", _HEX)),
+        # Option B: nothing published means TLS only, not a refusal.
+        (None, ("absent", "")),
+        ("", ("absent", "")),
+        ("   ", ("absent", "")),
+        # A well-formed digest we can't check is the same "can't verify" case.
+        ("sha512:" + "cd" * 64, ("unsupported", "sha512")),
+        # Present but unreadable is not "GitHub sent none": refused.
+        ("sha256:abc", ("malformed", "")),
+        (f"sha256:{'g' * 64}", ("malformed", "")),
+        (f"sha256:{_HEX}00", ("malformed", "")),
+        (_HEX, ("malformed", "")),
+        ("sha256", ("malformed", "")),
+        ("sha256:", ("malformed", "")),
+        (f":{_HEX}", ("malformed", "")),
+        (f"sha 256:{_HEX}", ("malformed", "")),
+    ],
+)
+def test_classify_digest(digest, expected) -> None:
+    assert updater.classify_digest(digest) == expected
+
+
+def _sdist_asset(**extra) -> dict:
+    return {"name": "ai_case_sorter-0.9.0.tar.gz", "browser_download_url": "https://x/app.tar.gz", **extra}
+
+
+@pytest.mark.parametrize(
+    ("asset", "expected"),
+    [
+        (_sdist_asset(digest=f"sha256:{_HEX}"), f"sha256:{_HEX}"),
+        (_sdist_asset(digest=None), None),
+        (_sdist_asset(), None),
+    ],
+)
+def test_check_carries_the_assets_digest(monkeypatch, asset: dict, expected) -> None:
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(200, _release(assets=[asset])))
+    info = updater.check_for_update(current="0.1.0")
+    assert info is not None
+    assert info.digest == expected
+
+
+def test_check_takes_the_digest_from_the_picked_asset_only(monkeypatch) -> None:
+    wheel = {
+        "name": "ai_case_sorter-0.9.0-py3-none-any.whl",
+        "browser_download_url": "https://x/w",
+        "digest": "sha256:" + "11" * 32,
+    }
+    assets = [wheel, _sdist_asset(digest=f"sha256:{_HEX}")]
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(200, _release(assets=assets)))
+    info = updater.check_for_update(current="0.1.0")
+    assert info is not None
+    assert info.digest == f"sha256:{_HEX}"
+
+
+def test_source_archive_fallback_has_no_digest(monkeypatch) -> None:
+    wheel = {"name": "x.whl", "browser_download_url": "https://x/w", "digest": f"sha256:{_HEX}"}
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(200, _release(assets=[wheel])))
+    info = updater.check_for_update(current="0.1.0")
+    assert info is not None
+    assert info.url.endswith("/archive/refs/tags/v0.9.0.tar.gz")
+    assert info.digest is None
+
+
+def test_list_releases_carries_the_digest(monkeypatch) -> None:
+    """The picker path must verify exactly like the single-release check."""
+    releases = [
+        {
+            "tag_name": "v0.9.0",
+            "assets": [_sdist_asset(digest=f"sha256:{_HEX}")],
+            "draft": False,
+            "prerelease": False,
+        },
+        {"tag_name": "v0.8.0", "assets": [], "draft": False, "prerelease": False},
+    ]
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _Resp(200, releases))
+    result = updater.list_releases()
+    assert [r.digest for r in result] == [f"sha256:{_HEX}", None]
+
+
+def _sha256(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _info_with(digest: str | None) -> UpdateInfo:
+    return UpdateInfo(version="0.9.0", tag="v0.9.0", url="https://x/app.tar.gz", digest=digest)
+
+
+def test_stage_verifies_a_matching_digest(monkeypatch, caplog) -> None:
+    payload = _good_archive()
+    _serve(monkeypatch, payload)
+    with caplog.at_level("INFO", logger="sorter.update.updater"):
+        pending = updater.stage_update(_info_with(f"sha256:{_sha256(payload)}"))
+
+    assert pending.verified is True
+    assert "SHA-256 matches" in caplog.text
+    meta = json.loads((updater.paths.updates_dir() / "pending.json").read_text())
+    assert meta["verified"] is True
+    assert meta["sha256"] == _sha256(payload)
+    found = updater.pending_update()
+    assert found is not None and found.verified is True
+
+
+def test_stage_accepts_an_uppercase_digest(monkeypatch) -> None:
+    payload = _good_archive()
+    _serve(monkeypatch, payload)
+    assert updater.stage_update(_info_with(f"sha256:{_sha256(payload).upper()}")).verified is True
+
+
+def test_stage_refuses_a_mismatched_digest(monkeypatch) -> None:
+    _serve(monkeypatch, _good_archive())
+    with pytest.raises(UpdateError, match="does not match the SHA-256"):
+        updater.stage_update(_info_with(f"sha256:{_HEX}"))
+
+    updates = updater.paths.updates_dir()
+    assert updater.pending_update() is None
+    assert not updater.pending_dir().exists()
+    assert not (updates / "pending.json").exists()
+    assert not (updates / "download.tar.gz").exists()
+    assert not (updates / "download.tar.gz.tmp").exists()
+    assert not (updates / "staging").exists()
+
+
+def test_a_mismatch_leaves_the_previous_pending_update_intact(monkeypatch) -> None:
+    _serve(monkeypatch, _good_archive())
+    updater.stage_update(_info())
+
+    newer = UpdateInfo(version="1.0.0", tag="v1.0.0", url="https://x/b.tar.gz", digest=f"sha256:{_HEX}")
+    with pytest.raises(UpdateError, match="does not match"):
+        updater.stage_update(newer)
+
+    still = updater.pending_update()
+    assert still is not None and still.version == "0.9.0"
+
+
+@pytest.mark.parametrize("digest", [None, ""])
+def test_stage_without_a_digest_proceeds_unverified(monkeypatch, caplog, digest) -> None:
+    payload = _good_archive()
+    _serve(monkeypatch, payload)
+    with caplog.at_level("WARNING", logger="sorter.update.updater"):
+        pending = updater.stage_update(_info_with(digest))
+
+    assert pending.verified is False
+    assert (pending.path / "main.py").is_file()
+    assert "no published digest" in caplog.text
+    meta = json.loads((updater.paths.updates_dir() / "pending.json").read_text())
+    assert meta["verified"] is False
+    # Still recorded, so a support request can compare it by hand.
+    assert meta["sha256"] == _sha256(payload)
+
+
+def test_stage_with_an_unsupported_algorithm_proceeds_unverified(monkeypatch, caplog) -> None:
+    _serve(monkeypatch, _good_archive())
+    with caplog.at_level("WARNING", logger="sorter.update.updater"):
+        pending = updater.stage_update(_info_with("sha512:" + "cd" * 64))
+
+    assert pending.verified is False
+    assert "sha512" in caplog.text
+
+
+@pytest.mark.parametrize("digest", ["sha256:abc", _HEX, f"sha256:{'z' * 64}"])
+def test_stage_refuses_a_malformed_digest_without_downloading(monkeypatch, digest: str) -> None:
+    def _no_download(*a, **k):
+        raise AssertionError("a malformed digest must be refused before downloading")
+
+    monkeypatch.setattr(requests, "get", _no_download)
+    with pytest.raises(UpdateError, match="can't be read"):
+        updater.stage_update(_info_with(digest))
+    assert updater.pending_update() is None
+    assert not updater.pending_dir().exists()
+
+
+def test_pending_update_from_an_older_version_has_unknown_verification(monkeypatch) -> None:
+    _serve(monkeypatch, _good_archive())
+    updater.stage_update(_info())
+    meta_path = updater.paths.updates_dir() / "pending.json"
+    meta = json.loads(meta_path.read_text())
+    del meta["verified"]
+    meta_path.write_text(json.dumps(meta))
+
+    found = updater.pending_update()
+    assert found is not None and found.verified is None

@@ -808,3 +808,20 @@ and the button becomes **Restart now** when it is ready. **Choose a
 different version…** lists every published release, including older ones,
 and optionally pre-releases (which the automatic check never offers). You
 can turn the automatic check off in the same dialog.
+
+When GitHub publishes a SHA-256 checksum for a release, the download is
+checked against it. A line under the release summary says whether it will be,
+and once the update is downloaded, whether it was:
+
+- **The download is checked against the SHA-256 checksum…** — before
+  downloading; once it is staged this becomes **Verified**.
+- **This release has no published checksum…** — it still installs,
+  but only the HTTPS connection vouches for it. Once staged this reads **Not
+  verified**. A checksum in a format this version can't check is treated the
+  same way, and names the format.
+- **This release's published checksum can't be read…** — the release
+  can't be installed from here; **Download & install** stays disabled.
+
+A download that doesn't match its checksum is thrown away and nothing is
+staged; the dialog offers **Try again**. If it fails the same way every time,
+see *An update fails its checksum* on the Troubleshooting page.

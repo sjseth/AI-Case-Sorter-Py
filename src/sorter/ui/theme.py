@@ -369,6 +369,10 @@ QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {c["border_focus"]}; }}
 QLabel#mutedLabel {{ color: {c["text_muted"]}; }}
 QLabel#updateTitle {{ color: {c["text_highlight"]}; font-weight: bold; }}
 QLabel#updateVersion {{ color: {c["accent"]}; }}
+QLabel#updateVerification {{ color: {c["text_muted"]}; }}
+QLabel#updateVerification[state="verified"] {{ color: {c["success"]}; }}
+QLabel#updateVerification[state="unverified"] {{ color: {c["warning"]}; }}
+QLabel#updateVerification[state="refused"] {{ color: {c["error"]}; }}
 
 QTextBrowser {{
     background-color: {c["bg_input"]};

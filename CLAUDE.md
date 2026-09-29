@@ -1111,6 +1111,26 @@ flowchart TD
   after the fact; see #58's issue thread for why the two-release migration
   this implies doesn't actually need engineering around it), and caps archive
   size and entry count. Staging is atomic: `pending/` only ever exists complete.
+  - **The download is checked against GitHub's asset `digest`** (#33), hashed
+    per chunk as it streams (`_download` returns the SHA-256), before the tar
+    is opened. `_pick_asset` reads the digest off the *same* asset dict as the
+    URL, so the version picker's releases verify exactly like the startup
+    check's; the source-archive fallback has none. `classify_digest` is the
+    policy, and it is **option B** from the issue — verify when present, TLS
+    alone when not: `sha256` → verify, a mismatch deletes the download and
+    raises, so `pending/` never appears; `absent` (null/empty) and
+    `unsupported` (a well-formed `<algo>:` GitHub might someday send) → stage
+    anyway, logged at WARNING; `malformed` (a sha256 that isn't 64 hex, no
+    algorithm prefix) → refused before downloading, because a digest that was
+    sent but can't be read is not the "none published" case the fallback is
+    for. The outcome travels as `PendingUpdate.verified` (True / False / None
+    for a `pending.json` staged before this existed), is written to
+    `pending.json` with the actual `sha256`, carried into
+    `last_applied.json` by `apply_update`, and shown by the dialog.
+    `install-windows.ps1`'s `Get-DigestCheck` / `Assert-DownloadDigest` apply
+    the same rule to the same asset (`installer/tests/Test-DigestVerification.ps1`
+    mirrors the Python cases), and the installer smoke job asserts a real
+    release installs *verified*.
   - `check_for_update()` (`GET /releases/latest`) is unchanged: latest stable
     only, newer-than-current only, used for the silent startup check and the
     dialog's default. `list_releases()` (`GET /repos/{repo}/releases`) is
@@ -1176,6 +1196,10 @@ flowchart TD
   from a status-bar button in `app.py` that appears only when there's something
   to do. A silent check runs 2.5 s after startup; opt out via the dialog's
   checkbox (`updates.check_on_startup`) or `CASESORTER_UPDATE_DISABLED=1`.
+  `verify_label` (objectName `updateVerification`, coloured by a `state`
+  property in `theme.py`) says before downloading whether the release will be
+  verified and, on the restart prompt, whether it was; a malformed digest
+  leaves **Download & install** disabled.
   The dialog opens showing only what the startup check already found — the
   latest stable release, or "up to date" — with nothing further fetched over
   the network. A "Choose a different version…" button is what triggers
