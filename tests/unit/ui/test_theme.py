@@ -111,3 +111,77 @@ def test_disabled_role_buttons_drop_their_hue(name: str) -> None:
     assert "background-color: transparent" in rule
     for hue in (palette["action"], palette["danger"], palette["update"]):
         assert hue not in rule
+
+
+# ----- spinbox step arrows (#145) ---------------------------------------------
+
+
+def _side_by_side_style():
+    """Fusion with Windows 11's spinbox geometry: up and down side by side.
+
+    qwindows11style.cpp lays the buttons out horizontally while the stylesheet
+    style sizes the edit field for one stacked column, so the edit field grew
+    over the up button. That style only exists on Windows; this reproduces its
+    one relevant difference everywhere.
+    """
+    from PySide6.QtWidgets import QProxyStyle, QStyle, QStyleFactory
+
+    class SideBySide(QProxyStyle):
+        def subControlRect(self, cc, opt, sc, widget):
+            buttons = (QStyle.SubControl.SC_SpinBoxUp, QStyle.SubControl.SC_SpinBoxDown)
+            if cc != QStyle.ComplexControl.CC_SpinBox or sc not in buttons:
+                return super().subControlRect(cc, opt, sc, widget)
+            side = opt.rect.height() - 2
+            rect = opt.rect.adjusted(opt.rect.width() - 2 * side - 1, 1, -1, -1)
+            rect.setWidth(side)
+            if sc == QStyle.SubControl.SC_SpinBoxDown:
+                rect.translate(side, 0)
+            return rect
+
+    return SideBySide(QStyleFactory.create("Fusion"))
+
+
+def _spin_styles() -> list[str]:
+    from PySide6.QtWidgets import QStyleFactory
+
+    return [*QStyleFactory.keys(), "side-by-side"]
+
+
+@pytest.mark.parametrize("name", list(BUILTIN_THEMES))
+def test_spinbox_arrows_step_the_value_under_every_style(qapp, name: str) -> None:
+    """Clicking an arrow must reach the spinbox, not the edit field over it.
+
+    The click goes to whichever widget is really under the arrow's centre, as
+    a mouse would; a click sent straight to the spinbox would pass regardless.
+    """
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QSpinBox, QStyle, QStyleFactory, QStyleOptionSpinBox
+
+    qss = build_stylesheet(BUILTIN_THEMES[name])
+    for style_name in _spin_styles():
+        spin = QSpinBox()
+        style = _side_by_side_style() if style_name == "side-by-side" else QStyleFactory.create(style_name)
+        style.setParent(spin)
+        spin.setStyle(style)
+        spin.setStyleSheet(qss)
+        spin.setRange(0, 99)
+        spin.setValue(50)
+        spin.resize(spin.sizeHint().width() + 60, spin.sizeHint().height())
+        spin.show()
+
+        for label, control, expected in (
+            ("up", QStyle.SubControl.SC_SpinBoxUp, 51),
+            ("down", QStyle.SubControl.SC_SpinBoxDown, 50),
+        ):
+            opt = QStyleOptionSpinBox()
+            spin.initStyleOption(opt)
+            centre = spin.style().subControlRect(QStyle.ComplexControl.CC_SpinBox, opt, control, spin).center()
+            target = spin.childAt(centre) or spin
+            QTest.mouseClick(
+                target, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, target.mapFrom(spin, centre)
+            )
+            assert spin.value() == expected, f"{name} / {style_name}: {label} click hit {type(target).__name__}"
+
+        spin.hide()
+        spin.deleteLater()

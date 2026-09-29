@@ -882,7 +882,13 @@ Themes panel in `app.py`. Dialogs are `dialog_*.py`.
   (`ads--CDockWidgetTab`, `ads--CDockAreaTitleBar`, …) — QtAds's own
   stylesheet is disabled so these are what paint them, which also means
   theme.py has to re-declare QtAds's button-icon rules or every close/undock
-  button renders blank. The few places a stylesheet can't reach (rich text in
+  button renders blank. A complex control given a box (border/padding) also
+  needs its sub-controls positioned in the QSS: the spinbox `::up-button` /
+  `::down-button` rules exist because Windows 11's base style lays the buttons
+  side by side, the stylesheet sized the edit field for a stacked column, and
+  the edit field swallowed the up arrow's clicks (#145) —
+  `test_spinbox_arrows_step_the_value_under_every_style` clicks through
+  whatever widget is really under each arrow. The few places a stylesheet can't reach (rich text in
   the feed and indicators, `QPlainTextEdit` line colors, painted history
   cards) bake their colors in and are re-rendered by an explicit
   `apply_palette()` on every switch.
