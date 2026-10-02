@@ -1,1 +1,12 @@
+# Last matching pattern wins. A pattern with no owner means "no code owner
+# review required" for those paths.
+
 * @sjseth
+
+# Dependency manifests: Renovate's minor/patch bumps touch only these two
+# files, so exempting them lets a PR with green required checks automerge
+# without a code-owner approval. A PR that also touches any other file still
+# needs review. .github/workflows/ is deliberately NOT exempted -- workflows
+# run with repo secrets, so action bumps (including Renovate's) stay gated.
+/pyproject.toml
+/uv.lock
