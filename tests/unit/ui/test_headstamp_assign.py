@@ -168,6 +168,23 @@ def test_a_whole_layout_in_one_keyboard_pass(config, assigner) -> None:
     assert stored_slots(config) == {"WIN 9MM LUGER": 1, "FC 9MM LUGER": 2, "WIN .45 AUTO": 3, "S B 9MM LUGER": 0}
 
 
+def test_the_next_search_lands_on_its_top_match_not_the_row_just_edited(config, assigner) -> None:
+    # The edited row still matches the next search; it must not stay current,
+    # or the next digit overwrites it instead of routing what was searched for.
+    seed_model(config, {"WIN 9MM LUGER": 0, "WIN 9MM LUGER +P": 0})
+    dialog = assigner()
+    QTest.keyClicks(dialog.filter_edit, "win 9")
+    QTest.keyClick(dialog.filter_edit, Qt.Key.Key_Return)
+    type_keys(dialog, Qt.Key.Key_Down, Qt.Key.Key_5)
+
+    QTest.keyClicks(dialog.table, "w")
+    QTest.keyClicks(dialog.filter_edit, "in 9mm luger")
+    QTest.keyClick(dialog.filter_edit, Qt.Key.Key_Return)
+    type_keys(dialog, Qt.Key.Key_3)
+
+    assert stored_slots(config) == {"WIN 9MM LUGER": 3, "WIN 9MM LUGER +P": 5}
+
+
 def test_an_edit_lands_in_the_active_sorting_template(config, assigner) -> None:
     seed_model(config, {"9mm FC": 0})
     dialog = assigner()

@@ -212,9 +212,14 @@ class HeadstampAssignDialog(QDialog):
     # ----- rendering ----------------------------------------------------------
 
     def refresh(self) -> None:
-        """Rebuild the table from Config through the filter, keeping the current row if it survives."""
-        current = self.current_row()
-        keep = current.key if current is not None else None
+        """Rebuild the table from Config through the filter, the top match current.
+
+        Only opening and a filter change get here — an edit re-reads its cells
+        in place (``_after_change``). So the current row is never carried over:
+        a row edited a moment ago that still matches the next search would
+        otherwise stay current, and the next digit would overwrite *its* slot
+        instead of landing on the match the user just searched for.
+        """
         mode = self.mode()
         self.hint_label.setText({"package": PACKAGE_HINT, "parent": PARENT_HINT}.get(mode, STANDARD_HINT))
         self.table.setColumnHidden(CONTAINS_COLUMN, mode != "parent")
@@ -243,10 +248,9 @@ class HeadstampAssignDialog(QDialog):
             self.table.setItem(index, SLOT_COLUMN, slot)
             self.table.setItem(index, CONTAINS_COLUMN, contains)
 
-        keys = [row.key for row in self.rows]
         if self.rows:
             # The top match is current, so Enter-then-digit from the filter lands on it.
-            self.table.setCurrentCell(keys.index(keep) if keep in keys else 0, NAME_COLUMN)
+            self.table.setCurrentCell(0, NAME_COLUMN)
         self._show_counts(everything)
 
     def _show_counts(self, everything: list[AssignRow]) -> None:
