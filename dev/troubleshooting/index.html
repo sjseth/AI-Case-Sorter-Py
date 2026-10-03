@@ -775,7 +775,7 @@ collects your version, platform, active model, run options and every settings
 page into one report, with the API key reported only as "set" or "not set" and
 paths relative to the data folder. Attach the logs described below too.</p>
 <h2 id="where-the-logs-are">Where the logs are<a class="headerlink" href="#where-the-logs-are" title="Permanent link">&para;</a></h2>
-<p>Both live in the data folder's <code>logs/</code> directory — on Windows that is
+<p>They live in the data folder's <code>logs/</code> directory — on Windows that is
 <code>%LOCALAPPDATA%\CaseSorter\logs</code>, on Linux and macOS
 <code>~/.local/share/CaseSorter/logs</code>. They answer different questions:</p>
 <ul>
@@ -786,7 +786,15 @@ paths relative to the data folder. Attach the logs described below too.</p>
 <li><strong><code>launch.log</code></strong> — the launcher: finding Python, syncing dependencies,
   applying an update, and anything the app printed. Rewritten on every start,
   with the previous one kept as <code>launch.prev.log</code>.</li>
+<li><strong><code>serial-&lt;date-time&gt;.log</code></strong> — every line sent to and received from the
+  board, timestamped. Only written while <strong>Log serial traffic to a file</strong> is
+  ticked on <a href="../guide/GUIDE/#serial">Settings → Serial</a>. It is off by default.</li>
 </ul>
+<p><strong>Reporting a board problem?</strong> Tick <strong>Log serial traffic to a file</strong> first,
+reproduce the problem, then export the support package. The package's ZIP
+carries the newest serial log as <code>serial.log</code>. The Serial Monitor only holds
+what is on screen, while the file keeps the whole session, including the
+moments before you noticed.</p>
 <p>To collect more detail, start the app with <code>CASESORTER_LOG_LEVEL=DEBUG</code> set in
 the environment.</p>
 <h2 id="nothing-happens-when-i-start-the-app">Nothing happens when I start the app<a class="headerlink" href="#nothing-happens-when-i-start-the-app" title="Permanent link">&para;</a></h2>
