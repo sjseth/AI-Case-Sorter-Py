@@ -232,7 +232,7 @@ ads--CFloatingWidgetTitleBar {{
     margin: 3px;
 }}
 
-QPlainTextEdit#serialLog {{
+QPlainTextEdit#serialLog, QPlainTextEdit#messageLog {{
     background-color: {c["bg_input"]};
     color: {c["text"]};
     border: 1px solid {c["border"]};
@@ -385,6 +385,10 @@ QSpinBox::down-button, QDoubleSpinBox::down-button {{
 QLabel#mutedLabel {{ color: {c["text_muted"]}; }}
 QLabel#updateTitle {{ color: {c["text_highlight"]}; font-weight: bold; }}
 QLabel#updateVersion {{ color: {c["accent"]}; }}
+QLabel#updateVerification {{ color: {c["text_muted"]}; }}
+QLabel#updateVerification[state="verified"] {{ color: {c["success"]}; }}
+QLabel#updateVerification[state="unverified"] {{ color: {c["warning"]}; }}
+QLabel#updateVerification[state="refused"] {{ color: {c["error"]}; }}
 
 QTextBrowser {{
     background-color: {c["bg_input"]};

@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .formatting import escape_mnemonic
 from .name_filter import matching
 
 CATCH_ALL_HINT = "Anything we can't classify or that isn't mapped to a slot ends up here."
@@ -215,7 +216,7 @@ class SlotAssignDialog(QDialog):
         row = QWidget()
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
-        box = QCheckBox(label, row)
+        box = QCheckBox(escape_mnemonic(label), row)
         box.setChecked(checked)
         box.setEnabled(enabled and on_toggle is not None)
         if on_toggle is not None:

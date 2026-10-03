@@ -30,14 +30,14 @@ def install(monkeypatch, tmp_path: Path):
     return app, data
 
 
-def _stage(data: Path, files: dict[str, str], *, version: str = "0.9.0") -> None:
+def _stage(data: Path, files: dict[str, str], *, version: str = "0.9.0", **extra: object) -> None:
     pending = data / "updates" / "pending"
     for rel, content in files.items():
         p = pending / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
     (data / "updates" / "pending.json").write_text(
-        json.dumps({"version": version, "tag": f"v{version}", "from_version": "0.1.0"}),
+        json.dumps({"version": version, "tag": f"v{version}", "from_version": "0.1.0", **extra}),
         encoding="utf-8",
     )
 
@@ -188,6 +188,18 @@ def test_records_what_was_applied(install) -> None:
     record = json.loads((data / "updates" / "last_applied.json").read_text())
     assert record["version"] == "0.9.0"
     assert record["from_version"] == "0.1.0"
+    # Staged by a version that predates digest verification: not recorded.
+    assert record["verified"] is None
+
+
+@pytest.mark.parametrize("verified", [True, False])
+def test_records_whether_the_applied_update_was_verified(install, verified: bool) -> None:
+    app, data = install
+    _stage(data, {"bootstrap.py": "new\n", "src/sorter/__init__.py": "new\n"}, verified=verified)
+    apply_update.apply_pending()
+
+    record = json.loads((data / "updates" / "last_applied.json").read_text())
+    assert record["verified"] is verified
 
 
 def test_rollback_restores_the_previous_version(install, monkeypatch) -> None:

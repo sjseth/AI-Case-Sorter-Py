@@ -157,12 +157,14 @@ def test_menus(window) -> None:
         "Classification History",
         "User Guide panel",
         "Themes",
+        "Messages",
         "Re-dock panels",
     ]
     assert window.serial_dock.toggleViewAction() in window.menus["View"].actions()
     assert window.history_dock.toggleViewAction() in window.menus["View"].actions()
     assert window.help_dock.toggleViewAction() in window.menus["View"].actions()
     assert window.themes_dock.toggleViewAction() in window.menus["View"].actions()
+    assert window.messages_dock.toggleViewAction() in window.menus["View"].actions()
     help_texts = [a.text() for a in window.menus["Help"].actions() if a.text()]
     assert help_texts == [
         "User Guide",
