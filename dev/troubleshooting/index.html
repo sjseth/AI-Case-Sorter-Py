@@ -552,6 +552,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#an-update-fails-its-checksum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An update fails its checksum
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#resetting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -700,6 +711,17 @@
     <span class="md-ellipsis">
       
         The app says a model update is available every time
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#an-update-fails-its-checksum" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An update fails its checksum
       
     </span>
   </a>
@@ -863,6 +885,17 @@ server; pick a different model, or train this one.</p>
 an app update. <strong>Update now</strong> installs it in place and keeps your slot
 assignments, sorting templates and the name you gave it. Dismissing it is
 fine — it returns next time you open the Sort screen.</p>
+<h2 id="an-update-fails-its-checksum">An update fails its checksum<a class="headerlink" href="#an-update-fails-its-checksum" title="Permanent link">&para;</a></h2>
+<p>The update dialog says the download <em>does not match the SHA-256 checksum
+GitHub published for it</em>. The file was discarded and nothing was staged or
+installed — the app you are running is untouched.</p>
+<p>Press <strong>Try again</strong>. A truncated or corrupted download is the usual cause, and
+a retry over a steadier connection fixes it. If it fails the same way every
+time, something between you and GitHub is changing the file: don't install
+that release by hand, and report it with <code>casesorter.log</code> attached — it
+records the checksum that was expected and the one that arrived. The Windows
+installer applies the same check and stops the same way; its
+<code>install-&lt;timestamp&gt;.log</code> holds the same two values.</p>
 <h2 id="resetting">Resetting<a class="headerlink" href="#resetting" title="Permanent link">&para;</a></h2>
 <p>Deleting the data folder (<strong>File → Open data folder</strong>) resets the app to a
 fresh install — settings, models, training images and all. There is no undo,

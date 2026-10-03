@@ -1779,8 +1779,19 @@ picker names the layout the cards are showing.</p>
 headstamp to route it to that slot; unticking sends it back to the
 Catch-All. Outside of <a href="#package-mode">package mode</a> a headstamp can only be
 assigned to one slot at a time — ticking it here moves it off whichever slot
-it was in before, and the row tells you which one that was. A filter box
-narrows a long headstamp list by name.</p>
+it was in before, and the row tells you which one that was.</p>
+<p>The list opens in three groups, alphabetical within each: what is already in
+this slot, then headstamps not in any slot yet, then those routed to another
+slot. Working through a big model, the unassigned part shrinks every time you
+reopen a card. In <a href="#package-mode">package mode</a>, where a headstamp can fill
+several slots, "routed to another slot" means any other slot, and the row
+lists which. The order is fixed while the editor is open — ticking a row
+doesn't move it — and is worked out again when you change the filter.</p>
+<p>The filter box has the cursor as soon as the editor opens. It matches every
+word you type, in any order and ignoring case, so <code>win 9</code> finds
+<code>WIN 9MM LUGER</code>. When the filter leaves exactly one row, <strong>Enter</strong> ticks it
+(or unticks it, if it was ticked); otherwise Enter does nothing. Close the
+editor with <strong>Esc</strong> or <strong>Close</strong>.</p>
 <h3 id="sorting-templates">Sorting templates<a class="headerlink" href="#sorting-templates" title="Permanent link">&para;</a></h3>
 <p>The <strong>Template</strong> picker on the slot grid's header row holds the active
 <strong>sorting template</strong> — a named snapshot of the whole slot layout, so one
@@ -2294,6 +2305,22 @@ and the button becomes <strong>Restart now</strong> when it is ready. <strong>Ch
 different version…</strong> lists every published release, including older ones,
 and optionally pre-releases (which the automatic check never offers). You
 can turn the automatic check off in the same dialog.</p>
+<p>When GitHub publishes a SHA-256 checksum for a release, the download is
+checked against it. A line under the release summary says whether it will be,
+and once the update is downloaded, whether it was:</p>
+<ul>
+<li><strong>The download is checked against the SHA-256 checksum…</strong> — before
+  downloading; once it is staged this becomes <strong>Verified</strong>.</li>
+<li><strong>This release has no published checksum…</strong> — it still installs,
+  but only the HTTPS connection vouches for it. Once staged this reads <strong>Not
+  verified</strong>. A checksum in a format this version can't check is treated the
+  same way, and names the format.</li>
+<li><strong>This release's published checksum can't be read…</strong> — the release
+  can't be installed from here; <strong>Download &amp; install</strong> stays disabled.</li>
+</ul>
+<p>A download that doesn't match its checksum is thrown away and nothing is
+staged; the dialog offers <strong>Try again</strong>. If it fails the same way every time,
+see <em>An update fails its checksum</em> on the Troubleshooting page.</p>
 
 
 
