@@ -533,6 +533,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#messages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Messages
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1115,6 +1126,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#messages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Messages
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1553,8 +1575,8 @@ day, in the order you meet them.</p>
   menus that frame everything else.</li>
 <li><a href="#panels">Panels</a> — the movable side and bottom panels:
   <a href="#serial-monitor">Serial Monitor</a>, <a href="#classification-history">Classification
-  History</a>, the guide you are reading, and
-  <a href="#themes-panel">Themes</a>.</li>
+  History</a>, the guide you are reading,
+  <a href="#themes-panel">Themes</a> and <a href="#messages">Messages</a>.</li>
 <li><a href="#sort-dashboard">Sort dashboard</a> — the main working screen: the current
   case, the slot cards, sorting templates and the run controls.</li>
 <li><a href="#train">Train</a> — capture cases, label them, and train a model from them.</li>
@@ -1645,7 +1667,10 @@ carries a button to the Models page to change it. Never a dead end.</p>
 <p>Along the bottom, from left to right:</p>
 <ul>
 <li><strong>Messages</strong> — what the app just did ("Auto-connected to COM3.", "Run
-  stopped."). This is where a refused action explains itself.</li>
+  stopped."). This is where a refused action explains itself. It shows one
+  line, cut off at the window's edge, until the next replaces it — <strong>click
+  it</strong> to open the <a href="#messages">Messages</a> panel, which keeps the recent ones
+  in full.</li>
 <li><strong>● Camera</strong> and <strong>● Serial</strong> — connection indicators. Green means
   connected, and the serial one names the port, speed and the firmware
   version it handshook with.</li>
@@ -1674,7 +1699,7 @@ carries a button to the Models page to change it. Never a dead end.</p>
   support package…</a>, About and License.</li>
 </ul>
 <h2 id="panels">Panels<a class="headerlink" href="#panels" title="Permanent link">&para;</a></h2>
-<p>Four panels can sit around your working screen. Each one can be moved,
+<p>Five panels can sit around your working screen. Each one can be moved,
 tabbed together with another, torn off into its own floating window, or
 closed:</p>
 <ul>
@@ -1682,6 +1707,7 @@ closed:</p>
 <li><strong>Classification History</strong> — on the right, closed by default.</li>
 <li><strong>User Guide</strong> — on the right, closed by default (this guide).</li>
 <li><strong>Themes</strong> — on the right, closed by default.</li>
+<li><strong>Messages</strong> — on the right, closed by default.</li>
 </ul>
 <p><strong>Moving a panel:</strong> drag it by its <em>tab</em> — the small labelled tab at the
 edge of the panel, not its title. As you drag, blue drop indicators appear
@@ -1743,6 +1769,25 @@ immediately, so you can try them against the room's lighting without leaving
 what you were doing. <strong>Edit theme…</strong> opens the theme editor.</p>
 <p>This is the same list as <a href="#theme">Settings → Theme</a>; whichever you use, the
 other follows.</p>
+<h3 id="messages">Messages<a class="headerlink" href="#messages" title="Permanent link">&para;</a></h3>
+<p>Every message the status bar has shown this session, newest at the bottom,
+each with the time it appeared — the last 200 are kept. Open it from <strong>View →
+Messages</strong>, or by clicking the message in the status bar.</p>
+<p>This is where to read an error in full. The status bar cuts a long message off
+at the window's edge and replaces it with the next one; here it is kept whole,
+wrapped to the panel's width. Errors are marked <code>[error]</code> and printed in bold
+in the theme's error colour.</p>
+<p>A step that is still in progress ("Connecting to COM3…", "Classifying…") is
+replaced by whatever comes next, so a long run shows its latest step rather
+than four lines per case. An error is never replaced: the step it interrupted
+stays just above it.</p>
+<ul>
+<li>Select any text and copy it as usual, or press <strong>Copy all</strong> to copy the
+  whole log — timestamps and <code>[error]</code> marks included — for a bug report.</li>
+<li><strong>Clear</strong> empties it.</li>
+</ul>
+<p>The panel is not saved: it starts empty each time the app does, so copy what
+you need before quitting.</p>
 <h2 id="sort-dashboard">Sort dashboard<a class="headerlink" href="#sort-dashboard" title="Permanent link">&para;</a></h2>
 <p>The Sort activity (the sidebar's top button) is where sorting actually
 happens. It combines the current case, the slot layout and the run controls
