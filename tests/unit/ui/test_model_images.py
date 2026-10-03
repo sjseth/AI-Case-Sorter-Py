@@ -20,7 +20,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QDialog
+from PySide6.QtWidgets import QDialog, QMenu
 
 from sorter.data import image_store
 from sorter.ui.dialog_image_preview import ImagePreviewDialog
@@ -196,6 +196,28 @@ def test_context_menu_reclassify_and_delete_one(qapp, config, tmp_path) -> None:
         dialog._delete_one(renamed_tile)
         assert not image_store.list_images(images_dir)
         assert not dialog.tiles
+    finally:
+        dialog.close()
+
+
+def test_context_menu_reclassifies_to_an_ampersand_name(qapp, config, tmp_path) -> None:
+    model_id = seed_model(config, {"WIN": 1, "S&B 9MM LUGER": 1})
+    images_dir = tmp_path / "images"
+    paths = _seed_images(images_dir, {"WIN": 1})
+
+    dialog = ModelImagesDialog(None, config, model_id, images_dir=images_dir)
+    dialog.notify = _fail_notify
+    try:
+        _wait_for_thumbnails(qapp, dialog)
+        menu = dialog.context_menu(dialog.tiles[str(paths[0])])
+        (reclassify_to,) = menu.findChildren(QMenu)
+        actions = {action.text(): action for action in reclassify_to.actions()}
+
+        assert "S&&B 9MM LUGER" in actions  # shown as "S&B", not "SB"
+        actions["S&&B 9MM LUGER"].trigger()
+
+        (on_disk,) = image_store.list_images(images_dir)
+        assert image_store.parse_headstamp(on_disk) == "S&B 9MM LUGER"
     finally:
         dialog.close()
 

@@ -83,7 +83,7 @@ jobs:
           # that triggered it, which is what `github.sha` already resolves to.
           ref: ${{ inputs.version || github.sha }}
 
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
 
       # --only-group docs: mkdocs and mike need nothing from the app itself, and
       # --no-install-project keeps hatch-vcs's build hook out of a job that has

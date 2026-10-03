@@ -105,7 +105,7 @@ Along the bottom, from left to right:
 - **File → Open data folder** opens the folder holding the database, your
   models, their training images and the logs. **Quit** closes the app.
 - **View** switches each [panel](#panels) on or off, and holds **Re-dock
-  panels**.
+  panels**. `Ctrl+Shift+M` toggles the [Serial Monitor](#serial-monitor).
 - **Help** holds this guide (`F1`), [Check for updates…](#updates), [Export
   support package…](#support-package), About and License.
 
@@ -141,6 +141,9 @@ Live traffic between the app and the board — every line it sends and every
 line the board answers, in the order it happened. It is the first place to
 look when the machine does something unexpected.
 
+`Ctrl+Shift+M` opens it and closes it again, from anywhere in the window —
+including while you are typing in its own command box.
+
 - The header shows the connection state, plus **Autoscroll**, **Timestamps**
   and **Pause**. Pausing holds new lines back and releases them when you
   un-pause; nothing is lost.
@@ -148,7 +151,9 @@ look when the machine does something unexpected.
   bench.
 - **Clear** empties the view. **Save…** writes what you are currently
   looking at to a text file — filtered lines are not written, so narrow the
-  view first if that's what you want to send.
+  view first if that's what you want to send. To keep the whole session on
+  disk as it happens, tick **Log serial traffic to a file** on
+  [Settings → Serial](#serial).
 - **Filter** hides every line that doesn't contain what you type, and the
   **RX** / **TX** / **Notes** toggles hide a whole direction (received,
   sent, and the monitor's own commentary). Filtering only hides: clear the
@@ -259,8 +264,21 @@ Click any card except Catch-All to open its assignment editor. Tick a
 headstamp to route it to that slot; unticking sends it back to the
 Catch-All. Outside of [package mode](#package-mode) a headstamp can only be
 assigned to one slot at a time — ticking it here moves it off whichever slot
-it was in before, and the row tells you which one that was. A filter box
-narrows a long headstamp list by name.
+it was in before, and the row tells you which one that was.
+
+The list opens in three groups, alphabetical within each: what is already in
+this slot, then headstamps not in any slot yet, then those routed to another
+slot. Working through a big model, the unassigned part shrinks every time you
+reopen a card. In [package mode](#package-mode), where a headstamp can fill
+several slots, "routed to another slot" means any other slot, and the row
+lists which. The order is fixed while the editor is open — ticking a row
+doesn't move it — and is worked out again when you change the filter.
+
+The filter box has the cursor as soon as the editor opens. It matches every
+word you type, in any order and ignoring case, so `win 9` finds
+`WIN 9MM LUGER`. When the filter leaves exactly one row, **Enter** ticks it
+(or unticks it, if it was ticked); otherwise Enter does nothing. Close the
+editor with **Esc** or **Close**.
 
 ### Sorting templates
 
@@ -673,6 +691,17 @@ Connects the app to the sorting machine over the board's UART protocol.
 - **Initialize these settings on startup** pushes the board init settings
   below automatically on every connect, instead of only when you press "Push
   to board".
+- **Log serial traffic to a file** writes everything the
+  [Serial Monitor](#serial-monitor) shows (each line sent, each line
+  received, and the app's own notes) to a file. Each line is timestamped to
+  the millisecond. The file is `logs/serial-<date-time>.log` in the data
+  folder (**File → Open data folder**), with one file per session. Ticking or
+  unticking it takes effect immediately, with no restart and no reconnect.
+  Leave it off for everyday sorting and turn it on when you are chasing a
+  board problem or about to report one. The newest file goes into the
+  [support package](#support-package) automatically. The logs can't fill the
+  disk: a file that reaches 5 MB is continued in a new one, and each new file
+  clears out all but the ten before it.
 
 **Board init settings** covers the machine's tunables — feed and sort speed,
 homing offsets, motor current, debounce timing and the camera LED level —
@@ -815,13 +844,15 @@ settings, and the AI Config setup.
 **Copy to clipboard** gives you the text to paste on the community Discord
 when asking for help. **Save package…** writes a ZIP holding the same report,
 a machine-readable `config.json`, and — if you have trained a model — the most
-recent run's log as `training.log`.
+recent run's log as `training.log`. If you have
+[logged serial traffic](#serial), the newest serial log goes in as
+`serial.log`.
 
 It is safe to share: the API key is reported only as "set" or "not set",
 nothing is read from the sign-in cache, and file paths are shown relative to
-the data folder, so your home directory never appears. The training log gets
-the same treatment: your folder paths are replaced by `<data>`, `<app>` and
-`<home>` before it goes in.
+the data folder, so your home directory never appears. Both logs get the same
+treatment: your folder paths are replaced by `<data>`, `<app>` and
+`<home>` before they go in.
 
 ### Updates
 
@@ -835,3 +866,20 @@ and the button becomes **Restart now** when it is ready. **Choose a
 different version…** lists every published release, including older ones,
 and optionally pre-releases (which the automatic check never offers). You
 can turn the automatic check off in the same dialog.
+
+When GitHub publishes a SHA-256 checksum for a release, the download is
+checked against it. A line under the release summary says whether it will be,
+and once the update is downloaded, whether it was:
+
+- **The download is checked against the SHA-256 checksum…** — before
+  downloading; once it is staged this becomes **Verified**.
+- **This release has no published checksum…** — it still installs,
+  but only the HTTPS connection vouches for it. Once staged this reads **Not
+  verified**. A checksum in a format this version can't check is treated the
+  same way, and names the format.
+- **This release's published checksum can't be read…** — the release
+  can't be installed from here; **Download & install** stays disabled.
+
+A download that doesn't match its checksum is thrown away and nothing is
+staged; the dialog offers **Try again**. If it fails the same way every time,
+see *An update fails its checksum* on the Troubleshooting page.

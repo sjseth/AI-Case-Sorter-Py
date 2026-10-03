@@ -63,6 +63,7 @@ DEFAULTS: dict[str, Any] = {
         "handshake_timeout_s": 4.0,
         "init_on_startup": False,
         "init_settings": dict(DEFAULT_INIT_SETTINGS),
+        "log_traffic": False,  # hardware/serial_log.py
     },
     "image_proc": {
         "strategy": "hough",

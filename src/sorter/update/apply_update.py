@@ -273,6 +273,8 @@ def apply_pending(app_dir: Path | None = None) -> bool:
                     "tag": str(meta.get("tag") or version),
                     "from_version": str(meta.get("from_version") or __version__),
                     "pruned": len(stale),
+                    # Carried from pending.json: True = matched GitHub's SHA-256.
+                    "verified": meta.get("verified") if isinstance(meta.get("verified"), bool) else None,
                 },
                 indent=2,
             ),

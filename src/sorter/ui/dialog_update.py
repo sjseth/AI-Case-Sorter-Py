@@ -30,6 +30,11 @@ be in flight at once and one queue would force the consumer to disentangle them
 by payload shape. The initial check rides the metadata pair (it can't overlap a
 picker load: both go through ``_loading_meta``).
 
+Under the detail line, ``verify_label`` says whether the download is checked
+against the SHA-256 GitHub publishes for the asset (#33): before downloading,
+what will happen; once staged, what did. A release with no usable checksum
+still installs -- over HTTPS alone -- but never silently.
+
 Release notes are Markdown, rendered by ``QTextBrowser.setMarkdown``.
 ``linkify_notes`` supplies the two things GitHub does that CommonMark doesn't —
 ``@user`` and ``#123`` — plus the size caps, and links open through a scheme
@@ -83,7 +88,7 @@ PICKER_LOADING = "Loading releases…"
 PRERELEASE_LABEL = "Show prereleases"
 AUTO_CHECK_LABEL = "Check for updates on startup"
 
-PRIMARY_DOWNLOAD = "Download & install"
+PRIMARY_DOWNLOAD = formatting.escape_mnemonic("Download & install")
 PRIMARY_DOWNLOADING = "Downloading…"
 PRIMARY_RESTART = "Restart now"
 PRIMARY_RETRY = "Try again"
@@ -104,6 +109,21 @@ PENDING_NOTES = (
 NO_NOTES = "No release notes were provided."
 NO_RELEASES = "No published releases were found."
 NO_LAUNCHER_DETAIL = "Close the app and start it again to finish installing the update."
+
+VERIFY_WILL = (
+    "The download is checked against the SHA-256 checksum GitHub publishes for this release before it is installed."
+)
+VERIFY_NONE = "This release has no published checksum, so it will be downloaded over HTTPS without verification."
+VERIFY_UNSUPPORTED = (
+    "This release's checksum uses {algorithm}, which this version can't check, so it will be "
+    "downloaded over HTTPS without verification."
+)
+VERIFY_MALFORMED = "This release's published checksum can't be read, so it can't be verified and won't be installed."
+VERIFIED_DONE = "Verified: the download matches the SHA-256 checksum GitHub published for this release."
+UNVERIFIED_DONE = (
+    "Not verified: this release had no checksum this version can check, so the download relied on "
+    "its HTTPS connection alone."
+)
 
 # Tagged unions for the worker->main-thread queues: the "kind" string picks
 # which payload shape goes with it, so a drain can narrow by literal.
@@ -268,6 +288,13 @@ class UpdateDialog(QDialog):
         self.detail_label.setObjectName("mutedLabel")
         self.detail_label.setWordWrap(True)
         column.addWidget(self.detail_label)
+
+        # Styled per state through the `state` property (theme.py).
+        self.verify_label = QLabel(self)
+        self.verify_label.setObjectName("updateVerification")
+        self.verify_label.setWordWrap(True)
+        self.verify_label.setVisible(False)
+        column.addWidget(self.verify_label)
 
         # Collapsed to one button until the user asks: nothing here fires a
         # request on its own.
@@ -517,11 +544,13 @@ class UpdateDialog(QDialog):
         if newest is not None and newest.tag != info.tag:
             not_newest = f" This is not the newest available release ({newest.tag} is newer)."
         self.detail_label.setText(self._available_detail(info) + not_newest)
+        self._show_digest_plan(info)
         self._set_notes(info.notes or NO_NOTES)
         self._hide_progress()
         self.primary_button.setVisible(True)
         self.primary_button.setText(PRIMARY_DOWNLOAD)
-        self.primary_button.setEnabled(True)
+        # stage_update would refuse it anyway; don't offer a click that must fail.
+        self.primary_button.setEnabled(updater.classify_digest(info.digest)[0] != "malformed")
         self.secondary_button.setText(SECONDARY_LATER)
 
     # ----- rendering ----------------------------------------------------------
@@ -533,6 +562,35 @@ class UpdateDialog(QDialog):
             f"Release {info.tag}{size} is available. It downloads in the "
             "background and installs the next time you start the app."
         )
+
+    def _set_verification(self, text: str, state: str = "") -> None:
+        self.verify_label.setText(text)
+        self.verify_label.setProperty("state", state)
+        style = self.verify_label.style()
+        style.unpolish(self.verify_label)
+        style.polish(self.verify_label)
+        self.verify_label.setVisible(bool(text))
+
+    def _show_digest_plan(self, info: UpdateInfo) -> None:
+        """Before downloading: will this release be verified?"""
+        kind, value = updater.classify_digest(info.digest)
+        if kind == "sha256":
+            self._set_verification(VERIFY_WILL)
+        elif kind == "unsupported":
+            self._set_verification(VERIFY_UNSUPPORTED.format(algorithm=value), "unverified")
+        elif kind == "malformed":
+            self._set_verification(VERIFY_MALFORMED, "refused")
+        else:
+            self._set_verification(VERIFY_NONE, "unverified")
+
+    def _show_digest_result(self, pending: PendingUpdate) -> None:
+        """Once staged: was it verified? Unknown (an older staging) says nothing."""
+        if pending.verified is True:
+            self._set_verification(VERIFIED_DONE, "verified")
+        elif pending.verified is False:
+            self._set_verification(UNVERIFIED_DONE, "unverified")
+        else:
+            self._set_verification("")
 
     def _set_notes(self, text: str) -> None:
         try:
@@ -555,6 +613,7 @@ class UpdateDialog(QDialog):
             self.title_label.setText(TITLE_PENDING)
             self.version_label.setText(f"{current}  →  {self._pending.version}")
             self.detail_label.setText(PENDING_DETAIL)
+            self._show_digest_result(self._pending)
             self._set_notes(PENDING_NOTES)
             self.picker_button.setVisible(False)
             self.combo_row.setVisible(False)
@@ -569,6 +628,7 @@ class UpdateDialog(QDialog):
             self.title_label.setText(TITLE_CHECKING)
             self.version_label.setText(f"Version {current}")
             self.detail_label.setText("")
+            self._set_verification("")
             self._set_notes("")
             self._hide_progress()
             self.primary_button.setVisible(False)
@@ -579,6 +639,7 @@ class UpdateDialog(QDialog):
             self.title_label.setText(TITLE_CHECK_FAILED)
             self.version_label.setText(f"Version {current}")
             self.detail_label.setText(self._check_error)
+            self._set_verification("")
             self._set_notes("")
             self._hide_progress()
             self.primary_button.setVisible(False)
@@ -590,6 +651,7 @@ class UpdateDialog(QDialog):
             self.title_label.setText(TITLE_UP_TO_DATE)
             self.version_label.setText(f"Version {current}")
             self.detail_label.setText(UP_TO_DATE_DETAIL)
+            self._set_verification("")
             self._set_notes("")
             self._hide_progress()
             # No download target, but the picker below still reaches every

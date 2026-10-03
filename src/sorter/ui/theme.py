@@ -20,6 +20,9 @@ GROUPBOX_TOP_MARGIN = 10
 # box, large enough to read as a control.
 INDICATOR_SIZE = 14
 
+# A spinbox's up/down buttons, stacked at the right edge, in px.
+SPIN_BUTTON_WIDTH = 16
+
 # Only these roles are read, so a palette that is missing one (a hand-edited
 # settings row) falls back rather than raising mid-stylesheet.
 _FALLBACK = {
@@ -365,10 +368,27 @@ QSpinBox, QDoubleSpinBox {{
     padding: 3px 4px;
 }}
 QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {c["border_focus"]}; }}
+/* Positioned here so the stylesheet owns the button geometry. Left to the base
+   style, Windows 11 puts the buttons side by side while the edit field is sized
+   for one stacked column, so it covers the up button and eats its clicks (#145). */
+QSpinBox::up-button, QDoubleSpinBox::up-button {{
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: {SPIN_BUTTON_WIDTH}px;
+}}
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: {SPIN_BUTTON_WIDTH}px;
+}}
 
 QLabel#mutedLabel {{ color: {c["text_muted"]}; }}
 QLabel#updateTitle {{ color: {c["text_highlight"]}; font-weight: bold; }}
 QLabel#updateVersion {{ color: {c["accent"]}; }}
+QLabel#updateVerification {{ color: {c["text_muted"]}; }}
+QLabel#updateVerification[state="verified"] {{ color: {c["success"]}; }}
+QLabel#updateVerification[state="unverified"] {{ color: {c["warning"]}; }}
+QLabel#updateVerification[state="refused"] {{ color: {c["error"]}; }}
 
 QTextBrowser {{
     background-color: {c["bg_input"]};

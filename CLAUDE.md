@@ -364,6 +364,9 @@ sanctioned way for worker threads to update the UI.
   the authoritative answer when it is the one running, falling back to a
   `site-packages`/`dist-packages` path heuristic for anything that imports
   `sorter` another way (e.g. a test). `bootstrap.py`'s launch log records it.
+  `session_logs(prefix)` / `prune_session_logs(prefix, keep)` list and trim
+  the per-session `logs/<prefix><stamp>.log` files; the training and serial
+  logs share them.
 
 ### Community backend config (`sorter/community/appenv.py`)
 - **`appenv.py`** — developer overrides for the community backend, read from the
@@ -455,6 +458,18 @@ between them from the Sort page's template dropdown.
   and testing without hardware — including a mid-run link loss, via
   `simulate_disconnect()`, which is the only way to reach that path without
   unplugging a real board.
+- **`serial_log.py`** — `SerialTrafficLog`: the file copy of the serial
+  monitor's traffic, switched live by `config.serial["log_traffic"]` (Settings
+  → Serial; off by default). The window builds one beside the monitor and
+  `attach`es it to the same `serial/rx`/`serial/tx`/`serial/note` bus topics,
+  so the emulator's traffic is logged exactly like a board's. Writes run on
+  the drain (main) thread, buffered, with a flush at most once a second and
+  on switch-off and window close. One `logs/serial-<stamp>.log` per session
+  (re-enabling appends), rolled over past `MAX_SERIAL_LOG_BYTES` (5 MB), with
+  `MAX_SERIAL_LOGS` kept through `paths.prune_session_logs`. Best-effort, like
+  the training log: an I/O error switches it off with one warning and never
+  raises into a bus handler. Also owns `KIND_PREFIX` (`<-`/`->`/`--`), which
+  the monitor imports so the two read alike.
 - **`camera.py`** — `Camera`: `cv2.VideoCapture` with a background **grab thread**
   keeping the latest frame; platform backends (CAP_DSHOW on Windows w/ optional
   pygrabber for friendly names + resolution probing, CAP_V4L2 on Linux,
@@ -865,6 +880,10 @@ Docks: `serial_monitor.py`, `history_view.py`, `help_viewer.py`,
   one place decides what a half-ticked parent means. Rows with nothing behind
   them are **omitted**, not disabled, so propagation never has to reason about
   a child the user can't reach.
+- **Data-driven button, action and tab text goes through
+  `formatting.escape_mnemonic`** — Qt reads `&` there as a mnemonic, so
+  `S&B` would render `SB` (#164). The widget's `text()` then reads back
+  escaped: key on the name, never on the text.
 - **The notify/confirm seam.** Anything that would open a native modal —
   `win.notify`, a page's `confirm` / `ask_text` / `ask_open_path` /
   `ask_save_path` / `ask_import_choice` — is an **instance attribute**, not a
@@ -884,7 +903,13 @@ Docks: `serial_monitor.py`, `history_view.py`, `help_viewer.py`,
   (`ads--CDockWidgetTab`, `ads--CDockAreaTitleBar`, …) — QtAds's own
   stylesheet is disabled so these are what paint them, which also means
   theme.py has to re-declare QtAds's button-icon rules or every close/undock
-  button renders blank. The few places a stylesheet can't reach (rich text in
+  button renders blank. A complex control given a box (border/padding) also
+  needs its sub-controls positioned in the QSS: the spinbox `::up-button` /
+  `::down-button` rules exist because Windows 11's base style lays the buttons
+  side by side, the stylesheet sized the edit field for a stacked column, and
+  the edit field swallowed the up arrow's clicks (#145) —
+  `test_spinbox_arrows_step_the_value_under_every_style` clicks through
+  whatever widget is really under each arrow. The few places a stylesheet can't reach (rich text in
   the feed and indicators, `QPlainTextEdit` line colors, painted history
   cards) bake their colors in and are re-rendered by an explicit
   `apply_palette()` on every switch.
@@ -955,7 +980,8 @@ Docks: `serial_monitor.py`, `history_view.py`, `help_viewer.py`,
   render: API key as set/not set, paths relative to the data root, the auth
   cache never read. Add a field to `collect_data` and the redaction rule goes
   with it. The ZIP also carries the most recent `training-*.log` as
-  `training.log` (#100) — a raw file, so it gets its own rule: `_redact_text`
+  `training.log` (#100), and the most recent `serial-*.log` as `serial.log`
+  (#112 A18). Each is a raw file, so it gets its own rule: `_redact_text`
   swaps the data root, the app root and the home directory for `<data>`,
   `<app>` and `<home>` on the way in, because a log that kept absolute paths
   would be the hole in the promise the report makes.
@@ -1039,11 +1065,12 @@ and must never be committed.
 │       ├── feedback_images/ # below-threshold feedback queue (folder == queue)
 │       ├── reports/         # evaluator HTML reports
 │       └── trainedmodel/    # <model_id>.pth checkpoint
-├── logs/                  # app + launcher + installer + training logs (§7, §8)
+├── logs/                  # app + launcher + installer + training + serial logs (§4, §7, §8)
 │   ├── casesorter.log       # the app's own; DEBUG, rotating 1 MB x 3
 │   ├── launch.log           # this launch; previous kept as launch.prev.log
 │   ├── install-<stamp>.log  # one per install-windows.ps1 run
-│   └── training-<stamp>.log # one per training run; last few kept
+│   ├── training-<stamp>.log # one per training run; last few kept
+│   └── serial-<stamp>.log   # opt-in serial traffic, one per session; last few kept
 └── updates/               # staged app updates (§7)
     ├── pending/             # extracted tree awaiting the next launch
     ├── pending.json         # its metadata — a SIBLING, never inside pending/
@@ -1123,6 +1150,26 @@ flowchart TD
   after the fact; see #58's issue thread for why the two-release migration
   this implies doesn't actually need engineering around it), and caps archive
   size and entry count. Staging is atomic: `pending/` only ever exists complete.
+  - **The download is checked against GitHub's asset `digest`** (#33), hashed
+    per chunk as it streams (`_download` returns the SHA-256), before the tar
+    is opened. `_pick_asset` reads the digest off the *same* asset dict as the
+    URL, so the version picker's releases verify exactly like the startup
+    check's; the source-archive fallback has none. `classify_digest` is the
+    policy, and it is **option B** from the issue — verify when present, TLS
+    alone when not: `sha256` → verify, a mismatch deletes the download and
+    raises, so `pending/` never appears; `absent` (null/empty) and
+    `unsupported` (a well-formed `<algo>:` GitHub might someday send) → stage
+    anyway, logged at WARNING; `malformed` (a sha256 that isn't 64 hex, no
+    algorithm prefix) → refused before downloading, because a digest that was
+    sent but can't be read is not the "none published" case the fallback is
+    for. The outcome travels as `PendingUpdate.verified` (True / False / None
+    for a `pending.json` staged before this existed), is written to
+    `pending.json` with the actual `sha256`, carried into
+    `last_applied.json` by `apply_update`, and shown by the dialog.
+    `install-windows.ps1`'s `Get-DigestCheck` / `Assert-DownloadDigest` apply
+    the same rule to the same asset (`installer/tests/Test-DigestVerification.ps1`
+    mirrors the Python cases), and the installer smoke job asserts a real
+    release installs *verified*.
   - `check_for_update()` (`GET /releases/latest`) is unchanged: latest stable
     only, newer-than-current only, used for the silent startup check and the
     dialog's default. `list_releases()` (`GET /repos/{repo}/releases`) is
@@ -1188,6 +1235,10 @@ flowchart TD
   from a status-bar button in `app.py` that appears only when there's something
   to do. A silent check runs 2.5 s after startup; opt out via the dialog's
   checkbox (`updates.check_on_startup`) or `CASESORTER_UPDATE_DISABLED=1`.
+  `verify_label` (objectName `updateVerification`, coloured by a `state`
+  property in `theme.py`) says before downloading whether the release will be
+  verified and, on the restart prompt, whether it was; a malformed digest
+  leaves **Download & install** disabled.
   The dialog opens showing only what the startup check already found — the
   latest stable release, or "up to date" — with nothing further fetched over
   the network. A "Choose a different version…" button is what triggers

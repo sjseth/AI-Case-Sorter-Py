@@ -175,6 +175,32 @@ def test_menus(window) -> None:
     ]
 
 
+def test_ctrl_shift_m_toggles_the_serial_monitor(window, qapp) -> None:
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeySequence
+    from PySide6.QtTest import QTest
+
+    toggle = window.serial_dock.toggleViewAction()
+    assert toggle.shortcut() == QKeySequence("Ctrl+Shift+M")
+
+    window.show()
+    window.activateWindow()
+    QTest.qWaitForWindowActive(window)
+    assert not window.serial_dock.isClosed()
+
+    # From the monitor's own command line: a QLineEdit must not swallow the shortcut.
+    window.serial_monitor.command_edit.setFocus()
+    QTest.keyClick(
+        window.serial_monitor.command_edit,
+        Qt.Key.Key_M,
+        Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
+    )
+    assert window.serial_dock.isClosed()
+
+    QTest.keyClick(window, Qt.Key.Key_M, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
+    assert not window.serial_dock.isClosed()
+
+
 def test_theme_section_hosts_the_theme_combo(window) -> None:
     # By name, not by row: Theme stopped being the last section when "Import
     # from Windows" was added, and this test is about the section's content.

@@ -691,7 +691,8 @@ candidate work item; per-item agent tasks in a future increment.
 
 - [ ] Image Processing page: label the two previews **Original** /
   **Processed** and show **processing time in ms** (guide p. 12; JL).
-- [ ] Serial monitor keyboard shortcut (guide: Ctrl+K).
+- [x] Serial monitor keyboard shortcut — `Ctrl+Shift+M`, not the guide's
+  Ctrl+K, which is delete-to-end-of-line in Linux text fields.
 - [ ] Emulation-mode capture parity: guide's emulator serves random sample
   images so camera-less demo works end to end; port's emulator covers serial
   only. Consider bundling a handful of sample frames.

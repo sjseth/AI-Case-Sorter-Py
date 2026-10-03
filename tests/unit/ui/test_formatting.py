@@ -114,3 +114,14 @@ def test_parse_ignores_a_trailing_timezone_offset_beyond_the_recognized_prefix()
     # fractional seconds) is dropped rather than raising.
     parsed = formatting.parse("2026-08-03T09:05:00.123456+00:00")
     assert parsed == datetime(2026, 8, 3, 9, 5, 0)
+
+
+# ----- escape_mnemonic ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "escaped"),
+    [("S&B 9MM LUGER", "S&&B 9MM LUGER"), ("9mm FC", "9mm FC"), ("A&&B", "A&&&&B")],
+)
+def test_escape_mnemonic_doubles_every_ampersand(name: str, escaped: str) -> None:
+    assert formatting.escape_mnemonic(name) == escaped

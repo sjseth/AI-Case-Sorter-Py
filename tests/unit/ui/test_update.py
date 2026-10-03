@@ -21,6 +21,7 @@ Two levels, per PLAN's rule:
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import tarfile
@@ -32,6 +33,8 @@ import pytest
 import requests
 
 pytest.importorskip("PySide6")
+
+from PySide6.QtGui import QKeySequence
 
 from sorter import paths
 from sorter.ui import dialog_update
@@ -47,6 +50,11 @@ from sorter.ui.dialog_update import (
     TITLE_PENDING,
     TITLE_REINSTALL,
     TITLE_UP_TO_DATE,
+    UNVERIFIED_DONE,
+    VERIFIED_DONE,
+    VERIFY_MALFORMED,
+    VERIFY_NONE,
+    VERIFY_WILL,
     UpdateDialog,
     linkify_notes,
 )
@@ -156,6 +164,12 @@ def test_available_shows_notes_and_download(make_dialog):
     assert not visible(dialog, dialog.progress)
 
 
+def test_the_download_button_keeps_its_ampersand(make_dialog):
+    dialog = make_dialog(info=info())
+
+    assert QKeySequence.mnemonic(dialog.primary_button.text()).isEmpty()
+
+
 def test_up_to_date_hides_download_but_keeps_the_picker(make_dialog):
     dialog = make_dialog(info=None)
 
@@ -175,6 +189,81 @@ def test_staged_update_opens_on_the_restart_prompt(make_dialog, tmp_path):
     assert dialog.primary_button.text() == PRIMARY_RESTART
     # Nothing else to choose: the download already happened.
     assert visible(dialog, dialog.picker_button) is False
+
+
+# ----- digest verification (#33) -------------------------------------------------
+
+DIGEST = "sha256:" + "ab" * 32
+
+
+def verification(dialog: UpdateDialog) -> tuple[str, str] | None:
+    """(text, state) of the verification line, or None when it is hidden."""
+    if not visible(dialog, dialog.verify_label):
+        return None
+    return dialog.verify_label.text(), str(dialog.verify_label.property("state") or "")
+
+
+def test_a_release_with_a_digest_says_it_will_be_verified(make_dialog):
+    dialog = make_dialog(info=info(digest=DIGEST))
+
+    assert verification(dialog) == (VERIFY_WILL, "")
+    assert dialog.primary_button.isEnabled()
+
+
+@pytest.mark.parametrize("digest", [None, ""])
+def test_a_release_without_a_digest_says_it_wont_be_verified(make_dialog, digest):
+    dialog = make_dialog(info=info(digest=digest))
+
+    # Option B: still installable, but an informed choice rather than a silent one.
+    assert verification(dialog) == (VERIFY_NONE, "unverified")
+    assert dialog.primary_button.isEnabled()
+
+
+def test_an_unsupported_algorithm_is_named(make_dialog):
+    dialog = make_dialog(info=info(digest="sha512:" + "cd" * 64))
+
+    shown = verification(dialog)
+    assert shown is not None
+    assert "sha512" in shown[0]
+    assert shown[1] == "unverified"
+    assert dialog.primary_button.isEnabled()
+
+
+def test_a_malformed_digest_is_refused_up_front(make_dialog):
+    dialog = make_dialog(info=info(digest="sha256:not-hex"))
+
+    assert verification(dialog) == (VERIFY_MALFORMED, "refused")
+    assert not dialog.primary_button.isEnabled()
+
+
+@pytest.mark.parametrize(
+    ("verified", "expected"),
+    [(True, (VERIFIED_DONE, "verified")), (False, (UNVERIFIED_DONE, "unverified")), (None, None)],
+)
+def test_the_restart_prompt_says_whether_it_was_verified(make_dialog, tmp_path, verified, expected):
+    pending = PendingUpdate(version="2.0.0", tag="2.0.0", path=tmp_path / "pending", verified=verified)
+    dialog = make_dialog(info=None, pending=pending)
+
+    assert dialog.title_label.text() == TITLE_PENDING
+    # None is a staging from before this was recorded: claim nothing either way.
+    assert verification(dialog) == expected
+
+
+def test_up_to_date_shows_no_verification_line(make_dialog):
+    assert verification(make_dialog(info=None)) is None
+
+
+def test_picking_a_release_shows_its_own_verification(qapp, make_dialog):
+    releases = [info("2.0.0", digest=DIGEST), info("1.0.0")]
+    calls: list[bool] = []
+    dialog = _picker_dialog(make_dialog, {False: releases, True: releases}, calls, info=releases[0])
+    assert verification(dialog) == (VERIFY_WILL, "")
+
+    dialog.picker_button.click()
+    assert pump_until(qapp, lambda: dialog.version_combo.count() == 2)
+    dialog.version_combo.setCurrentIndex(1)
+
+    assert verification(dialog) == (VERIFY_NONE, "unverified")
 
 
 # ----- explicit check ----------------------------------------------------------
@@ -451,6 +540,34 @@ def test_download_stages_a_real_archive(qapp, make_dialog, app_stub, tmp_path, m
     # Real download bytes reached the progress widgets through the queue/poller.
     assert dialog.progress.value() == 100
     assert updater.pending_update() is not None
+    # No digest on this release: staged, and the prompt says it wasn't verified.
+    assert verification(dialog) == (UNVERIFIED_DONE, "unverified")
+
+
+def test_download_verified_against_a_real_digest(qapp, make_dialog, app_stub, tmp_path, monkeypatch):
+    payload = _build_sdist(tmp_path / "sdist.tar.gz", version="9.9.9")
+    monkeypatch.setattr(requests, "get", lambda url, **kwargs: _FakeResponse(url, payload))
+    digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+
+    dialog = make_dialog(info=info("9.9.9", size=len(payload), digest=digest), app=app_stub)
+    dialog.primary_button.click()
+
+    assert pump_until(qapp, lambda: dialog.title_label.text() == TITLE_PENDING)
+    assert verification(dialog) == (VERIFIED_DONE, "verified")
+
+
+def test_a_checksum_mismatch_stages_nothing(qapp, make_dialog, app_stub, tmp_path, monkeypatch):
+    payload = _build_sdist(tmp_path / "sdist.tar.gz", version="9.9.9")
+    monkeypatch.setattr(requests, "get", lambda url, **kwargs: _FakeResponse(url, payload))
+
+    dialog = make_dialog(info=info("9.9.9", size=len(payload), digest=DIGEST), app=app_stub)
+    dialog.primary_button.click()
+
+    assert pump_until(qapp, lambda: dialog.primary_button.text() == PRIMARY_RETRY)
+    assert "does not match the SHA-256 checksum" in dialog.progress_label.text()
+    assert updater.pending_update() is None
+    assert not updater.pending_dir().exists()
+    assert app_stub.pending is None
 
 
 # ----- restart ------------------------------------------------------------------
