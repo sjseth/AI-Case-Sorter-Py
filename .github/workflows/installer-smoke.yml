@@ -76,6 +76,12 @@ jobs:
         shell: powershell
         run: .\installer\tests\Test-ArchiveEntryValidation.ps1
 
+      # Likewise synthetic: the real install below only ever sees a matching
+      # digest, never a mismatch or a malformed one.
+      - name: Digest verification
+        shell: powershell
+        run: .\installer\tests\Test-DigestVerification.ps1
+
       # -Repo $env:GITHUB_REPOSITORY, not the script's own hardcoded default:
       # makes this self-adapting to wherever it runs -- the fork's own real
       # releases today, whatever repo eventually hosts this upstream.
@@ -237,6 +243,15 @@ jobs:
             exit 1
           }
           Write-Host "Provisioning path for '$env:MODE' confirmed."
+
+          # Every real release asset carries a GitHub digest, so the TLS-only
+          # fallback here would mean the installer stopped reading it (#33).
+          if ($text -notmatch 'SHA-256 verified against the published checksum') {
+            Write-Host "----- installer output -----"
+            Write-Host $text
+            Write-Host "The download was not verified against the release's published SHA-256."
+            exit 1
+          }
 
           # 6>&1 above keeps Write-Host out of the console host, so the
           # transcript is thin -- but it must still exist and name this run.

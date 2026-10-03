@@ -43,12 +43,15 @@ from PySide6.QtWidgets import (
 from ..data.models import ImageProcessingConfig, Model
 from ..data.repository import ModelRepo
 from ..hardware.image_proc import (
+    CASE_MIN_DISC_BRIGHTNESS,
     HoughParams,
     apply_primer_mask,
     crop_headstamp,
+    disc_brightness,
     hough_detect,
     overlay_detection,
 )
+from .message_log import ERROR
 
 PRIMER_MODES: tuple[tuple[str, str], ...] = (
     ("None", "none"),
@@ -137,13 +140,25 @@ class ImageProcSection(QWidget):
         model = self._active_model()
         if model is not None:
             cfg = self._win.config.image_proc
-            before = (cfg.get("primer_mode"), cfg.get("primer_radius"), dict(cfg.get("hough") or {}))
+            before = (
+                cfg.get("primer_mode"),
+                cfg.get("primer_radius"),
+                cfg.get("case_min_brightness"),
+                dict(cfg.get("hough") or {}),
+            )
             if (model.use_primer_mask, model.hide_primer, model.primer_mask_size) != _UNSET_PRIMER:
                 cfg["primer_mode"] = primer_mode_of(model)
                 cfg["primer_radius"] = int(model.primer_mask_size)
             if model.image_processing.hough != _UNSET_HOUGH:
                 cfg["hough"] = {**(cfg.get("hough") or {}), **model.image_processing.hough}
-            after = (cfg.get("primer_mode"), cfg.get("primer_radius"), dict(cfg.get("hough") or {}))
+            if model.image_processing.case_min_brightness != ImageProcessingConfig().case_min_brightness:
+                cfg["case_min_brightness"] = int(model.image_processing.case_min_brightness)
+            after = (
+                cfg.get("primer_mode"),
+                cfg.get("primer_radius"),
+                cfg.get("case_min_brightness"),
+                dict(cfg.get("hough") or {}),
+            )
             if after != before:
                 self._win.config.save()
         self.refresh_from_config()
@@ -160,6 +175,7 @@ class ImageProcSection(QWidget):
             self.param2_spin.setValue(int(hough.get("param2", 60)))
             self.min_radius_spin.setValue(int(hough.get("min_radius", 150)))
             self.max_radius_spin.setValue(int(hough.get("max_radius", 250)))
+            self.case_floor_spin.setValue(int(cfg.get("case_min_brightness", CASE_MIN_DISC_BRIGHTNESS)))
             index = self.primer_mode_combo.findData(cfg.get("primer_mode", "hide"))
             self.primer_mode_combo.setCurrentIndex(index if index >= 0 else 2)
             self.primer_radius_spin.setValue(int(cfg.get("primer_radius", 135)))
@@ -176,6 +192,7 @@ class ImageProcSection(QWidget):
         _write_primer_to(model, str(cfg.get("primer_mode", "hide")), int(cfg.get("primer_radius", 135)))
         model.image_processing.strategy = str(cfg.get("strategy", "hough"))
         model.image_processing.hough = dict(cfg.get("hough") or {})
+        model.image_processing.case_min_brightness = int(cfg.get("case_min_brightness", CASE_MIN_DISC_BRIGHTNESS))
         with self._win.config.db.transaction():
             ModelRepo(self._win.config.db).update(model)
 
@@ -215,6 +232,18 @@ class ImageProcSection(QWidget):
         self.max_radius_spin.setRange(1, 4000)
         self.max_radius_spin.setValue(int(h.get("max_radius", 250)))
 
+        self.case_floor_spin = QSpinBox(box)
+        self.case_floor_spin.setRange(0, 255)
+        self.case_floor_spin.setValue(
+            int(self._win.config.image_proc.get("case_min_brightness", CASE_MIN_DISC_BRIGHTNESS))
+        )
+        self.case_floor_spin.setToolTip(
+            "End-of-run empty-nest check: a detected disc darker than this does not\n"
+            "count as a case. Capture the EMPTY nest, read its brightness in the\n"
+            "status line, set this above it — then capture a case and confirm it\n"
+            "reads clear of the floor."
+        )
+
         fields = (
             ("Accumulator scale (dp)", self.dp_spin),
             ("Min center separation (px)", self.min_dist_spin),
@@ -222,6 +251,7 @@ class ImageProcSection(QWidget):
             ("Detection threshold (param2)", self.param2_spin),
             ("Min case radius (px)", self.min_radius_spin),
             ("Max case radius (px)", self.max_radius_spin),
+            ("Case brightness floor", self.case_floor_spin),
         )
         for idx, (label, widget) in enumerate(fields):
             grid.addWidget(QLabel(label, box), idx // 3, (idx % 3) * 2)
@@ -242,6 +272,7 @@ class ImageProcSection(QWidget):
             "min_radius": int(self.min_radius_spin.value()),
             "max_radius": int(self.max_radius_spin.value()),
         }
+        cfg["case_min_brightness"] = int(self.case_floor_spin.value())
         self._win.config.save()
         self._store_on_active_model()
         self._reprocess()
@@ -331,7 +362,7 @@ class ImageProcSection(QWidget):
             # Give the LED + camera a moment to settle, then show the new brightness.
             QTimer.singleShot(LED_RECAPTURE_DELAY_MS, self, self.capture)
         except Exception as exc:
-            self._win.set_status(f"LED send failed: {exc}")
+            self._win.set_status(f"LED send failed: {exc}", level=ERROR)
 
     # ----- actions + preview -----------------------------------------------
 
@@ -379,7 +410,7 @@ class ImageProcSection(QWidget):
         self._reprocess()
 
     def _on_capture_error(self, exc: Exception) -> None:
-        self._win.set_status(f"Capture failed: {exc}")
+        self._win.set_status(f"Capture failed: {exc}", level=ERROR)
 
     def _reprocess(self) -> None:
         """Re-run the pipeline against the last captured frame — no re-capture."""
@@ -393,7 +424,14 @@ class ImageProcSection(QWidget):
             self._win.set_status("No circle detected within radius bounds.")
         else:
             cx, cy, r = detection
-            self._win.set_status(f"Detected circle: r={r:.0f} px at ({cx:.0f}, {cy:.0f}).")
+            # The disc brightness is what the end-of-brass flush compares to
+            # the case floor — showing it here is how the floor gets tuned.
+            brightness = disc_brightness(self._raw_frame, detection)
+            floor = int(cfg.get("case_min_brightness", CASE_MIN_DISC_BRIGHTNESS))
+            self._win.set_status(
+                f"Detected circle: r={r:.0f} px at ({cx:.0f}, {cy:.0f}). "
+                f"Disc brightness {brightness:.0f} (case floor {floor})."
+            )
 
         cropped = crop_headstamp(self._raw_frame, cfg)
         cropped = apply_primer_mask(cropped, self.primer_mode_combo.currentData(), int(self.primer_radius_spin.value()))

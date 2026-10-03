@@ -16,7 +16,7 @@ from .. import paths
 from ..community.feedback import FeedbackService
 from ..data.config import Config
 from ..data.repository import ModelRepo
-from ..hardware import image_proc
+from ..hardware import image_proc, serial_broker
 from ..ml import classifier
 from ..training.dataset import save_training_image
 from .events import EventBus
@@ -26,6 +26,18 @@ log = logging.getLogger(__name__)
 SlotCallback = Callable[[int], None]
 
 DISCONNECT_ERROR = "Serial disconnected"
+
+# End-of-brass flush. The wheel holds a pipeline (feed at position 1, camera
+# at 3, drop at 5), so when the hopper runs dry up to three cases still sit
+# past the feed sensor — cases the run has fed but not yet dropped. The flush
+# walks each of them through the camera with forced feeds and sorts every one
+# to its true slot, so a run ends with the wheel empty and nothing stranded.
+#
+# If this many CONSECUTIVE flush cycles each deliver a real case, the hopper
+# is provably still feeding — the end-of-brass call was a false alarm (a
+# delivery gap while a case fell from the collator), and the run resumes at
+# full speed instead of walking the whole hopper at flush pace.
+FLUSH_RESUME_CASES = 6
 
 
 class RunController:
@@ -417,7 +429,7 @@ class RunController:
             log.exception("test_once failed")
             return _fail(str(exc) or exc.__class__.__name__)
 
-    def run_once(self) -> dict[str, Any]:
+    def run_once(self, *, flush_prev: int | None = None) -> dict[str, Any]:
         """One iteration of the continuous run: capture, classify, sort.
 
         IMPORTANT: This does NOT call feed_one(). The continuous loop primes
@@ -427,10 +439,22 @@ class RunController:
         feed_one() here in addition would queue an extra case per cycle (the
         "double feed" symptom).
 
+        With ``flush_prev`` set this is one END-OF-BRASS FLUSH cycle instead:
+        the camera is first checked for an actual case (an empty, in-focus
+        pocket still crops to a plausible circle — see image_proc.case_present),
+        and the sort is issued as a forced flush cycle that cannot wait on the
+        dry feed sensor. ``flush_prev`` is the previous cycle's slot — where
+        the case now at the drop port belongs.
+
         Bus topics emitted during the cycle:
           run/status     (str) human-readable stage label
           run/cropped    (np.ndarray) cropped frame ready to show
           run/classified ({"label","confidence","slot"}) result before the sort step
+
+        Extra result keys beyond the happy path: ``feeder_empty`` (the bare
+        sort saw a dry feed gate; ``prev_slot``/``above_floor`` accompany it
+        so _loop can hand off to the flush), and ``wheel_empty`` (a flush
+        cycle found no case at the camera — the wheel has walked dry).
         """
         result: dict[str, Any] = {
             "ok": False,
@@ -442,10 +466,18 @@ class RunController:
             "error": None,
         }
         try:
+            # The slot the previous sort command carried — the arm target the
+            # firmware's queue holds for the case now at the drop port. Needed
+            # only when this cycle turns out to be the end of the brass.
+            prev_slot = self._last_classified_slot
             self.bus.post("run/status", "Capturing & cropping…")
             frame = self.camera.capture_frame()
             if frame is None:
                 result["error"] = "Camera capture failed"
+                return result
+
+            if flush_prev is not None and not image_proc.case_present(frame, self.config.image_proc):
+                result["wheel_empty"] = True
                 return result
 
             cropped = image_proc.crop_headstamp(frame, self.config.image_proc)
@@ -486,13 +518,35 @@ class RunController:
             )
             self._post_history(result)
 
-            self.bus.post("run/status", f"Sorting to slot {slot}…")
-            # sort_and_move drops the current case at `slot` AND feeds the
-            # next case into the imaging area before responding 'done'. The
-            # next iteration's capture will see that next case.
-            if not self.broker.sort_and_move(slot):
-                result["error"] = self._board_error("Sort timeout")
-                return result
+            if flush_prev is not None:
+                self.bus.post("run/status", f"Flushing to slot {slot}…")
+                # Forced flush cycle: the arm makes the same move the bare
+                # sort would have, but the feed cannot wait on the (dry)
+                # proximity gate. A failure here (jam, link loss) must stop
+                # the flush before anything drops blind.
+                if not self.broker.flush_sort_and_move(flush_prev, slot):
+                    result["error"] = self._board_error("Flush failed")
+                    return result
+            else:
+                self.bus.post("run/status", f"Sorting to slot {slot}…")
+                # sort_and_move drops the current case at `slot` AND feeds the
+                # next case into the imaging area before responding 'done'. The
+                # next iteration's capture will see that next case.
+                outcome, detail = self.broker.sort_and_move_watched(slot)
+                if outcome == serial_broker.SORT_EMPTY:
+                    # The feed half of the sort is waiting on a dry proximity
+                    # gate — the hopper looks empty, with this case's sort
+                    # still pending. _loop owns what happens next.
+                    result["feeder_empty"] = True
+                    result["prev_slot"] = prev_slot
+                    result["above_floor"] = above_floor
+                    return result
+                if outcome == serial_broker.SORT_ERROR:
+                    result["error"] = f"Board error: {detail}" if detail else "Board error"
+                    return result
+                if outcome != serial_broker.SORT_DONE:
+                    result["error"] = self._board_error("Sort timeout")
+                    return result
             # Tally the batch only once the case has physically dropped.
             self._commit_package_count(slot, label, above_floor)
 
@@ -587,6 +641,91 @@ class RunController:
             self.bus.post("run/error", result["error"])
         return result
 
+    def _handle_feeder_empty(self, result: dict[str, Any]) -> str:
+        """End-of-brass: confirm the hopper is dry, then flush the wheel.
+
+        Entered when a bare sort's feed half answered "waiting for brass"
+        repeatedly. First cancel the pending feed — a case may have landed on
+        the sensor just before the stop, in which case the sort completed for
+        real ("resumed") and the run simply continues. On a clean cancel the
+        classified-but-unsorted case is re-issued as a forced flush cycle, and
+        the loop keeps photographing, classifying, and flushing whatever each
+        forced feed walks into the camera — including the tail cases the run
+        never saw — until the camera comes up empty. One final forced feed
+        then executes the last queued drop, and the wheel ends empty with
+        every case in its true slot.
+
+        Returns "resume" when the run should continue at full speed (the
+        end-of-brass call was a false alarm), or "stop" when the run is over
+        (out of brass, a jam, or the operator pressed Stop mid-flush). Jams
+        during the flush never home-and-refeed blind — remaining stragglers
+        stay in the wheel for the operator.
+        """
+        label = result.get("label", "")
+        slot = int(result["slot"])
+        prev_slot = int(result["prev_slot"])
+        above_floor = bool(result.get("above_floor"))
+
+        self.bus.post("run/status", "Feeder empty — cancelling the pending feed…")
+        outcome = self.broker.cancel_pending_feed()
+        if outcome == "resumed":
+            # Brass landed just before the stop; the waiting feed fired and
+            # the sort completed for real. Count it and keep sorting.
+            self._commit_package_count(slot, label, above_floor)
+            self.bus.post("run/status", "Brass arrived — resuming.")
+            return "resume"
+        if outcome != "clean":
+            self.bus.post("run/error", self._board_error("Board error while cancelling the pending feed"))
+            return "stop"
+
+        # The wait died dry. Re-issue the pending sort as the first flush
+        # cycle: the arm makes the move the bare sort would have made, so the
+        # case at the drop port falls into its true slot.
+        self.bus.post("run/status", f"Out of brass — flushing the wheel (slot {slot})…")
+        if not self.broker.flush_sort_and_move(prev_slot, slot):
+            self.bus.post("run/error", self._board_error("Flush failed"))
+            return "stop"
+        self._commit_package_count(slot, label, above_floor)
+        flushed = 1
+        prev_slot = slot
+
+        present_streak = 0
+        while True:
+            if self._stop_event.is_set():
+                self.bus.post("run/status", "Stopped mid-flush — cases may remain in the wheel.")
+                return "stop"
+            flush_result = self.run_once(flush_prev=prev_slot)
+            self.bus.post("run/result", flush_result)
+            if flush_result.get("wheel_empty"):
+                # Every straggler has been photographed and flushed. One last
+                # forced feed executes the final queued drop; the wheel is
+                # now empty. Best-effort — the cases are already counted.
+                self.broker.feed_one()
+                self.bus.post("run/out_of_brass", {"flushed": flushed})
+                self.bus.post(
+                    "run/status",
+                    f"Out of brass — {flushed} in-flight case(s) flushed to their slots.",
+                )
+                return "stop"
+            if flush_result.get("error"):
+                self.bus.post("run/error", flush_result["error"])
+                return "stop"
+            flushed += 1
+            prev_slot = int(flush_result["slot"])
+            present_streak += 1
+            if present_streak >= FLUSH_RESUME_CASES:
+                # Case after case keeps arriving: the hopper is still feeding
+                # and the dry spell was a delivery gap. Resume at full speed —
+                # re-entry is safe because every flush cycle leaves the
+                # firmware's queue holding this case's slot, exactly the arm
+                # target the drop-port case needs on the next bare sort.
+                # "resume_after_flush" rather than "resume": this verdict came
+                # from case_present, so _loop holds it unvalidated until a
+                # normal sort actually completes — a mis-set brightness floor
+                # must not ping-pong the run between flush and resume forever.
+                self.bus.post("run/status", "Brass still flowing — resuming the run.")
+                return "resume_after_flush"
+
     def _loop(self) -> None:
         try:
             # Prime: rotate the wheel once with the last-known classification
@@ -600,12 +739,35 @@ class RunController:
                 self.bus.post("run/error", self._board_error("Initial feed timeout"))
                 return
 
+            # Set after a flush-streak resume, cleared by the next successful
+            # normal sort. A second dry feeder while it is still set means the
+            # camera keeps reporting cases the feeder cannot be supplying — a
+            # mis-tuned empty-nest brightness floor — and re-entering the
+            # flush would ping-pong the machine forever.
+            resume_unvalidated = False
             while not self._stop_event.is_set():
                 result = self.run_once()
                 self.bus.post("run/result", result)
+                if result.get("feeder_empty"):
+                    if resume_unvalidated:
+                        self.bus.post(
+                            "run/error",
+                            "Feeder is empty but the camera still reports a case, so the "
+                            "end-of-brass flush cannot finish. Check the case brightness "
+                            "floor in Settings → Image Processing; cases may remain in "
+                            "the wheel.",
+                        )
+                        break
+                    action = self._handle_feeder_empty(result)
+                    if action == "stop":
+                        break
+                    resume_unvalidated = action == "resume_after_flush"
+                    continue
                 if result.get("error"):
                     self.bus.post("run/error", result["error"])
                     break
+                if result.get("ok"):
+                    resume_unvalidated = False
                 if result.get("halt"):
                     # Every slot for this headstamp is full — stop and notify.
                     self.bus.post(

@@ -24,6 +24,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtGui import QKeySequence
+from PySide6.QtWidgets import QPushButton
+
 from sorter import paths
 from sorter.data.config import Config
 from sorter.data.db import Database
@@ -118,6 +121,13 @@ def test_the_role_rows_are_exactly_the_editable_palette_keys(window) -> None:
     # Nothing in the palette is unreachable: what isn't editable is derived.
     assert listed | set(DERIVED_ROLES) == set(BUILTIN_THEMES["Dark"])
     assert "success" not in listed and "error" not in listed
+
+
+def test_no_button_label_swallows_an_ampersand(window) -> None:
+    texts = [button.text() for button in _editor(window).findChildren(QPushButton)]
+
+    assert "Save && apply" in texts
+    assert all(QKeySequence.mnemonic(text).isEmpty() for text in texts)
 
 
 def test_the_editor_starts_from_the_theme_the_window_shows(window) -> None:

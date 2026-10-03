@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .formatting import escape_mnemonic
 from .palettes import (
     BUILTIN_THEMES,
     CUSTOM_THEME_VERSION,
@@ -477,7 +478,7 @@ class ThemeEditorDialog(QDialog):
         create = QPushButton("Create new…", self)
         create.clicked.connect(self.create_new)
         row.addWidget(create)
-        save = QPushButton("Save & apply", self)
+        save = QPushButton(escape_mnemonic("Save & apply"), self)
         save.setObjectName("action")
         save.clicked.connect(self.save)
         row.addWidget(save)

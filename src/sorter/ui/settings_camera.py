@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..hardware.camera import Camera, camera_names, list_cameras_with_metadata
+from .message_log import ERROR
 
 PREVIEW_INITIAL_TEXT = "No frame"
 NO_FEED_TEXT = "No camera feed — press Detect / refresh or check the device."
@@ -232,7 +233,7 @@ class CameraSection(QWidget):
             self._win.set_status(f"Using {cam.get('name', '?')} @ {new_camera.width}x{new_camera.height}.")
         else:
             self._win._set_camera_indicator("Camera: failed to start", connected=False)
-            self._win.set_status("Camera failed to start. Check the device index.")
+            self._win.set_status("Camera failed to start. Check the device index.", level=ERROR)
         self._refresh_current_label()
 
     def _refresh_current_label(self) -> None:

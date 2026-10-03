@@ -12,13 +12,21 @@ Three routing modes:
 * **parent** — parent groups (plus ungrouped headstamps) carry the slot,
   because that is what routing reads once parent classifications are on.
 * **package** — many-to-many: the same headstamp may fill several bins.
+
+Finding a row in a long list: the filter matches every whitespace-separated
+word (``win 9`` finds ``WIN 9MM LUGER``), and Enter in it ticks or unticks the
+row when exactly one is left. Rows are ordered this slot's first, then the
+unassigned, then those in another slot — ranked when the dialog opens or the
+filter changes, never on a tick, so a row doesn't jump out from under the
+pointer.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -32,6 +40,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .formatting import escape_mnemonic
+
 CATCH_ALL_HINT = "Anything we can't classify or that isn't mapped to a slot ends up here."
 PACKAGE_HINT = (
     "Tick a headstamp to batch it into this slot. The same headstamp can fill "
@@ -39,6 +49,9 @@ PACKAGE_HINT = (
 )
 PARENT_HINT = "Tick a parent group (or an ungrouped headstamp) to route it here."
 STANDARD_HINT = "Tick a headstamp to route it here. A headstamp belongs to one slot at a time."
+
+# Row groups, top to bottom.
+RANK_THIS_SLOT, RANK_UNASSIGNED, RANK_ELSEWHERE = 0, 1, 2
 
 
 class SlotAssignDialog(QDialog):
@@ -52,6 +65,8 @@ class SlotAssignDialog(QDialog):
         self.slot = int(slot)
         # label -> checkbox, rebuilt on every render; parent rows share it.
         self.checkboxes: dict[str, QCheckBox] = {}
+        # (kind, name) -> RANK_*, frozen by _resort() so a tick doesn't reorder.
+        self._rank: dict[tuple[str, str], int] = {}
 
         self.setWindowTitle("Catch-All" if self.slot == 0 else f"Slot #{self.slot}")
         self.setMinimumWidth(380)
@@ -65,7 +80,8 @@ class SlotAssignDialog(QDialog):
         self.filter_edit = QLineEdit(self)
         self.filter_edit.setPlaceholderText("Filter headstamps…")
         self.filter_edit.setClearButtonEnabled(True)
-        self.filter_edit.textChanged.connect(lambda _text: self.refresh())
+        self.filter_edit.textChanged.connect(lambda _text: self.refresh(resort=True))
+        self.filter_edit.returnPressed.connect(self._toggle_single_match)
         column.addWidget(self.filter_edit)
 
         scroll = QScrollArea(self)
@@ -82,14 +98,21 @@ class SlotAssignDialog(QDialog):
         buttons.rejected.connect(self.reject)
         column.addWidget(buttons)
 
-        self.refresh()
+        self.refresh(resort=True)
+        self.filter_edit.setFocus()
 
     # ----- rendering ----------------------------------------------------------
 
-    def refresh(self) -> None:
-        """Rebuild every row from a fresh read of Config."""
+    def refresh(self, *, resort: bool = False) -> None:
+        """Rebuild every row from a fresh read of Config.
+
+        ``resort`` re-ranks the rows by assignment; a tick leaves it off so the
+        order stays where the user is looking.
+        """
+        if resort:
+            self._resort()
         self._clear_rows()
-        needle = self.filter_edit.text().strip().casefold()
+        needle = self.filter_edit.text()
         headstamps = sorted(self.config.headstamps_with_parents(), key=lambda h: h["name"].casefold())
 
         if self.slot == 0:
@@ -98,12 +121,14 @@ class SlotAssignDialog(QDialog):
                 self._add_row(entry["name"], checked=False, enabled=False)
         elif self.config.run_package_mode:
             self.hint_label.setText(PACKAGE_HINT)
-            assigned = set(self.config.headstamps_in_package_slot(self.slot))
-            for entry in self._matching(headstamps, needle):
+            slot_map = self.config.package_slot_map()
+            for entry in self._ordered("headstamp", self._matching(headstamps, needle)):
                 name = entry["name"]
+                others = [s for s in sorted(slot_map) if s not in (0, self.slot) and name in slot_map[s]]
                 self._add_row(
                     name,
-                    checked=name in assigned,
+                    checked=name in slot_map.get(self.slot, []),
+                    hint="in " + ", ".join(f"slot #{s}" for s in others) if others else "",
                     on_toggle=lambda checked, n=name: self._toggle_package(n, checked),
                 )
         else:
@@ -118,10 +143,9 @@ class SlotAssignDialog(QDialog):
         self._rows.addStretch(1)
 
     def _render_parent_mode(self, parents: list[dict], headstamps: list[dict], needle: str) -> None:
-        for parent in sorted(parents, key=lambda p: p["name"].casefold()):
+        parents = sorted(parents, key=lambda p: p["name"].casefold())
+        for parent in self._ordered("parent", self._matching(parents, needle)):
             name = parent["name"]
-            if needle and needle not in name.casefold():
-                continue
             pid = int(parent["id"])
             self._add_assignable_row(
                 name,
@@ -132,7 +156,7 @@ class SlotAssignDialog(QDialog):
         self._render_standard([h for h in headstamps if h["parent_id"] is None], needle)
 
     def _render_standard(self, headstamps: list[dict], needle: str) -> None:
-        for entry in self._matching(headstamps, needle):
+        for entry in self._ordered("headstamp", self._matching(headstamps, needle)):
             name = entry["name"]
             self._add_assignable_row(
                 name,
@@ -142,7 +166,37 @@ class SlotAssignDialog(QDialog):
 
     @staticmethod
     def _matching(entries: list[dict], needle: str) -> list[dict]:
-        return [e for e in entries if not needle or needle in e["name"].casefold()]
+        """Entries whose name contains every whitespace-separated word of ``needle``."""
+        words = needle.casefold().split()
+        return [e for e in entries if all(w in e["name"].casefold() for w in words)]
+
+    def _resort(self) -> None:
+        """Rank every row by where it is assigned right now."""
+
+        def rank(slots: set[int]) -> int:
+            if self.slot in slots:
+                return RANK_THIS_SLOT
+            return RANK_ELSEWHERE if slots - {0} else RANK_UNASSIGNED
+
+        ranks: dict[tuple[str, str], int] = {}
+        if self.config.run_package_mode:
+            # Many-to-many: "assigned" means in any package slot at all.
+            held: dict[str, set[int]] = {}
+            for slot, names in self.config.package_slot_map().items():
+                for name in names:
+                    held.setdefault(name, set()).add(slot)
+            for entry in self.config.headstamps_with_parents():
+                ranks["headstamp", entry["name"]] = rank(held.get(entry["name"], set()))
+        else:
+            for entry in self.config.headstamps_with_parents():
+                ranks["headstamp", entry["name"]] = rank({int(entry["slot"])})
+            for parent in self.config.parents_with_slots():
+                ranks["parent", parent["name"]] = rank({int(parent["slot"])})
+        self._rank = ranks
+
+    def _ordered(self, kind: str, entries: list[dict]) -> list[dict]:
+        """``entries`` (already alphabetical) grouped by their frozen rank."""
+        return sorted(entries, key=lambda e: self._rank.get((kind, e["name"]), RANK_UNASSIGNED))
 
     def _add_assignable_row(self, name: str, assigned: int, on_toggle: Any) -> None:
         """One single-slot row: ticked here, or ticked elsewhere and labelled so."""
@@ -166,7 +220,7 @@ class SlotAssignDialog(QDialog):
         row = QWidget()
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
-        box = QCheckBox(label, row)
+        box = QCheckBox(escape_mnemonic(label), row)
         box.setChecked(checked)
         box.setEnabled(enabled and on_toggle is not None)
         if on_toggle is not None:
@@ -191,6 +245,22 @@ class SlotAssignDialog(QDialog):
                 widget.setParent(None)
                 widget.deleteLater()
         self.checkboxes.clear()
+
+    # ----- keyboard -----------------------------------------------------------
+
+    def _toggle_single_match(self) -> None:
+        """Enter in the filter: tick or untick the row when it is the only one left."""
+        boxes = [box for box in self.checkboxes.values() if box.isEnabled()]
+        if len(boxes) == 1:
+            boxes[0].click()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        # Enter in the filter is _toggle_single_match's alone; it must never
+        # reach a default button and close the dialog mid-edit.
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self.focusWidget() is self.filter_edit:
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     # ----- mutations ----------------------------------------------------------
 

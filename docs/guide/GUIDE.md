@@ -9,8 +9,8 @@ day, in the order you meet them.
   menus that frame everything else.
 - [Panels](#panels) — the movable side and bottom panels:
   [Serial Monitor](#serial-monitor), [Classification
-  History](#classification-history), the guide you are reading, and
-  [Themes](#themes-panel).
+  History](#classification-history), the guide you are reading,
+  [Themes](#themes-panel) and [Messages](#messages).
 - [Sort dashboard](#sort-dashboard) — the main working screen: the current
   case, the slot cards, sorting templates and the run controls.
 - [Train](#train) — capture cases, label them, and train a model from them.
@@ -78,7 +78,10 @@ carries a button to the Models page to change it. Never a dead end.
 Along the bottom, from left to right:
 
 - **Messages** — what the app just did ("Auto-connected to COM3.", "Run
-  stopped."). This is where a refused action explains itself.
+  stopped."). This is where a refused action explains itself. It shows one
+  line, cut off at the window's edge, until the next replaces it — **click
+  it** to open the [Messages](#messages) panel, which keeps the recent ones
+  in full.
 - **● Camera** and **● Serial** — connection indicators. Green means
   connected, and the serial one names the port, speed and the firmware
   version it handshook with.
@@ -102,13 +105,13 @@ Along the bottom, from left to right:
 - **File → Open data folder** opens the folder holding the database, your
   models, their training images and the logs. **Quit** closes the app.
 - **View** switches each [panel](#panels) on or off, and holds **Re-dock
-  panels**.
+  panels**. `Ctrl+Shift+M` toggles the [Serial Monitor](#serial-monitor).
 - **Help** holds this guide (`F1`), [Check for updates…](#updates), [Export
   support package…](#support-package), About and License.
 
 ## Panels
 
-Four panels can sit around your working screen. Each one can be moved,
+Five panels can sit around your working screen. Each one can be moved,
 tabbed together with another, torn off into its own floating window, or
 closed:
 
@@ -116,6 +119,7 @@ closed:
 - **Classification History** — on the right, closed by default.
 - **User Guide** — on the right, closed by default (this guide).
 - **Themes** — on the right, closed by default.
+- **Messages** — on the right, closed by default.
 
 **Moving a panel:** drag it by its *tab* — the small labelled tab at the
 edge of the panel, not its title. As you drag, blue drop indicators appear
@@ -137,6 +141,9 @@ Live traffic between the app and the board — every line it sends and every
 line the board answers, in the order it happened. It is the first place to
 look when the machine does something unexpected.
 
+`Ctrl+Shift+M` opens it and closes it again, from anywhere in the window —
+including while you are typing in its own command box.
+
 - The header shows the connection state, plus **Autoscroll**, **Timestamps**
   and **Pause**. Pausing holds new lines back and releases them when you
   un-pause; nothing is lost.
@@ -144,7 +151,9 @@ look when the machine does something unexpected.
   bench.
 - **Clear** empties the view. **Save…** writes what you are currently
   looking at to a text file — filtered lines are not written, so narrow the
-  view first if that's what you want to send.
+  view first if that's what you want to send. To keep the whole session on
+  disk as it happens, tick **Log serial traffic to a file** on
+  [Settings → Serial](#serial).
 - **Filter** hides every line that doesn't contain what you type, and the
   **RX** / **TX** / **Notes** toggles hide a whole direction (received,
   sent, and the monitor's own commentary). Filtering only hides: clear the
@@ -184,6 +193,29 @@ what you were doing. **Edit theme…** opens the theme editor.
 
 This is the same list as [Settings → Theme](#theme); whichever you use, the
 other follows.
+
+### Messages
+
+Every message the status bar has shown this session, newest at the bottom,
+each with the time it appeared — the last 200 are kept. Open it from **View →
+Messages**, or by clicking the message in the status bar.
+
+This is where to read an error in full. The status bar cuts a long message off
+at the window's edge and replaces it with the next one; here it is kept whole,
+wrapped to the panel's width. Errors are marked `[error]` and printed in bold
+in the theme's error colour.
+
+A step that is still in progress ("Connecting to COM3…", "Classifying…") is
+replaced by whatever comes next, so a long run shows its latest step rather
+than four lines per case. An error is never replaced: the step it interrupted
+stays just above it.
+
+- Select any text and copy it as usual, or press **Copy all** to copy the
+  whole log — timestamps and `[error]` marks included — for a bug report.
+- **Clear** empties it.
+
+The panel is not saved: it starts empty each time the app does, so copy what
+you need before quitting.
 
 ## Sort dashboard
 
@@ -232,8 +264,21 @@ Click any card except Catch-All to open its assignment editor. Tick a
 headstamp to route it to that slot; unticking sends it back to the
 Catch-All. Outside of [package mode](#package-mode) a headstamp can only be
 assigned to one slot at a time — ticking it here moves it off whichever slot
-it was in before, and the row tells you which one that was. A filter box
-narrows a long headstamp list by name.
+it was in before, and the row tells you which one that was.
+
+The list opens in three groups, alphabetical within each: what is already in
+this slot, then headstamps not in any slot yet, then those routed to another
+slot. Working through a big model, the unassigned part shrinks every time you
+reopen a card. In [package mode](#package-mode), where a headstamp can fill
+several slots, "routed to another slot" means any other slot, and the row
+lists which. The order is fixed while the editor is open — ticking a row
+doesn't move it — and is worked out again when you change the filter.
+
+The filter box has the cursor as soon as the editor opens. It matches every
+word you type, in any order and ignoring case, so `win 9` finds
+`WIN 9MM LUGER`. When the filter leaves exactly one row, **Enter** ticks it
+(or unticks it, if it was ticked); otherwise Enter does nothing. Close the
+editor with **Esc** or **Close**.
 
 ### Sorting templates
 
@@ -301,6 +346,42 @@ both versions: the one the model needs and the one you have. Update PyTorch
 when the app offers to, and it will load. Nothing about this is recoverable
 by retrying, and a model that says this has not been damaged — it is simply
 newer than the software trying to open it.
+
+### Running out of brass
+
+When the collator runs dry mid-run, up to three cases are still riding the
+feed wheel — fed past the sensor but not yet dropped. The app notices the
+board waiting on brass that isn't coming (about six seconds of quiet at the
+feed gate), confirms nothing is mid-fall, and then **flushes the wheel**:
+each remaining case is walked to the camera, classified, and dropped into
+its own slot, exactly as if the hopper were still full. The run then ends on
+its own with the wheel empty, and the status bar says how many in-flight
+cases were placed.
+
+Two details worth knowing:
+
+- If brass keeps arriving during the flush — the "empty" was really the
+  collator pausing — the run notices and resumes at full speed by itself.
+  Topping up the hopper mid-run is fine.
+- This relies on the board's **feed sensor**. With the sensor disabled the
+  firmware feeds blind, the app can't tell an empty hopper from a full one,
+  and a run at the end of the brass classifies empty air until you press
+  Stop — exactly as before.
+- Knowing when the wheel has finished emptying relies on telling a case at
+  the camera from an **empty pocket** — and an empty, in-focus pocket still
+  looks like a circle to the detector. The tiebreaker is the **Case
+  brightness floor** in [Settings → Image Processing](#image-processing):
+  brass has to read brighter than it. Tune it once for your machine —
+  capture the empty nest, read the "disc brightness" number in the status
+  line, set the floor above it, then capture a case and confirm it reads
+  clear of the floor. A shiny, worn pocket can read bright enough to need a
+  floor well above the default; if the floor is set wrong the run tells you
+  so and stops rather than cycling the machine forever.
+
+A jam during the flush stops it immediately; whatever is still in the wheel
+stays there for you to clear. Deliberately so: at the end of the brass the
+app never feeds blind to shake a case loose, because that is how a case ends
+up in the wrong bin.
 
 ### Package mode
 
@@ -610,6 +691,17 @@ Connects the app to the sorting machine over the board's UART protocol.
 - **Initialize these settings on startup** pushes the board init settings
   below automatically on every connect, instead of only when you press "Push
   to board".
+- **Log serial traffic to a file** writes everything the
+  [Serial Monitor](#serial-monitor) shows (each line sent, each line
+  received, and the app's own notes) to a file. Each line is timestamped to
+  the millisecond. The file is `logs/serial-<date-time>.log` in the data
+  folder (**File → Open data folder**), with one file per session. Ticking or
+  unticking it takes effect immediately, with no restart and no reconnect.
+  Leave it off for everyday sorting and turn it on when you are chasing a
+  board problem or about to report one. The newest file goes into the
+  [support package](#support-package) automatically. The logs can't fill the
+  disk: a file that reaches 5 MB is continued in a new one, and each new file
+  clears out all but the ten before it.
 
 **Board init settings** covers the machine's tunables — feed and sort speed,
 homing offsets, motor current, debounce timing and the camera LED level —
@@ -752,13 +844,15 @@ settings, and the AI Config setup.
 **Copy to clipboard** gives you the text to paste on the community Discord
 when asking for help. **Save package…** writes a ZIP holding the same report,
 a machine-readable `config.json`, and — if you have trained a model — the most
-recent run's log as `training.log`.
+recent run's log as `training.log`. If you have
+[logged serial traffic](#serial), the newest serial log goes in as
+`serial.log`.
 
 It is safe to share: the API key is reported only as "set" or "not set",
 nothing is read from the sign-in cache, and file paths are shown relative to
-the data folder, so your home directory never appears. The training log gets
-the same treatment: your folder paths are replaced by `<data>`, `<app>` and
-`<home>` before it goes in.
+the data folder, so your home directory never appears. Both logs get the same
+treatment: your folder paths are replaced by `<data>`, `<app>` and
+`<home>` before they go in.
 
 ### Updates
 
@@ -772,3 +866,20 @@ and the button becomes **Restart now** when it is ready. **Choose a
 different version…** lists every published release, including older ones,
 and optionally pre-releases (which the automatic check never offers). You
 can turn the automatic check off in the same dialog.
+
+When GitHub publishes a SHA-256 checksum for a release, the download is
+checked against it. A line under the release summary says whether it will be,
+and once the update is downloaded, whether it was:
+
+- **The download is checked against the SHA-256 checksum…** — before
+  downloading; once it is staged this becomes **Verified**.
+- **This release has no published checksum…** — it still installs,
+  but only the HTTPS connection vouches for it. Once staged this reads **Not
+  verified**. A checksum in a format this version can't check is treated the
+  same way, and names the format.
+- **This release's published checksum can't be read…** — the release
+  can't be installed from here; **Download & install** stays disabled.
+
+A download that doesn't match its checksum is thrown away and nothing is
+staged; the dialog offers **Try again**. If it fails the same way every time,
+see *An update fails its checksum* on the Troubleshooting page.

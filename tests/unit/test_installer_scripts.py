@@ -22,10 +22,15 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 INSTALLER = ROOT / "installer"
-# Paths relative to installer/. tests/Test-ArchiveEntryValidation.ps1 is held to
-# the same rules: it is executed by the same Windows PowerShell 5.1 that the
+# Paths relative to installer/. The two tests/ scripts below are held to the
+# same rules: they are executed by the same Windows PowerShell 5.1 that the
 # encoding rule below exists for.
-SCRIPTS = ("install-windows.ps1", "install-windows.bat", "tests/Test-ArchiveEntryValidation.ps1")
+SCRIPTS = (
+    "install-windows.ps1",
+    "install-windows.bat",
+    "tests/Test-ArchiveEntryValidation.ps1",
+    "tests/Test-DigestVerification.ps1",
+)
 
 
 @pytest.mark.parametrize("name", SCRIPTS)

@@ -24,6 +24,7 @@ from sorter.ui.dialog_support import SupportDialog, build_support_dialog, open_s
 from sorter.ui.support_bundle import (
     CONFIG_MEMBER,
     REPORT_MEMBER,
+    SERIAL_LOG_MEMBER,
     TRAINING_LOG_MEMBER,
     collect_data,
     collect_report,
@@ -252,3 +253,30 @@ def test_a_bundle_without_a_training_log_still_writes(config, tmp_path: Path) ->
     out = write_bundle(tmp_path / "pkg.zip", config, config.db)
     with zipfile.ZipFile(out) as archive:
         assert TRAINING_LOG_MEMBER not in archive.namelist()
+        assert SERIAL_LOG_MEMBER not in archive.namelist()
+
+
+# ----- the last serial log (issue #112, item A18) ------------------------------
+
+
+def test_the_report_says_there_is_no_serial_log_yet(config) -> None:
+    assert collect_data(config, config.db)["serial_log"] == {"available": "none"}
+
+
+def test_the_newest_serial_log_is_named_and_bundled_redacted(config, tmp_path: Path) -> None:
+    paths.logs_dir().mkdir(parents=True, exist_ok=True)
+    (paths.logs_dir() / "serial-20260101-000000.log").write_text("old session\n", encoding="utf-8")
+    data_root = paths.app_data_dir()
+    newest = paths.logs_dir() / "serial-20260301-000000.log"
+    newest.write_text(f"2026-03-01 00:00:00.000 -- saved to {data_root}/x.txt\n", encoding="utf-8")
+
+    data = collect_data(config, config.db)
+    assert data["serial_log"]["file"] == newest.name
+    assert data["serial_log"]["older_runs_kept"] == 1
+    assert "== Last serial log ==" in collect_report(config, config.db)
+
+    out = write_bundle(tmp_path / "pkg.zip", config, config.db)
+    with zipfile.ZipFile(out) as archive:
+        log = archive.read(SERIAL_LOG_MEMBER).decode("utf-8")
+    assert "<data>/x.txt" in log
+    assert str(data_root) not in log

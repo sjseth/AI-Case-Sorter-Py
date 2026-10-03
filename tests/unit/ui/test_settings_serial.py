@@ -10,11 +10,14 @@ under test, not a stand-in's guess at that protocol.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 pytest.importorskip("PySide6")
 
 from sorter.data.config import Config
+from sorter.hardware import serial_log
 from sorter.hardware.serial_emulator import EMULATED_PORT, EmulatorBroker
 from sorter.ui import app, settings_serial
 from sorter.ui.settings_serial import (
@@ -480,3 +483,77 @@ def test_macos_usb_adapters_sort_before_the_leftovers(window, monkeypatch) -> No
 
     ports = [section.port_combo.itemText(i) for i in range(section.port_combo.count())]
     assert ports == [EMULATED_PORT, "/dev/cu.usbmodem14201", "/dev/cu.Bluetooth-Incoming-Port"]
+
+
+# ----- the serial traffic log (issue #112, item A18) ---------------------------
+
+
+@pytest.fixture
+def data_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("CASESORTER_DATA_DIR", str(tmp_path / "data"))
+    return tmp_path / "data"
+
+
+def test_the_traffic_log_is_off_by_default_and_writes_nothing(window, data_root) -> None:
+    section = build_serial_section(window)
+    assert not section.log_traffic_check.isChecked()
+
+    window.bus.post("serial/tx", "version")
+    window.bus.post("serial/rx", "ok")
+    window.bus.drain()
+
+    assert serial_log.serial_logs() == []
+    assert not (data_root / "logs").exists()
+
+
+def test_switching_the_log_on_records_bus_traffic(window, config, data_root) -> None:
+    section = build_serial_section(window)
+
+    section.log_traffic_check.setChecked(True)
+    assert config.serial["log_traffic"] is True
+    window.bus.post("serial/tx", "version")
+    window.bus.post("serial/rx", "CS7.2 Firmware V1.7")
+    window.bus.drain()
+    section.log_traffic_check.setChecked(False)  # flushes
+
+    assert config.serial["log_traffic"] is False
+    [log_file] = serial_log.serial_logs()
+    assert log_file.parent == data_root / "logs"
+    text = log_file.read_text(encoding="utf-8")
+    assert re.search(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} -> version$", text, re.MULTILINE)
+    assert re.search(r"^\S+ \S+ <- CS7\.2 Firmware V1\.7$", text, re.MULTILINE)
+
+    window.bus.post("serial/tx", "after off")
+    window.bus.drain()
+    assert "after off" not in log_file.read_text(encoding="utf-8")
+
+
+def test_toggling_the_log_leaves_the_connection_alone(window, data_root) -> None:
+    section = build_serial_section(window)
+    _connect_emulated(window, section)
+    broker = window.broker
+
+    section.log_traffic_check.setChecked(True)
+    broker.send_command("getconfig")
+    assert drain_until(window, lambda: any(line == "getconfig" for _k, _s, line in window.serial_monitor._lines))
+    section.log_traffic_check.setChecked(False)
+
+    assert window.broker is broker
+    assert broker.is_connected
+    [log_file] = serial_log.serial_logs()
+    assert "-> getconfig" in log_file.read_text(encoding="utf-8")
+
+
+def test_the_setting_survives_a_restart_and_a_close_flushes(window_factory, config, data_root) -> None:
+    config.serial["log_traffic"] = True
+    config.save()
+    window = window_factory(Config(config.db).load())
+    assert build_serial_section(window).log_traffic_check.isChecked()
+    assert window.serial_log.enabled
+
+    window.bus.post("serial/rx", "ok")
+    window.bus.drain()
+    window.close()
+
+    [log_file] = serial_log.serial_logs()
+    assert "<- ok" in log_file.read_text(encoding="utf-8")

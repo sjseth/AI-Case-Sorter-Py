@@ -13,6 +13,10 @@
     git's delta transfer buys nothing. Not installing a 60 MB dependency to
     deliver a 1 MB update is the whole point.
 
+    The download is checked against the SHA-256 digest GitHub publishes on
+    the release asset. A release without one installs on TLS alone, with a
+    warning; a mismatch, or a digest that can't be read, stops the install.
+
     Installs per-user to %LOCALAPPDATA%\Programs\CaseSorter - no admin rights,
     and the folder stays writable so the venv and the in-app updater work.
     User data lives in %LOCALAPPDATA%\CaseSorter, outside the app folder, so
@@ -336,7 +340,65 @@ function Select-ReleaseAsset {
         Where-Object { $_.PSObject.Properties['name'] -and $_.name -eq $expected } |
         Select-Object -First 1
     if (-not $asset) { return $null }
-    return [pscustomobject]@{ Tag = $tag; Url = $asset.browser_download_url }
+    # From the same asset object, so it always describes the URL beside it.
+    $digest = if ($asset.PSObject.Properties['digest']) { $asset.digest } else { $null }
+    return [pscustomobject]@{ Tag = $tag; Url = $asset.browser_download_url; Digest = $digest }
+}
+
+function Get-DigestCheck {
+    <# What a release asset's `digest` lets us check. Kept in lock-step with
+       classify_digest in sorter/update/updater.py, down to which shapes are
+       refused: returns Kind 'sha256' (Value = lowercase hex), 'absent' (null
+       or empty), 'unsupported' (Value = the algorithm) or 'malformed'. #>
+    param($Digest)
+
+    $text = if ($null -eq $Digest) { '' } else { ([string]$Digest).Trim() }
+    if (-not $text) { return [pscustomobject]@{ Kind = 'absent'; Value = '' } }
+    $malformed = [pscustomobject]@{ Kind = 'malformed'; Value = '' }
+    $colon = $text.IndexOf(':')
+    if ($colon -lt 0) { return $malformed }
+    $algorithm = $text.Substring(0, $colon).ToLowerInvariant()
+    $value = $text.Substring($colon + 1)
+    if (-not $value -or $algorithm -notmatch '^[a-z0-9-]+$') { return $malformed }
+    if ($algorithm -ne 'sha256') { return [pscustomobject]@{ Kind = 'unsupported'; Value = $algorithm } }
+    if ($value -notmatch '^[0-9a-f]{64}$') { return $malformed }
+    return [pscustomobject]@{ Kind = 'sha256'; Value = $value.ToLowerInvariant() }
+}
+
+function Assert-DownloadDigest {
+    <# Throws unless the file at $Path matches the release's published
+       SHA-256. With nothing to check against it warns and returns $false --
+       the same "verify when present, TLS alone when not" rule as the in-app
+       updater's stage_update. Returns $true when verified. #>
+    param([Parameter(Mandatory)][string]$Path, $Digest)
+
+    $check = Get-DigestCheck -Digest $Digest
+    if ($check.Kind -eq 'malformed') {
+        throw "The release publishes a checksum that can't be read ('$Digest'), so the download can't be verified. Refusing to install it."
+    }
+    $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($check.Kind -eq 'sha256') {
+        if ($actual -ne $check.Value) {
+            throw @"
+The download does not match the SHA-256 checksum GitHub published for it.
+
+  expected: $($check.Value)
+  got:      $actual
+
+It was discarded and nothing was installed. Re-run the installer; if this
+keeps happening, report it.
+"@
+        }
+        Write-Ok "SHA-256 verified against the published checksum."
+        return $true
+    }
+    if ($check.Kind -eq 'unsupported') {
+        Write-Warn2 "Not verified: the published checksum is $($check.Value), which this installer can't check."
+    } else {
+        Write-Warn2 "Not verified: no checksum is published for this download."
+    }
+    Write-Note "Relying on the HTTPS connection alone. SHA-256 of the download: $actual"
+    return $false
 }
 
 function Get-ReleaseInfo {
@@ -410,6 +472,7 @@ tree with no version stamp and would report 0.0.0 forever.
         return [pscustomobject]@{
             Tag = $DefaultBranch
             Url = "https://github.com/$Repo/archive/refs/heads/$DefaultBranch.tar.gz"
+            Digest = $null
         }
     }
 
@@ -418,11 +481,11 @@ tree with no version stamp and would report 0.0.0 forever.
     if ($found) { return $found }
     Write-Warn2 "Release $tag has no matching sdist; falling back to the source archive."
     Write-Note  "The app will report its version as 0.0.0 until the first in-app update."
-    return [pscustomobject]@{ Tag = $tag; Url = "https://github.com/$Repo/archive/refs/tags/$tag.tar.gz" }
+    return [pscustomobject]@{ Tag = $tag; Url = "https://github.com/$Repo/archive/refs/tags/$tag.tar.gz"; Digest = $null }
 }
 
 function Install-App {
-    param([string]$Url, [string]$Tag, [string]$Dest)
+    param([string]$Url, [string]$Tag, [string]$Dest, $Digest)
 
     $work = Join-Path $env:TEMP "casesorter-install-$([guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $work -Force | Out-Null
@@ -456,6 +519,10 @@ whose tag matches what you asked for.
             }
             throw "Could not download the app from $Url : $($_.Exception.Message)"
         }
+
+        # Before tar.exe reads a byte of it. A throw here leaves only $work,
+        # which the finally below removes.
+        Assert-DownloadDigest -Path $targz -Digest $Digest | Out-Null
 
         Write-Note "Extracting..."
         $unpack = Join-Path $work 'unpacked'
@@ -615,7 +682,7 @@ try {
     Write-Step "Fetching the app"
     $release = Get-ReleaseInfo
     Write-Note "Source: $($release.Url)"
-    Install-App -Url $release.Url -Tag $release.Tag -Dest $InstallDir
+    Install-App -Url $release.Url -Tag $release.Tag -Dest $InstallDir -Digest $release.Digest
     Write-Ok "$($release.Tag) installed."
 
     Write-Step "Creating shortcuts"

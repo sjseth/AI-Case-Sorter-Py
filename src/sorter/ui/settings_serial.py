@@ -10,7 +10,9 @@ The traffic log is deliberately not duplicated here — the serial panel
 (``ui/serial_monitor.py``) already renders ``serial/rx``/``serial/tx``/
 ``serial/note``, and a second log on this page would be an out-of-sync copy
 of its ring buffer. "Open monitor ↗" reveals that panel instead; the baud
-picker is kept in step with the panel's own.
+picker is kept in step with the panel's own. What this page does own is the
+switch for the *file* copy of that traffic (``hardware/serial_log.py``),
+which applies live through ``win.serial_log``.
 
 As on the other settings pages (``settings_camera.py``,
 ``settings_imageproc.py``): every field persists to ``Config`` on change, no
@@ -39,6 +41,8 @@ from PySide6.QtWidgets import (
 
 from ..hardware import serial_broker
 from ..hardware.serial_emulator import EMULATED_PORT, EmulatorBroker
+from ..hardware.serial_log import SERIAL_LOG_PREFIX
+from .message_log import ERROR
 
 BAUD_CHOICES = (9600, 19200, 38400, 57600, 115200)
 
@@ -131,6 +135,15 @@ class SerialSection(QWidget):
         self.init_on_startup_check.toggled.connect(self._on_init_on_startup_toggled)
         column.addWidget(self.init_on_startup_check)
 
+        self.log_traffic_check = QCheckBox("Log serial traffic to a file", box)
+        self.log_traffic_check.setToolTip(
+            f"Writes every line sent and received to logs/{SERIAL_LOG_PREFIX}<date-time>.log "
+            "in the data folder (File → Open data folder). Takes effect immediately."
+        )
+        self.log_traffic_check.setChecked(bool(ser_cfg.get("log_traffic", False)))
+        self.log_traffic_check.toggled.connect(self._on_log_traffic_toggled)
+        column.addWidget(self.log_traffic_check)
+
         buttons = QHBoxLayout()
         self.connect_button = QPushButton("Connect", box)
         self.connect_button.setObjectName("action")
@@ -219,7 +232,7 @@ class SerialSection(QWidget):
         def _done(opened: bool) -> None:
             self.connect_button.setEnabled(True)
             if not opened:
-                win.set_status(f"Failed to open {port}.")
+                win.set_status(f"Failed to open {port}.", level=ERROR)
                 win._set_serial_indicator(f"Serial: failed to open {port}", connected=False)
                 return
             self._finish_connect(broker, port)
@@ -228,7 +241,7 @@ class SerialSection(QWidget):
 
     def _on_connect_error(self, exc: Exception) -> None:
         self.connect_button.setEnabled(True)
-        self._win.set_status(f"Connect error: {exc}")
+        self._win.set_status(f"Connect error: {exc}", level=ERROR)
 
     def _finish_connect(self, broker: Any, port: str) -> None:
         # _after_connect owns the init-on-startup push (shared with auto-connect).
@@ -485,6 +498,17 @@ class SerialSection(QWidget):
     def _on_init_on_startup_toggled(self, checked: bool) -> None:
         self._win.config.serial["init_on_startup"] = bool(checked)
         self._win.config.save()
+
+    def _on_log_traffic_toggled(self, checked: bool) -> None:
+        self._win.config.serial["log_traffic"] = bool(checked)
+        self._win.config.save()
+        serial_log = self._win.serial_log
+        if serial_log.set_enabled(checked) and serial_log.path is not None:
+            self._win.set_status(f"Logging serial traffic to logs/{serial_log.path.name}.")
+        elif checked:
+            self._win.set_status("Couldn't open the serial log file; serial traffic is not being logged.")
+        else:
+            self._win.set_status("Serial traffic logging stopped.")
 
 
 def build_serial_section(win: Any) -> SerialSection:
