@@ -595,6 +595,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#assigning-by-headstamp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assigning by headstamp
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#sorting-templates" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1181,6 +1192,17 @@
     <span class="md-ellipsis">
       
         Editing an assignment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#assigning-by-headstamp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assigning by headstamp
       
     </span>
   </a>
@@ -1817,7 +1839,9 @@ routed to a slot; the rest are your bins. A card shows:</p>
 <li>every headstamp currently routed to it, listed in full — the card grows to
   fit the list rather than truncating it</li>
 </ul>
-<p>Above the grid: <strong>Sorted this run</strong> counts every case this run has sorted,
+<p>Above the grid: <strong>Assign by headstamp…</strong> opens the
+<a href="#assigning-by-headstamp">headstamp-first view</a> of the whole layout,
+<strong>Sorted this run</strong> counts every case this run has sorted,
 <strong>Reset counts</strong> zeroes the counters (the grid's and the per-bin ones)
 without touching your assignments, and the <a href="#sorting-templates">template</a>
 picker names the layout the cards are showing.</p>
@@ -1839,6 +1863,37 @@ word you type, in any order and ignoring case, so <code>win 9</code> finds
 <code>WIN 9MM LUGER</code>. When the filter leaves exactly one row, <strong>Enter</strong> ticks it
 (or unticks it, if it was ticked); otherwise Enter does nothing. Close the
 editor with <strong>Esc</strong> or <strong>Close</strong>.</p>
+<h3 id="assigning-by-headstamp">Assigning by headstamp<a class="headerlink" href="#assigning-by-headstamp" title="Permanent link">&para;</a></h3>
+<p>A card's editor answers "what goes in this bin?". Laying out a big model
+from scratch is the opposite question, asked once per headstamp: "which bin
+does this one go to?". <strong>Assign by headstamp…</strong>, above the slot grid, lists
+every headstamp in one table with the slot it is routed to (<strong>—</strong> means the
+Catch-All), so the whole layout is one pass at the keyboard:</p>
+<ol>
+<li>Type part of a name. The filter works as in the card editor — every word,
+   any order, ignoring case, so <code>win 9</code> finds <code>WIN 9MM LUGER</code>.</li>
+<li>Press <strong>Enter</strong> or <strong>↓</strong>. The cursor moves into the table, on the top
+   match.</li>
+<li>Type the slot number. It is saved straight away, and the slot cards behind
+   the window update as you go.</li>
+<li>Type the next name — any letter typed in the table starts a new search.</li>
+</ol>
+<p><strong>0</strong>, <strong>Delete</strong> or <strong>Backspace</strong> sends a headstamp back to the Catch-All.
+The arrow keys move between rows, and double-clicking a slot (or <strong>F2</strong>)
+opens a number box for anyone who prefers the mouse.</p>
+<p>On a machine with 10 or more slots, a number that could still be the start
+of a longer one waits for you: with 16 slots, <code>1</code> waits for a second digit
+(<code>12</code>) or <strong>Enter</strong> (slot 1), while <code>2</code> to <code>9</code> are saved at once. <strong>Esc</strong> or
+<strong>Backspace</strong> takes a half-typed number back. A number the machine doesn't
+have is refused, with a note under the table.</p>
+<p>Like the card editor, this follows the routing the run will use. With parent
+classifications on, parent groups carry the slot and a <strong>Contains</strong> column
+lists each group's headstamps — the filter searches those too, so typing a
+headstamp's name finds the group it belongs to. In
+<a href="#package-mode">package mode</a>, where a headstamp can fill several slots,
+typing a slot number adds that slot to the row or takes it off again, and
+<strong>0</strong>, <strong>Delete</strong> or <strong>Backspace</strong> clears them all. Every change lands in the
+active <a href="#sorting-templates">sorting template</a>, just as a card edit does.</p>
 <h3 id="sorting-templates">Sorting templates<a class="headerlink" href="#sorting-templates" title="Permanent link">&para;</a></h3>
 <p>The <strong>Template</strong> picker on the slot grid's header row holds the active
 <strong>sorting template</strong> — a named snapshot of the whole slot layout, so one
