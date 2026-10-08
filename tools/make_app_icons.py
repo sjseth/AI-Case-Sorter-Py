@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
-"""Build ``installer/casesorter.ico`` from ``sorter.ui.icons``' launcher mark.
+"""Build the committed raster exports of the launcher mark from ``assets/``.
 
-Exactly one icon has to exist as a file in this repository, because exactly one
-consumer runs before any Python of ours does: ``install-windows.ps1`` points the
-Start Menu shortcut's ``IconLocation`` at ``installer/casesorter.ico`` while it
-is still laying the app down. Everything else is generated at launch from the
-same SVG — the hicolor rungs on Linux and the ``.icns`` inside the macOS bundle,
-both by ``sorter.ui.desktop_integration`` — so there is nothing else to commit
-and nothing that can drift.
+The artwork is two SVGs in ``assets/`` — ``app-icon.svg`` and its simplified
+small cut ``app-icon-small.svg`` — which ``sorter.ui.icons`` reads at runtime.
+Two rasters are committed beside them, and this tool is the only thing that
+writes either:
+
+``installer/casesorter.ico``
+    ``install-windows.ps1`` points the Start Menu shortcut at it while it is
+    still laying the app down, before any Python of ours runs.
+``assets/app-icon-512.png``
+    For documentation, which can't render an SVG everywhere it is shown.
+
+Everything else — the hicolor rungs on Linux, the ``.icns`` in the macOS
+bundle — is generated at launch by ``sorter.ui.desktop_integration`` from the
+same SVGs. ``tests/unit/ui/test_icons.py`` fails if a committed raster no
+longer matches what this tool renders.
 
 Run this after editing the launcher artwork, and commit what changes::
 
@@ -28,8 +36,8 @@ paths outside the tree, and don't commit one:
 from __future__ import annotations
 
 import argparse
+import io
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -39,28 +47,39 @@ sys.path.insert(0, str(ROOT / "src"))
 # every ICO in the wild carries, and the ones Explorer actually asks for.
 ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)
 
+ICO_PATH = ROOT / "installer" / "casesorter.ico"
+PNG_SIZE = 512
+PNG_PATH = ROOT / "assets" / f"app-icon-{PNG_SIZE}.png"
 
-def _pixmaps(sizes, icons):
-    """Rasterise the launcher mark once per size, as PNG bytes on disk."""
-    directory = Path(tempfile.mkdtemp(prefix="casesorter-icons-"))
-    written = []
+
+def _frames(sizes, icons):
+    """Rasterise the launcher mark once per size, as RGBA Pillow images."""
+    from PIL import Image
+    from PySide6.QtCore import QBuffer, QIODevice
+
+    frames = []
     for size in sizes:
-        path = directory / f"{size}.png"
-        if not icons.launcher_pixmap(size).save(str(path), "PNG"):
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        if not icons.launcher_pixmap(size).save(buffer, "PNG"):
             raise SystemExit(f"could not rasterise the launcher mark at {size} px")
-        written.append(path)
-    return written
+        frames.append(Image.open(io.BytesIO(bytes(buffer.data().data()))).convert("RGBA"))
+    return frames
 
 
 def build_ico(target: Path, icons) -> None:
-    from PIL import Image
-
-    frames = [Image.open(path).convert("RGBA") for path in _pixmaps(ICO_SIZES, icons)]
+    frames = _frames(ICO_SIZES, icons)
     # Pillow's ICO writer resamples the largest frame down for `sizes` it is
     # given, which would throw away the simplified small cut. Handing it the
     # already-rendered members as `append_images` keeps each size's own artwork.
     frames[-1].save(target, format="ICO", sizes=[(s, s) for s in ICO_SIZES], append_images=frames[:-1])
-    print(f"wrote {target.relative_to(ROOT)} ({', '.join(f'{s}x{s}' for s in ICO_SIZES)})")
+    print(f"wrote {target} ({', '.join(f'{s}x{s}' for s in ICO_SIZES)})")
+
+
+def build_png(target: Path, icons) -> None:
+    if not icons.launcher_pixmap(PNG_SIZE).save(str(target), "PNG"):
+        raise SystemExit(f"could not write {target}")
+    print(f"wrote {target}")
 
 
 def build_icns(target: Path) -> None:
@@ -76,12 +95,11 @@ def build_preview(target: Path, icons) -> None:
     sizes = (512, 128, 64, 48, 32, 24, 16)
     tile = 160
     sheet = Image.new("RGBA", (tile * len(sizes), tile), (255, 255, 255, 255))
-    for column, path in enumerate(_pixmaps(sizes, icons)):
-        with Image.open(path) as frame:
-            # Nearest-neighbour on the way up: this is a sheet for judging the
-            # small members, and a smooth upscale would flatter them.
-            scaled = frame.resize((tile, tile), Image.Resampling.NEAREST)
-            sheet.paste(scaled, (column * tile, 0), scaled)
+    for column, frame in enumerate(_frames(sizes, icons)):
+        # Nearest-neighbour on the way up: this is a sheet for judging the
+        # small members, and a smooth upscale would flatter them.
+        scaled = frame.resize((tile, tile), Image.Resampling.NEAREST)
+        sheet.paste(scaled, (column * tile, 0), scaled)
     sheet.save(target)
     print(f"wrote {target}")
 
@@ -100,7 +118,8 @@ def main() -> int:
     app = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
     assert app is not None
 
-    build_ico(ROOT / "installer" / "casesorter.ico", icons)
+    build_ico(ICO_PATH, icons)
+    build_png(PNG_PATH, icons)
     if args.icns is not None:
         build_icns(args.icns)
     if args.preview is not None:

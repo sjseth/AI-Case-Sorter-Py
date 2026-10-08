@@ -179,9 +179,10 @@ Python that works but cannot be uninstalled from Settings.
   expect a "More info → Run anyway" step.
 - `casesorter.ico` in this folder is the Start Menu shortcut's icon. It is
   **generated, not drawn**: `tools/make_app_icons.py` renders it from the
-  launcher artwork in `src/sorter/ui/icons.py`, so the shortcut, the Linux menu
-  entry and the running window are all the same mark. Re-run that tool and
-  commit the result if the artwork changes; the shortcut code still guards on
+  launcher artwork in `assets/app-icon.svg` (and its small cut), the same
+  files the running app reads, so the shortcut, the Linux menu entry and the
+  running window are all the same mark. Re-run that tool and commit the
+  result if the artwork changes; the shortcut code still guards on
   `Test-Path`, so a missing file costs the icon and not the install.
 - The running app's taskbar button does **not** merge with the pinned
   shortcut. Windows groups by AppUserModelID: the app sets its own (see

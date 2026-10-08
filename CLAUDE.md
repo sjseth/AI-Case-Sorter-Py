@@ -158,6 +158,7 @@ AI-Case-Sorter-Py/
 │       ├── update/              # self-update: check/stage + pre-launch apply
 │       ├── training/            # out-of-process ConvNeXt trainer
 │       └── ui/                  # PySide6 UI — the only UI (§5)
+├── assets/                  # launcher artwork: the SVGs icons.py reads + a docs PNG (§5)
 ├── installer/               # Windows bootstrapper (see §7)
 ├── tools/                   # developer utilities, not shipped or imported
 └── tests/                   # pytest suite, mirrors src/sorter/'s subpackages
@@ -1046,11 +1047,18 @@ Docks: `serial_monitor.py`, `history_view.py`, `help_viewer.py`,
   (`LAUNCHER_DETAIL_MIN`) — the groove and primer ring that make it a case head
   turn to mud below 48 px, so the small rungs carry a simplified cut, and every
   consumer picks through `launcher_svg()` so the `.ico`, the hicolor tree and
-  the `.icns` all switch at the same size. Only **one** file is committed:
-  `installer/casesorter.ico`, because `install-windows.ps1` reads it before any
-  Python of ours runs. Rebuild it with `tools/make_app_icons.py` (whose
-  `--preview` renders a contact sheet — look at it) and commit the result;
-  everything else is generated at launch from the same SVG.
+  the `.icns` all switch at the same size. **The two SVGs are files**, not
+  strings: `assets/app-icon.svg` and `assets/app-icon-small.svg`, read from
+  `paths.app_root()` at runtime (the sdist carries them, as it does
+  `docs/guide/` for the help panel), so docs and packaging point at the same
+  bytes the app renders. A missing file costs the window icon, never the
+  launch. Two rasters are committed from them by `tools/make_app_icons.py`
+  and nothing else: `installer/casesorter.ico`, because `install-windows.ps1`
+  reads it before any Python of ours runs, and `assets/app-icon-512.png` for
+  docs. Re-run the tool after editing an SVG (its `--preview` renders a
+  contact sheet — look at it) and commit the result; `test_icons.py` fails
+  when a committed raster no longer matches what the tool renders. The hicolor
+  rungs and the `.icns` are still generated at launch.
 - **Tests** live in `tests/unit/ui/` and run **offscreen, with no display
   server and no Xvfb** (§8). `conftest.py` supplies `qapp`, a real
   SQLite-backed `config`, `window_factory`/`window`, plus `seed_model` and

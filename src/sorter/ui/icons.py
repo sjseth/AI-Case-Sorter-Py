@@ -11,16 +11,24 @@ machine's own identity (a cartridge case, a headstamp seen base-on) rather
 than generic glyphs; AI Config, Models, Community and Settings use familiar
 metaphors.
 
-The launcher mark at the foot of this file is the exception to every word of
-that: filled, full-colour and untouched by the palette, because the desktop
+The launcher mark at the foot of this file — read from ``assets/``, not
+embedded — is the exception to every word of that: filled, full-colour and untouched by the palette, because the desktop
 draws it on a background of its own (``app_icon``, ``launcher_svg``).
 """
 
 from __future__ import annotations
 
+import logging
+from functools import cache
+from pathlib import Path
+
 from PySide6.QtCore import QByteArray, QRectF, Qt
 from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
+
+from ..paths import app_root
+
+log = logging.getLogger(__name__)
 
 SORT = "sort"
 TRAIN = "train"
@@ -189,47 +197,25 @@ LAUNCHER_DETAIL_MIN = 48
 # no other platform uses in the shared list).
 LAUNCHER_SIZES: tuple[int, ...] = (16, 24, 32, 48, 64, 128, 256, 512)
 
-_LAUNCHER_DETAILED = """\
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3E444D"/><stop offset="1" stop-color="#1E2228"/>
-    </linearGradient>
-    <linearGradient id="rim" x1="0.15" y1="0.05" x2="0.85" y2="0.95">
-      <stop offset="0" stop-color="#F5DE9C"/><stop offset="0.5" stop-color="#C89C48"/>
-      <stop offset="1" stop-color="#7E581B"/>
-    </linearGradient>
-    <linearGradient id="face" x1="0.2" y1="0.12" x2="0.8" y2="0.9">
-      <stop offset="0" stop-color="#DCB868"/><stop offset="0.55" stop-color="#B0863A"/>
-      <stop offset="1" stop-color="#6E4E17"/>
-    </linearGradient>
-    <linearGradient id="primer" x1="0.25" y1="0.15" x2="0.75" y2="0.85">
-      <stop offset="0" stop-color="#F6E3AD"/><stop offset="1" stop-color="#B08432"/>
-    </linearGradient>
-  </defs>
-  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#plate)"/>
-  <circle cx="256" cy="256" r="172" fill="url(#rim)"/>
-  <circle cx="256" cy="256" r="140" fill="none" stroke="#241A06" stroke-width="14"/>
-  <circle cx="256" cy="256" r="133" fill="url(#face)"/>
-  <circle cx="256" cy="256" r="78" fill="#241A06"/>
-  <circle cx="256" cy="256" r="64" fill="url(#primer)"/>
-  <circle cx="256" cy="256" r="22" fill="#241A06"/>
-</svg>
-"""
+# The artwork itself lives in ``assets/`` at the app root, not here, so the
+# files docs and packaging point at are the same bytes this module renders.
+LAUNCHER_ASSET = "app-icon.svg"
+LAUNCHER_SMALL_ASSET = "app-icon-small.svg"
 
-_LAUNCHER_SIMPLE = """\
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect x="8" y="8" width="496" height="496" rx="104" fill="#272C33"/>
-  <circle cx="256" cy="256" r="184" fill="#D4A94F"/>
-  <circle cx="256" cy="256" r="96" fill="#2A1E06"/>
-  <circle cx="256" cy="256" r="70" fill="#E8CB84"/>
-</svg>
-"""
+
+def assets_dir() -> Path:
+    """``<app>/assets`` — shipped in the sdist, like ``docs/guide`` for the help panel."""
+    return app_root() / "assets"
+
+
+@cache
+def _read_asset(name: str) -> str:
+    return (assets_dir() / name).read_text(encoding="utf-8")
 
 
 def launcher_svg(size: int) -> str:
     """The launcher artwork to use at ``size`` px — detailed, or the small cut."""
-    return _LAUNCHER_DETAILED if size >= LAUNCHER_DETAIL_MIN else _LAUNCHER_SIMPLE
+    return _read_asset(LAUNCHER_ASSET if size >= LAUNCHER_DETAIL_MIN else LAUNCHER_SMALL_ASSET)
 
 
 def launcher_pixmap(size: int) -> QPixmap:
@@ -239,12 +225,12 @@ def launcher_pixmap(size: int) -> QPixmap:
     ratio in: right for a widget, wrong for a file on disk, where the size in
     the path (``48x48/apps/…``) is a promise about how many pixels are in it.
     """
+    document = QByteArray(launcher_svg(size).encode("utf-8"))
     canvas = QPixmap(size, size)
     canvas.fill(Qt.GlobalColor.transparent)
     painter = QPainter(canvas)
     try:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        document = QByteArray(launcher_svg(size).encode("utf-8"))
         QSvgRenderer(document).render(painter, QRectF(0, 0, size, size))
     finally:
         painter.end()
@@ -252,8 +238,16 @@ def launcher_pixmap(size: int) -> QPixmap:
 
 
 def app_icon() -> QIcon:
-    """The window/taskbar icon — the launcher mark at every size a shell asks for."""
+    """The window/taskbar icon — the launcher mark at every size a shell asks for.
+
+    An empty icon, not an exception, if the artwork is missing: the window
+    falls back to the platform default rather than the app failing to start.
+    """
     result = QIcon()
-    for size in LAUNCHER_SIZES:
-        result.addPixmap(launcher_pixmap(size))
+    try:
+        for size in LAUNCHER_SIZES:
+            result.addPixmap(launcher_pixmap(size))
+    except OSError:
+        log.warning("launcher artwork missing from %s; using the default window icon", assets_dir(), exc_info=True)
+        return QIcon()
     return result
