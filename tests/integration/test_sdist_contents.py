@@ -55,6 +55,11 @@ RUNTIME_FILES = (
     # it an install reports 0.0.0+unknown, which parses as a pre-release, so
     # every launch sees the current release as newer and re-prompts.
     "src/sorter/_version.py",
+    # The launcher artwork, read from <app>/assets by sorter.ui.icons at
+    # runtime, and the shortcut icon install-windows.ps1 reads from the tree.
+    "assets/app-icon.svg",
+    "assets/app-icon-small.svg",
+    "installer/casesorter.ico",
 )
 
 
