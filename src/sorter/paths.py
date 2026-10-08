@@ -227,6 +227,24 @@ def logs_dir() -> Path:
     return app_data_dir() / "logs"
 
 
+def session_logs(prefix: str, *, newest_first: bool = True, suffix: str = ".log") -> list[Path]:
+    """Every ``<prefix><stamp><suffix>`` in ``logs_dir()``; the stamp sorts by time."""
+    directory = logs_dir()
+    if not directory.exists():
+        return []
+    found = sorted(directory.glob(f"{prefix}*{suffix}"))
+    return list(reversed(found)) if newest_first else found
+
+
+def prune_session_logs(prefix: str, keep: int, *, suffix: str = ".log") -> None:
+    """Delete all but the newest ``keep`` of a kind of session log. Best-effort."""
+    for stale in session_logs(prefix, suffix=suffix)[keep:]:
+        try:
+            stale.unlink()
+        except OSError:
+            pass
+
+
 def export_temp_dir() -> Path:
     """App-local scratch folder for model export/share ZIPs.
 

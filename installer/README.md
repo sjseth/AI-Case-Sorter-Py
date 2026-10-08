@@ -22,7 +22,8 @@ a safe way to repair a broken install.
 | Step | Detail |
 |---|---|
 | Python | Uses an existing Python 3.12+ if one is present. Otherwise installs one via `winget`, falling back to a silent per-user python.org install. |
-| App | Downloads the latest release's sdist (`ai_case_sorter-<version>.tar.gz`) over HTTPS and extracts it with `tar.exe`. Falls back to the source archive if that asset is absent. **No git.** |
+| App | Downloads the latest release's sdist (`ai_case_sorter-<version>.tar.gz`) over HTTPS, checks it against the SHA-256 GitHub publishes for that asset, and extracts it with `tar.exe`. Falls back to the source archive if that asset is absent. **No git.** |
+| Checksum | A mismatch, or a published checksum that can't be read, stops the install before anything is extracted. A download with no published checksum — the source-archive fallback always, or a release GitHub returns none for — still installs, over HTTPS alone, and says *Not verified* in the log. The in-app updater applies the same rule. |
 | Launch | Hands off to `start.bat`, which calls `bootstrap.py` — that's what owns the venv and dependency sync now, via [uv](https://docs.astral.sh/uv/), not `pip install`. |
 
 ## Where things live
@@ -83,9 +84,10 @@ explicitly.
 
 ## Testing the installer locally
 
-### Archive-entry validation — runs on any OS
+### Archive-entry validation and digest checks — run on any OS
 
-`tests/Test-ArchiveEntryValidation.ps1` needs no Windows. It dot-sources this
+`tests/Test-ArchiveEntryValidation.ps1` and `tests/Test-DigestVerification.ps1`
+need no Windows. It dot-sources this
 parent directory's script for its functions only (the guard on the main block stops
 it installing anything), so it runs under PowerShell on Linux or macOS:
 
@@ -94,14 +96,16 @@ docker run --rm -v "$PWD:/w" -w /w mcr.microsoft.com/powershell:7.4-ubuntu-22.04
   pwsh -File installer/tests/Test-ArchiveEntryValidation.ps1
 ```
 
+(and the same with `Test-DigestVerification.ps1`)
+
 Run it from the repo root; it takes a few seconds. There is no bare `7.4`
 tag on that registry — the tags are OS-qualified.
 
 Two things it does **not** prove. It runs PowerShell 7.4, whereas a real
 double-click through `install-windows.bat` runs **Windows PowerShell 5.1** —
 which is why CI uses `shell: powershell`, and why this file's header warns
-about BOM/codepage decoding. And it covers the entry-name checks only, not
-winget, `tar.exe`, the registry, or the python.org bundle.
+about BOM/codepage decoding. And they cover the entry-name and checksum
+logic only, not winget, `tar.exe`, the registry, or the python.org bundle.
 
 ### The three provisioning paths — need a real Windows machine
 

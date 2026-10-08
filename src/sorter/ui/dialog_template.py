@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .formatting import escape_mnemonic
+
 
 def _mode_noun(mode: str) -> str:
     return "package-mode " if mode == "package" else ""
@@ -75,7 +77,7 @@ class NewTemplateDialog(_TemplateDialog):
         self.mode = mode
         self.created: Any | None = None
 
-        self.copy_radio = QRadioButton(f"Copy the slot assignments from “{current_name}”", self)
+        self.copy_radio = QRadioButton(f"Copy the slot assignments from “{escape_mnemonic(current_name)}”", self)
         self.copy_radio.setChecked(True)
         self.blank_radio = QRadioButton("Start fresh with no slot assignments", self)
         self.column.addWidget(self.copy_radio)

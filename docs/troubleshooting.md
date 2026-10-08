@@ -13,7 +13,7 @@ paths relative to the data folder. Attach the logs described below too.
 
 ## Where the logs are
 
-Both live in the data folder's `logs/` directory — on Windows that is
+They live in the data folder's `logs/` directory — on Windows that is
 `%LOCALAPPDATA%\CaseSorter\logs`, on Linux and macOS
 `~/.local/share/CaseSorter/logs`. They answer different questions:
 
@@ -24,9 +24,24 @@ Both live in the data folder's `logs/` directory — on Windows that is
 - **`launch.log`** — the launcher: finding Python, syncing dependencies,
   applying an update, and anything the app printed. Rewritten on every start,
   with the previous one kept as `launch.prev.log`.
+- **`serial-<date-time>.log`** — every line sent to and received from the
+  board, timestamped. Only written while **Log serial traffic to a file** is
+  ticked on [Settings → Serial](guide/GUIDE.md#serial). It is off by default.
+
+**Reporting a board problem?** Tick **Log serial traffic to a file** first,
+reproduce the problem, then export the support package. The package's ZIP
+carries the newest serial log as `serial.log`. The Serial Monitor only holds
+what is on screen, while the file keeps the whole session, including the
+moments before you noticed.
 
 To collect more detail, start the app with `CASESORTER_LOG_LEVEL=DEBUG` set in
 the environment.
+
+## An error flashed past in the status bar
+
+Click the status bar's message, or open **View → Messages**: the
+[Messages](guide/GUIDE.md#messages) panel keeps the last 200 status lines in
+full, errors marked, and **Copy all** puts them on the clipboard for a report.
 
 ## Nothing happens when I start the app
 
@@ -161,6 +176,20 @@ The status-bar notice is the *model's* publisher releasing a new version, not
 an app update. **Update now** installs it in place and keeps your slot
 assignments, sorting templates and the name you gave it. Dismissing it is
 fine — it returns next time you open the Sort screen.
+
+## An update fails its checksum
+
+The update dialog says the download *does not match the SHA-256 checksum
+GitHub published for it*. The file was discarded and nothing was staged or
+installed — the app you are running is untouched.
+
+Press **Try again**. A truncated or corrupted download is the usual cause, and
+a retry over a steadier connection fixes it. If it fails the same way every
+time, something between you and GitHub is changing the file: don't install
+that release by hand, and report it with `casesorter.log` attached — it
+records the checksum that was expected and the one that arrived. The Windows
+installer applies the same check and stops the same way; its
+`install-<timestamp>.log` holds the same two values.
 
 ## Resetting
 

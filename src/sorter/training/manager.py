@@ -54,19 +54,11 @@ def training_log_path(stamp: str) -> Path:
 
 def training_logs(newest_first: bool = True) -> list[Path]:
     """Every training log on disk. The stamp sorts lexicographically by time."""
-    directory = paths.logs_dir()
-    if not directory.exists():
-        return []
-    found = sorted(directory.glob(f"{LOG_PREFIX}*{LOG_SUFFIX}"))
-    return list(reversed(found)) if newest_first else found
+    return paths.session_logs(LOG_PREFIX, newest_first=newest_first, suffix=LOG_SUFFIX)
 
 
 def _prune_training_logs() -> None:
-    for stale in training_logs()[MAX_TRAINING_LOGS:]:
-        try:
-            stale.unlink()
-        except OSError:
-            pass
+    paths.prune_session_logs(LOG_PREFIX, MAX_TRAINING_LOGS, suffix=LOG_SUFFIX)
 
 
 @dataclass

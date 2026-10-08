@@ -8,7 +8,8 @@ is its own module with a ``build_*(win)`` factory that this only wires up.
 
 The panels are Qt Advanced Docking System dock widgets (see ``_build_dock``
 and ``DOCK_HOMES``): serial monitor at the bottom, classification history,
-user guide and themes on the right, the last three closed until asked for.
+user guide, themes and messages on the right, all but the monitor closed until
+asked for.
 The sidebar+pages are the manager's *central* widget, which is what makes
 them a fixed anchor the panels arrange around rather than a panel themselves.
 
@@ -36,6 +37,7 @@ import numpy as np
 import PySide6QtAds as ads
 from PySide6.QtCore import (
     QByteArray,
+    QEvent,
     QSize,
     Qt,
     QTimer,
@@ -68,6 +70,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStackedWidget,
     QToolButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
     QWidgetAction,
@@ -79,11 +82,13 @@ from ..control.run_controller import RunController
 from ..hardware import serial_broker
 from ..hardware.camera import Camera
 from ..hardware.serial_emulator import EMULATED_PORT, EmulatorBroker
+from ..hardware.serial_log import SerialTrafficLog
 from ..ml import classifier, local_inference
 from ..paths import app_data_dir
 from . import desktop_integration
 from .ai_page import build_ai_page
 from .community_page import build_community_page
+from .dialog_headstamp_assign import HeadstampAssignDialog, build_headstamp_assign_dialog
 from .dialog_slot_assign import CATCH_ALL_HINT, SlotAssignDialog
 from .dialog_template import EditTemplateDialog, NewTemplateDialog
 from .dialog_winforms_import import (
@@ -97,6 +102,8 @@ from .help_viewer import build_help_window, topic_for
 from .history_view import build_history_view
 from .icons import AI_CONFIG, COMMUNITY, MODELS, SETTINGS, SORT, TRAIN, app_icon
 from .icons import icon as vector_icon
+from .message_log import ERROR, INFO, MessageLog
+from .messages_view import build_messages_view
 from .models_page import build_models_page
 from .palettes import (
     SETTING_CUSTOM_THEMES,
@@ -297,7 +304,10 @@ DOCK_HOMES = (
     ("history_dock", ads.RightDockWidgetArea),
     ("help_dock", ads.RightDockWidgetArea),
     ("themes_dock", ads.RightDockWidgetArea),
+    ("messages_dock", ads.RightDockWidgetArea),
 )
+
+MESSAGES_HINT = "Click to see every recent message in full (View → Messages)."
 
 
 def _configure_dock_manager() -> None:
@@ -335,6 +345,7 @@ class QtMainWindow(QMainWindow):
         self._is_running = False
         self._master_count = 0
         self._templates: list[Any] = []
+        self.headstamp_assign_dialog: HeadstampAssignDialog | None = None
         # The current case only — (display label, confidence, above the floor).
         self._current_result: tuple[str, float, bool] | None = None
         # The store-images disk-usage notice shows once per session, not per run.
@@ -350,6 +361,8 @@ class QtMainWindow(QMainWindow):
         # them and nothing blocks offscreen.
         self.open_notes_dialog: Callable[[], None] = self._open_notes_dialog
         self.open_model_update_dialog: Callable[[], None] = self._open_model_update_dialog
+        # Before _build_ui: set_status records into it from the first page on.
+        self.status_log = MessageLog()
 
         self.setMinimumSize(*MIN_WINDOW_SIZE)
 
@@ -380,6 +393,8 @@ class QtMainWindow(QMainWindow):
         self._restore_window_state()
 
         self.bus.subscribe("status", self.set_status)
+        self.bus.subscribe("status/error", lambda msg: self.set_status(msg, level=ERROR))
+        self.bus.subscribe("status/progress", lambda msg: self.set_status(msg, progress=True))
         # Run state comes from the controller's own events, never from the
         # button handlers — a run can also end on its own (error, package halt).
         self.bus.subscribe("run/started", lambda _p: self._on_run_started())
@@ -388,7 +403,8 @@ class QtMainWindow(QMainWindow):
         # Manual feed / test cycles report on their own topic; without this
         # their progress is invisible and the previous status looks stuck.
         self.bus.subscribe("test/status", self.set_status)
-        self.bus.subscribe("run/error", lambda msg: self.set_status(f"Run error: {msg}"))
+        self.bus.subscribe("run/error", lambda msg: self.set_status(f"Run error: {msg}", level=ERROR))
+        self.bus.subscribe("test/error", lambda msg: self.set_status(f"Test error: {msg}", level=ERROR))
         self.bus.subscribe("run/result", self._on_run_result)
         # Both fire right after classify_active — the moment the inference
         # device is guaranteed to have been picked.
@@ -398,6 +414,7 @@ class QtMainWindow(QMainWindow):
         self.bus.subscribe("run/assignment_changed", lambda _p: self._refresh_sort_grid())
         self.bus.subscribe("run/package_full", self._on_package_full)
         self.bus.subscribe("run/package_halt", self._on_package_halt)
+        self.bus.subscribe("run/out_of_brass", self._on_out_of_brass)
         self.bus.subscribe("serial/disconnected", self._on_serial_disconnected)
         # Headstamps, templates and the Train activity are all scoped to the
         # active model, so a mode switch re-reads every one of them.
@@ -483,6 +500,7 @@ class QtMainWindow(QMainWindow):
         self._build_history_dock()
         self._build_help_dock()
         self._build_themes_dock()
+        self._build_messages_dock()
         self._build_menus()
 
         # Where local classification runs (e.g. "Inference: MPS · Apple M4").
@@ -515,6 +533,10 @@ class QtMainWindow(QMainWindow):
         self.signin_button = QPushButton("Sign in", self)
         self.signin_button.clicked.connect(self._on_signin_clicked)
         self.statusBar().addPermanentWidget(self.signin_button)
+        # The message area is painted by the bar itself, not a child widget,
+        # so a click on it reaches only the bar (see eventFilter).
+        self._status_bar = self.statusBar()
+        self._status_bar.installEventFilter(self)
         self._paint_indicators()
         self._apply_mode_visibility()
         self.set_status("Idle.")
@@ -661,6 +683,10 @@ class QtMainWindow(QMainWindow):
 
         header = QHBoxLayout()
         header.addWidget(self._muted_label("Slots", holder))
+        # The inverse of clicking a card: every headstamp, its slot set on the row (#129).
+        self.assign_by_headstamp_button = QPushButton("Assign by headstamp…", holder)
+        self.assign_by_headstamp_button.clicked.connect(self.open_headstamp_assign)
+        header.addWidget(self.assign_by_headstamp_button)
         header.addStretch(1)
         header.addWidget(self._muted_label("Sorted this run", holder))
         self.master_count_label = QLabel("0", holder)
@@ -1081,6 +1107,9 @@ class QtMainWindow(QMainWindow):
         self.serial_monitor = build_serial_monitor(self)
         # Bottom, like Arduino IDE's monitor / VS Code's terminal (JL).
         self.serial_dock = self._build_dock("Serial Monitor", self.serial_monitor, ads.BottomDockWidgetArea)
+        # The same traffic, to a file while Settings → Serial has it switched on.
+        self.serial_log = SerialTrafficLog(enabled=bool(self.config.serial.get("log_traffic", False)))
+        self.serial_log.attach(self.bus)
 
     def _build_history_dock(self) -> None:
         self.history_view = build_history_view(self)
@@ -1457,6 +1486,17 @@ class QtMainWindow(QMainWindow):
         # the registry without passing through here.
         self.themes_dock.viewToggled.connect(self._on_themes_dock_toggled)
 
+    def _build_messages_dock(self) -> None:
+        self.messages_view = build_messages_view(self, self.status_log)
+        # No scroll area: the log wraps to the panel's width and scrolls itself.
+        self.messages_dock = self._build_dock(
+            "Messages", self.messages_view, ads.RightDockWidgetArea, scroll_area=False
+        )
+        self.messages_dock.toggleView(False)
+
+    def open_messages(self) -> None:
+        self.reveal_dock(self.messages_dock)
+
     def _on_themes_dock_toggled(self, opened: bool) -> None:
         if opened:
             self.refresh_theme_picker()
@@ -1505,6 +1545,7 @@ class QtMainWindow(QMainWindow):
 
         toggle = self.serial_dock.toggleViewAction()
         toggle.setText("Serial Monitor")
+        toggle.setShortcut(QKeySequence("Ctrl+Shift+M"))  # not the Windows app's Ctrl+K: delete-to-end-of-line on Linux
         self.menus["View"] = self.menuBar().addMenu("&View")
         self.menus["View"].addAction(toggle)
         history_toggle = self.history_dock.toggleViewAction()
@@ -1516,6 +1557,9 @@ class QtMainWindow(QMainWindow):
         themes_toggle = self.themes_dock.toggleViewAction()
         themes_toggle.setText("Themes")
         self.menus["View"].addAction(themes_toggle)
+        messages_toggle = self.messages_dock.toggleViewAction()
+        messages_toggle.setText("Messages")
+        self.menus["View"].addAction(messages_toggle)
         self.menus["View"].addSeparator()
         # The always-works escape hatch (Seth: floated the history panel and
         # couldn't get it back): drag-to-dock takes dexterity and has failed
@@ -1591,6 +1635,24 @@ class QtMainWindow(QMainWindow):
         dialog = SlotAssignDialog(self.config, int(slot), self)
         dialog.changed.connect(self._refresh_sort_grid)
         dialog.exec()
+        self._refresh_sort_grid()
+
+    def open_headstamp_assign(self) -> None:
+        """Every headstamp in one table; the cards repaint on each edit while it is open.
+
+        ``open()``, not ``exec()``: modal to the window but returning at once,
+        so a test can drive the dialog it leaves in ``headstamp_assign_dialog``.
+        """
+        dialog = build_headstamp_assign_dialog(self)
+        dialog.changed.connect(self._refresh_sort_grid)
+        dialog.finished.connect(self._on_headstamp_assign_closed)
+        self.headstamp_assign_dialog = dialog
+        dialog.open()
+
+    def _on_headstamp_assign_closed(self, _result: int) -> None:
+        dialog, self.headstamp_assign_dialog = self.headstamp_assign_dialog, None
+        if dialog is not None:
+            dialog.deleteLater()
         self._refresh_sort_grid()
 
     def _refresh_templates(self) -> None:
@@ -1852,13 +1914,48 @@ class QtMainWindow(QMainWindow):
             self.history_view.apply_palette()
         if hasattr(self, "models_page"):
             self.models_page.apply_palette()
+        if hasattr(self, "messages_view"):
+            self.messages_view.apply_palette()
         # Indicator dots carry state, not a palette role a stylesheet can reach.
         self._paint_indicators()
 
     # ----- status -------------------------------------------------------------
 
-    def set_status(self, message: str) -> None:
-        self.statusBar().showMessage(str(message))
+    def set_status(self, message: str, *, level: str = INFO, progress: bool | None = None) -> None:
+        """The one way to write the status bar — main thread only, like any widget.
+
+        Every line is also kept, untruncated, in ``status_log`` (the Messages
+        panel). ``level=ERROR`` marks a failure; ``progress`` overrides the
+        trailing-"…" inference of an in-progress line (see message_log.py).
+        """
+        text = str(message)
+        self.statusBar().showMessage(text)
+        entry = self.status_log.add(text, level=level, progress=progress)
+        # A file-only trail of what the operator was shown; the panel isn't saved.
+        if not entry.progress:
+            log.debug("status [%s] %s", entry.level, entry.text)
+
+    def _in_status_message_area(self, pos: Any) -> bool:
+        """Is ``pos`` (status-bar coordinates) left of every permanent widget?"""
+        bar = self.statusBar()
+        children = bar.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly)
+        left_edge = min((w.geometry().x() for w in children if w.isVisible()), default=bar.width())
+        return pos.x() < left_edge
+
+    def eventFilter(self, watched: Any, event: Any) -> bool:
+        if watched is self._status_bar:
+            kind = event.type()
+            if (
+                kind == QEvent.Type.MouseButtonRelease
+                and event.button() == Qt.MouseButton.LeftButton
+                and self._in_status_message_area(event.position().toPoint())
+            ):
+                self.open_messages()
+                return True
+            if kind == QEvent.Type.ToolTip and self._in_status_message_area(event.pos()):
+                QToolTip.showText(event.globalPos(), MESSAGES_HINT, self._status_bar)
+                return True
+        return super().eventFilter(watched, event)
 
     def _indicator_html(self, message: str, *, connected: bool) -> str:
         color = self.palette_colors["success" if connected else "error"]
@@ -1952,10 +2049,10 @@ class QtMainWindow(QMainWindow):
                 )
             else:
                 # The red dot alone left the user with nowhere to go (JL).
-                self.bus.post("status", CAMERA_FAILED_STATUS)
+                self.bus.post("status/error", CAMERA_FAILED_STATUS)
                 self._set_camera_indicator("Camera: failed to start", connected=False)
         except Exception as exc:
-            self.bus.post("status", f"Camera error: {exc} — pick a device in Settings → Camera.")
+            self.bus.post("status/error", f"Camera error: {exc} — pick a device in Settings → Camera.")
             self._set_camera_indicator("Camera: error", connected=False)
 
     @staticmethod
@@ -2050,7 +2147,7 @@ class QtMainWindow(QMainWindow):
         self.run_worker(
             _probe,
             on_done=self._finalize_auto_connect,
-            on_error=lambda exc: self.set_status(f"Auto-connect error: {exc}"),
+            on_error=lambda exc: self.set_status(f"Auto-connect error: {exc}", level=ERROR),
         )
 
     def _finalize_auto_connect(self, result: tuple[Any, str] | tuple[None, None]) -> None:
@@ -2097,7 +2194,7 @@ class QtMainWindow(QMainWindow):
                 self.run_worker(
                     lambda: broker.update_init_settings(settings),
                     on_done=lambda _r: self.set_status(f"Connected to {port}. Init settings pushed."),
-                    on_error=lambda err: self.set_status(f"Init push failed: {err}"),
+                    on_error=lambda err: self.set_status(f"Init push failed: {err}", level=ERROR),
                 )
 
     def connect_serial(self, port: str | None = None) -> None:
@@ -2145,7 +2242,7 @@ class QtMainWindow(QMainWindow):
 
         def _done(opened: bool) -> None:
             if not opened:
-                self.set_status(f"Failed to open {port}.")
+                self.set_status(f"Failed to open {port}.", level=ERROR)
                 self._set_serial_indicator(f"Serial: failed to open {port}", connected=False)
                 return
             self._after_connect(broker, port, source="manual")
@@ -2153,7 +2250,7 @@ class QtMainWindow(QMainWindow):
         self.run_worker(
             _open,
             on_done=_done,
-            on_error=lambda exc: self.set_status(f"Connect error: {exc}"),
+            on_error=lambda exc: self.set_status(f"Connect error: {exc}", level=ERROR),
         )
 
     def _on_serial_disconnected(self, reason: Any = None) -> None:
@@ -2184,7 +2281,7 @@ class QtMainWindow(QMainWindow):
             connected=False,
         )
         self._update_run_buttons()
-        self.set_status(f"Serial disconnected — {detail}")
+        self.set_status(f"Serial disconnected — {detail}", level=ERROR)
         if was_running:
             self.beep()
             # Same shape as the package halt: a modal, queued out of the drain
@@ -2392,6 +2489,12 @@ class QtMainWindow(QMainWindow):
         self.beep()
         self.set_status(f"Slot {data.get('slot')} batch full ({data.get('count')}). Reset it to refill.")
 
+    def _on_out_of_brass(self, payload: Any) -> None:
+        data = payload if isinstance(payload, dict) else {}
+        flushed = data.get("flushed", 0)
+        self.beep()
+        self.set_status(f"Out of brass — run finished. {flushed} in-flight case(s) were flushed to their slots.")
+
     def _on_package_halt(self, payload: Any) -> None:
         label = (payload or {}).get("label") if isinstance(payload, dict) else None
         self.beep()
@@ -2482,6 +2585,7 @@ class QtMainWindow(QMainWindow):
             self.camera.stop()
         except Exception:
             pass
+        self.serial_log.close()
         try:
             self._save_window_state()
         except Exception:
