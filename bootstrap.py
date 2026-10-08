@@ -47,6 +47,8 @@ What it does, in order:
      with PYTHONPATH=src in the child's environment. --no-sync, not
      --frozen: `uv run` syncs implicitly by default even with --frozen,
      which would redo the very build step 4 skipped.
+     `--setup-only` stops just before this step, so an installer can do the
+     slow first sync up front.
 
      PYTHONPATH is what makes `-m` work at all here -- the package is never
      installed into the venv (step 4), so there is otherwise nothing for it
@@ -460,14 +462,22 @@ def run_app(uv: str, forward_args: list[str]) -> int:
 # ---------------------------------------------------------------------------
 
 
+# Everything up to the launch, then exit: installer/install-unix.sh runs it so
+# the first sync happens in the installer's terminal, not on first launch.
+SETUP_ONLY_FLAG = "--setup-only"
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
 
     auto_install = os.environ.get("AUTO_INSTALL", "0") in ("1", "true", "yes")
+    setup_only = False
     forward_args = []
     for arg in args:
         if arg in ("--auto", "-y"):
             auto_install = True
+        elif arg == SETUP_ONLY_FLAG:
+            setup_only = True
         else:
             forward_args.append(arg)
 
@@ -554,6 +564,10 @@ def main(argv: list[str] | None = None) -> int:
 
     ensure_linux_runtime_libs(uv, auto_install)
     ensure_qt_platform_libs(auto_install)
+
+    if setup_only:
+        log("Setup complete; not starting the app (--setup-only).")
+        return 0
 
     # Everything this file is responsible for is done at this point; from
     # here on the process is just the app. Worth saying out loud on a first

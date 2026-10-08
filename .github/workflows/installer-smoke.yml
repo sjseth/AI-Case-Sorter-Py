@@ -1,11 +1,11 @@
 name: Verify Installer
 
-# install-windows.ps1 is not part of the normal dev loop the way
-# start.sh/start.bat are -- nobody runs it while iterating on the app, it is
-# a one-shot onboarding script. It also needs a real published release to
-# exercise its interesting path (sdist matching, tar.exe extraction); on a
-# repo with none yet it would only ever hit the "no release, fall back to
-# the source zip" branch. So this gets its own trigger rather than
+# The installers (install-windows.ps1, install-unix.sh) are not part of the
+# normal dev loop the way start.sh/start.bat are -- nobody runs them while
+# iterating on the app, they are one-shot onboarding scripts. They also need
+# a real published release to exercise their interesting path (sdist
+# matching, extraction); on a repo with none yet they would never reach it.
+# So this gets its own trigger rather than
 # build.yml's blanket one: path-filtered on PR/push (fast feedback exactly
 # when the script itself changes, near-zero cost otherwise), plus a
 # workflow_call so release.yml can run it against the release it just cut.
@@ -310,3 +310,72 @@ jobs:
             }
             Write-Host "Installed version matches the release under test: $installed"
           }
+
+  # install-unix.sh against the same real release, on both platforms it
+  # targets. macos-latest is what proves it under bash 3.2's sh and BSD
+  # tar/shasum; ubuntu's sh is dash.
+  installer-smoke-unix:
+    name: verify ${{ matrix.os }} installer
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Synthetic, like the PowerShell tests above: the rejection paths and
+      # offline install cases a real release never exercises.
+      - name: Installer tests (sh)
+        run: TEST_SHELL=sh sh installer/tests/test-install-unix.sh
+      - name: Installer tests (bash)
+        run: TEST_SHELL=bash bash installer/tests/test-install-unix.sh
+
+      # Without --no-bootstrap, so the first-run dependency setup runs too
+      # when the release supports it. It must finish without starting the
+      # app, which timeout-minutes would catch. AUTO_INSTALL lets bootstrap.py
+      # install system libraries without a prompt.
+      - name: Run the installer for real
+        env:
+          TAG: ${{ inputs.tag }}
+          AUTO_INSTALL: "1"
+        run: |
+          set -o pipefail
+          out="$RUNNER_TEMP/installer-out.txt"
+          if [ -n "$TAG" ]; then
+            sh installer/install-unix.sh --repo "$GITHUB_REPOSITORY" --version "$TAG" </dev/null | tee "$out"
+          else
+            sh installer/install-unix.sh --repo "$GITHUB_REPOSITORY" </dev/null | tee "$out"
+          fi
+          # Every real release asset carries a GitHub digest (#33).
+          grep -qF 'SHA-256 verified against the published checksum' "$out" || {
+            echo "::error::The download was not verified against the release's published SHA-256."
+            exit 1
+          }
+
+      - name: Verify the install
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          dest="$HOME/.local/opt/ai-case-sorter"
+          launcher="$HOME/.local/bin/ai-case-sorter"
+          [ -x "$launcher" ] || { echo "::error::$launcher is missing"; exit 1; }
+          grep -qF "$dest/start.sh" "$launcher" || { echo "::error::the launcher does not run $dest/start.sh"; exit 1; }
+          version_file=$(find "$dest" -name _version.py -not -path '*/.venv/*' | head -n 1)
+          [ -n "$version_file" ] || { echo "::error::_version.py is missing -- installed from the source archive, not the sdist."; exit 1; }
+          installed=$(sed -n "s/^__version__ = version = '\(.*\)'$/\1/p" "$version_file")
+          [ -n "$installed" ] || { echo "::error::$version_file does not carry a real version."; exit 1; }
+          echo "Installed version: $installed"
+          if [ -n "$TAG" ] && [ "$installed" != "${TAG#v}" ]; then
+            echo "::error::Installed version '$installed' is not the release under test ('${TAG#v}')."
+            exit 1
+          fi
+          if [ "$(uname -s)" = Darwin ]; then
+            logs="$HOME/Library/Application Support/CaseSorter/logs"
+          else
+            logs="$HOME/.local/share/CaseSorter/logs"
+          fi
+          ls "$logs"/install-*.log || { echo "::error::no install-<stamp>.log under the data root"; exit 1; }

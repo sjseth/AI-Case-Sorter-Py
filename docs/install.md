@@ -8,7 +8,7 @@ Once it is installed, go on to [Getting Started](getting-started.md).
 
 ## What you need
 
-- **Windows or Linux.** macOS runs from source.
+- **Windows, Linux or macOS.**
 - **A webcam** — the app photographs each case with it.
 - **The CS7.2 sorter** on a USB serial port, for actual sorting. Without it
   the app still runs: pick the **Emulated** port and everything except moving
@@ -48,7 +48,49 @@ locations are in
 
 ## Linux and macOS
 
-Run it from a checkout. The launch script installs
+### With the installer
+
+No git needed. In a terminal:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/sjseth/AI-Case-Sorter-Py/main/installer/install-unix.sh
+sh install-unix.sh
+```
+
+It downloads the latest release, checks it against the checksum GitHub
+publishes for it, and installs it in `~/.local/opt/ai-case-sorter` — per-user,
+**no `sudo`**. It then puts a launcher at `~/.local/bin/ai-case-sorter`.
+
+Before it finishes, the installer sets up the app's dependencies in the same
+terminal: it fetches [uv](https://docs.astral.sh/uv/), the right Python and
+the packages the app needs, which takes a few minutes the first time. If a
+system library is missing (see the table below), this is where you are asked
+for your `sudo` password. The app itself is not started; when the installer
+is done, start it with:
+
+```bash
+ai-case-sorter
+```
+
+If that says *command not found*, `~/.local/bin` is not on your `PATH` —
+the installer warns you when that is the case. Run
+`~/.local/bin/ai-case-sorter` instead, or add the folder to your `PATH`.
+
+| Option | Effect |
+|---|---|
+| `--prefix DIR` | Install somewhere else, e.g. `/opt/ai-case-sorter` (the folder must be writable by you, so updates can replace it). |
+| `--version TAG` | Install a specific release, e.g. `--version 2.3.0`. The default is the latest. |
+| `--no-bootstrap` | Skip the dependency setup; the first start of the app does it instead. |
+| `--force` | Install into a folder that already has other files in it, or replace an existing `ai-case-sorter` launcher the installer did not write. |
+
+Re-running the installer updates an existing install in place — a safe way
+to repair one. Your data is never touched. An older release pinned with
+`--version` may skip the dependency setup; the first start of the app does
+it instead.
+
+### From a checkout
+
+The alternative, if you want git. The launch script installs
 [uv](https://docs.astral.sh/uv/) if it isn't already there, uses it to fetch
 the right Python and the dependencies, and starts the app — every time, in one
 step.
@@ -59,9 +101,12 @@ cd AI-Case-Sorter-Py
 ./start.sh
 ```
 
+### System libraries
+
 The one thing uv can't provide is system libraries. On a minimal Linux install
-the script offers to install them with `sudo`; pass `--auto` (or set
-`AUTO_INSTALL=1`) to confirm automatically.
+the installer (or `./start.sh`) offers to install them with `sudo`; pass
+`--auto` to `./start.sh` (or set `AUTO_INSTALL=1` for either) to confirm
+automatically.
 
 | Library | Needed by | Debian/Ubuntu | Fedora | Arch |
 |---|---|---|---|---|
@@ -73,8 +118,8 @@ The first two are required. The third is not — without it Qt falls back to
 Wayland, where a floating [panel](guide/GUIDE.md#panels) can't be moved or
 resized.
 
-You need **some** Python 3 already on the machine, new enough to run
-`bootstrap.py` — 3.12 or newer. That is not the Python the app itself runs on:
+Either way, you need **some** Python 3 already on the machine, new enough to
+run `bootstrap.py` — 3.12 or newer. That is not the Python the app itself runs on:
 uv provisions that separately.
 
 The same checkout works on Windows: `start.bat` instead of `./start.sh`.
@@ -82,6 +127,7 @@ The same checkout works on Windows: `start.bat` instead of `./start.sh`.
 ## Starting the app
 
 - **Windows, installed:** Start Menu → **AI Case Sorter**.
+- **Linux/macOS, installed:** `ai-case-sorter` in a terminal.
 - **From a checkout:** `./start.sh` (Linux/macOS) or `start.bat` (Windows).
 
 Every launch re-checks the dependencies against the lockfile, so pulling a
@@ -123,7 +169,7 @@ a different version…** lists every published release, older ones included, and
 optionally pre-releases. See [Updates](guide/GUIDE.md#updates) for the whole
 dialog.
 
-- **Installed on Windows:** never re-run the installer for an update.
+- **Installed with an installer:** never re-run it for an update.
 - **Running from a checkout:** `git pull` and launch again. The in-app updater
   still works, but a checkout is normally managed with git.
 - Turn the automatic check off in the dialog, or set
@@ -154,7 +200,7 @@ the two routes ship different builds, and PyPI's Windows wheel is CPU-only.
 ## When something goes wrong
 
 Both halves of the launch leave a log under the data folder, in `logs/`:
-`install-<timestamp>.log` from the Windows installer, and `launch.log` from
+`install-<timestamp>.log` from the installer, and `launch.log` from
 every start of the app (the run before is kept as `launch.prev.log`).
 
 On Windows the console closes with the process and takes any traceback with

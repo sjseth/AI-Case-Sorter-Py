@@ -1,4 +1,4 @@
-"""Guards on the Windows installer scripts.
+"""Guards on the installer scripts, and the runner for the Unix one's tests.
 
 These can't be executed here (no Windows), so the suite enforces the two
 properties that silently broke them once already. What the scripts actually
@@ -16,6 +16,10 @@ lands on some unrelated line much further down.
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -96,3 +100,39 @@ def test_powershell_script_has_no_unpaired_quotes_per_line() -> None:
         if line.count('"') % 2 != 0:
             bad.append(n)
     assert not bad, f"odd number of double quotes on line(s): {bad}"
+
+
+# --- install-unix.sh ------------------------------------------------------
+
+UNIX_SCRIPTS = ("install-unix.sh", "tests/test-install-unix.sh")
+
+
+@pytest.mark.parametrize("name", UNIX_SCRIPTS)
+def test_unix_script_is_ascii_lf_posix_sh(name: str) -> None:
+    """A CR breaks a shell script outright; non-ASCII has no reason to be there."""
+    raw = (INSTALLER / name).read_bytes()
+    assert raw.startswith(b"#!/bin/sh\n"), f"installer/{name} must start with #!/bin/sh"
+    assert b"\r" not in raw, f"installer/{name} has CR line endings"
+    assert all(b <= 0x7F for b in raw), f"installer/{name} has non-ASCII bytes"
+
+
+# dash is Debian's /bin/sh and bash 3.2 is macOS's; each one present is run.
+UNIX_SHELLS = ("sh", "dash", "bash")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="install-unix.sh targets Linux and macOS")
+@pytest.mark.parametrize("shell", UNIX_SHELLS)
+def test_unix_installer_suite(shell: str) -> None:
+    """installer/tests/test-install-unix.sh: digests, entry names, tags, and
+    offline installs from a synthetic sdist. No network."""
+    exe = shutil.which(shell)
+    if exe is None:
+        pytest.skip(f"{shell} not installed")
+    proc = subprocess.run(
+        [exe, str(INSTALLER / "tests" / "test-install-unix.sh")],
+        env={**os.environ, "TEST_SHELL": exe},
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
