@@ -92,6 +92,12 @@ def test_sdist_carries_the_runtime_file(sdist_names: frozenset[str], path: str) 
     )
 
 
+@pytest.mark.parametrize("path", ["installer/install-unix.sh", "installer/install-windows.ps1"])
+def test_sdist_ships_the_installers(sdist_names: frozenset[str], path: str) -> None:
+    """Both docs and the installers' own READMEs point users at a release archive."""
+    assert path in sdist_names, f"{path} is missing from the sdist"
+
+
 def test_sdist_satisfies_the_updaters_own_gate(sdist_names: frozenset[str]) -> None:
     """Whatever else changes, the archive still has to pass stage_update.
 

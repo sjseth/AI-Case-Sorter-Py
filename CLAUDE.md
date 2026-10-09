@@ -85,7 +85,8 @@ against a real built sdist to keep all of this honest.
 automatically):**
 - Linux/macOS: `./start.sh` (`--auto` / `AUTO_INSTALL=1` auto-confirms `sudo`
   package installs — libGL/glib for opencv, and libxcb-cursor for Qt's xcb
-  plugin when there is a display; see below)
+  plugin when there is a display; see below; `--setup-only` does all of it
+  and exits without starting the app, which is what `install-unix.sh` runs)
 - Windows: `start.bat`
 - Either just hands off to `bootstrap.py`, which does the actual work via
   [uv](https://docs.astral.sh/uv/): installs uv itself if it isn't already
@@ -158,7 +159,7 @@ AI-Case-Sorter-Py/
 │       ├── update/              # self-update: check/stage + pre-launch apply
 │       ├── training/            # out-of-process ConvNeXt trainer
 │       └── ui/                  # PySide6 UI — the only UI (§5)
-├── installer/               # Windows bootstrapper (see §7)
+├── installer/               # Windows + Linux/macOS installers (see §7)
 ├── tools/                   # developer utilities, not shipped or imported
 └── tests/                   # pytest suite, mirrors src/sorter/'s subpackages
 ```
@@ -1281,6 +1282,17 @@ flowchart TD
   `requires-python` while `$PythonWinget` / `$PythonFallback` track
   `.python-version`, which lets uv reuse the already-present install instead
   of downloading a near-identical second one.
+  `install-unix.sh` is the Linux/macOS counterpart: POSIX sh (dash, macOS's
+  bash 3.2), `curl` + `tar` only, no Python provisioning and no system
+  packages. It installs to `~/.local/opt/ai-case-sorter` with a launcher in
+  `~/.local/bin`, and mirrors `updater.py` rule for rule — `_TAG_RE`, exact
+  sdist name, `classify_digest`, `_safe_members`' entry checks,
+  `PROTECTED_TOP_LEVEL`/`PRUNE_ROOTS` on upgrade — so a change to any of
+  those is a change to it too. It ends with `start.sh --setup-only` (the
+  first sync, in the user's terminal), feature-detected by grepping the
+  *installed* `bootstrap.py` for `SETUP_ONLY_FLAG`: an older release would
+  forward the flag to the app. `installer/tests/test-install-unix.sh` covers
+  it offline through `CASESORTER_INSTALL_*` hooks.
 - **Logging, and why it spans three files.** The chain is
   `install-windows.ps1` → `start.bat` → `bootstrap.py` → the app, and every
   step after the first runs in a **detached console that closes with the
@@ -1419,8 +1431,8 @@ flowchart TD
   `# ty: ignore` there would flip to an *unused* ignore and fail the build for
   exactly the contributors who have built the tree. It silences
   `unused-ignore-comment` for that one file and nowhere else.
-  `install-windows.ps1` gets its own workflow
-  (`.github/workflows/installer-smoke.yml`), not `build.yml`'s blanket
+  `install-windows.ps1` (and `install-unix.sh`, on ubuntu and macOS legs)
+  gets its own workflow (`.github/workflows/installer-smoke.yml`), not `build.yml`'s blanket
   trigger: it needs a real published release to exercise its interesting
   path (sdist matching, `tar.exe` extraction), so it's path-filtered to
   `installer/**` on PR/push plus a `workflow_call` that `release.yml` makes
