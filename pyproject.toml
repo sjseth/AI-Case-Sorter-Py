@@ -32,7 +32,7 @@ dependencies = [
     "Pillow==12.3.0",
     "requests==2.34.2",
     "msal==1.39.0",
-    "platformdirs==4.12.2",
+    "platformdirs==4.12.3",
     "msal==1.39.0",
     # PEP 440 parsing/ordering for the updater's version comparison.
     "packaging==26.3",
