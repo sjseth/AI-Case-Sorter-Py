@@ -31,6 +31,7 @@ MIGRATION_NAMES = [
     "0004_slot_templates",
     "0005_models_columns",
     "0006_models_checkpoint_env",
+    "0007_sort_runs",
 ]
 # The steps that widen `models` through the same idempotent helper.
 MODEL_COLUMN_MIGRATIONS = ("0005_models_columns", "0006_models_checkpoint_env")

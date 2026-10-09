@@ -155,6 +155,7 @@ def test_menus(window) -> None:
     assert [a.text() for a in window.menus["View"].actions() if a.text()] == [
         "Serial Monitor",
         "Classification History",
+        "Catch-All breakdown",
         "User Guide panel",
         "Themes",
         "Messages",
@@ -162,6 +163,7 @@ def test_menus(window) -> None:
     ]
     assert window.serial_dock.toggleViewAction() in window.menus["View"].actions()
     assert window.history_dock.toggleViewAction() in window.menus["View"].actions()
+    assert window.catch_all_dock.toggleViewAction() in window.menus["View"].actions()
     assert window.help_dock.toggleViewAction() in window.menus["View"].actions()
     assert window.themes_dock.toggleViewAction() in window.menus["View"].actions()
     assert window.messages_dock.toggleViewAction() in window.menus["View"].actions()
@@ -287,6 +289,7 @@ def test_only_the_serial_panel_is_open_at_startup(window) -> None:
     # panel, so isClosed() is the only honest question to ask.
     assert not window.serial_dock.isClosed()
     assert window.history_dock.isClosed()
+    assert window.catch_all_dock.isClosed()
     assert window.help_dock.isClosed()
     assert window.themes_dock.isClosed()
 

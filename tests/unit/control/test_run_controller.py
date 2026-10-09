@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import patch
 
 import numpy as np
@@ -56,6 +57,8 @@ def test_run_once_routes_known_label_to_its_slot(tmp_path) -> None:
     assert result["ok"] is True
     assert result["label"] == "WIN"
     assert result["slot"] == 3
+    assert result["reason"] == "routed"
+    assert result["above_floor"] is True
 
 
 def test_confidence_floor_routes_below_to_catch_all(tmp_path) -> None:
@@ -65,10 +68,13 @@ def test_confidence_floor_routes_below_to_catch_all(tmp_path) -> None:
     with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 50)):
         result = ctrl.run_once()
     assert result["slot"] == 0
+    assert result["reason"] == "below_floor"
+    assert result["above_floor"] is False
     # At/above the floor it routes normally.
     with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 80)):
         result = ctrl.run_once()
     assert result["slot"] == 3
+    assert result["reason"] == "routed"
 
 
 def test_confidence_floor_zero_disables_floor(tmp_path) -> None:
@@ -149,6 +155,7 @@ def test_run_once_routes_unknown_label_to_slot_zero(tmp_path) -> None:
         result = ctrl.run_once()
     assert result["ok"] is True
     assert result["slot"] == 0
+    assert result["reason"] == "unknown"
 
 
 def test_test_once_skips_sort_step(tmp_path) -> None:
@@ -511,3 +518,221 @@ def test_stop_during_flush_aborts_without_blind_feeding(tmp_path, monkeypatch) -
             action = ctrl._handle_feeder_empty(result)
 
     assert action == "stop"
+
+
+def test_run_once_logs_the_slot_and_reason(tmp_path, caplog) -> None:
+    import logging
+
+    ctrl, _, _ = _make_controller(tmp_path)
+    with caplog.at_level(logging.DEBUG, logger="sorter.control.run_controller"):
+        with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)):
+            ctrl.run_once()
+    assert "case: label='WIN' parent=None confidence=100.0 slot=3 reason=routed above_floor=True" in caplog.text
+
+
+def test_cycle_once_logs_and_carries_the_reason(tmp_path, caplog) -> None:
+    import logging
+
+    ctrl, _, _ = _make_controller(tmp_path)
+    history: list[dict] = []
+    classified: list[dict] = []
+    ctrl.bus.subscribe("run/history", history.append)
+    ctrl.bus.subscribe("run/classified", classified.append)
+    with caplog.at_level(logging.DEBUG, logger="sorter.control.run_controller"):
+        with patch("sorter.ml.classifier.classify_active", return_value=("FC", 40)):
+            result = ctrl.cycle_once()
+    ctrl.bus.drain()
+    assert result["reason"] == "routed"
+    assert result["slot"] == 5
+    assert "reason=routed" in caplog.text
+    assert history and history[0]["reason"] == "routed"
+    assert classified and classified[0]["reason"] == "routed"
+
+
+def test_upside_down_is_a_special_catch_all_reason(tmp_path) -> None:
+    ctrl, cfg, _ = _make_controller(tmp_path)
+    cfg.add_headstamp("UPSIDE DOWN", slot=0)
+    with patch("sorter.ml.classifier.classify_active", return_value=("UPSIDE DOWN", 99)):
+        result = ctrl.run_once()
+    assert result["slot"] == 0
+    assert result["reason"] == "special"
+
+
+def test_a_known_unassigned_headstamp_is_not_unknown(tmp_path) -> None:
+    ctrl, cfg, _ = _make_controller(tmp_path)
+    cfg.add_headstamp("BPS", slot=0)
+    with patch("sorter.ml.classifier.classify_active", return_value=("BPS", 90)):
+        result = ctrl.run_once()
+    assert result["slot"] == 0
+    assert result["reason"] == "unassigned"
+
+
+def test_an_empty_label_is_unknown(tmp_path) -> None:
+    ctrl, _, _ = _make_controller(tmp_path)
+    with patch("sorter.ml.classifier.classify_active", return_value=("", 90)):
+        result = ctrl.run_once()
+    assert result["reason"] == "unknown"
+    assert result["slot"] == 0
+
+
+def test_start_opens_a_sort_run(tmp_path, monkeypatch) -> None:
+    from sorter.data.repository import SortRunRepo
+
+    ctrl, _, db = _make_controller(tmp_path)
+    monkeypatch.setattr(ctrl, "_loop", lambda: None)
+    ctrl.start()
+    assert ctrl._thread is not None
+    ctrl._thread.join(timeout=2)
+    run_id = ctrl._sort_run_id
+    assert run_id is not None
+    row = SortRunRepo(db).recent(1)[0]
+    assert row["id"] == run_id
+    assert row["mode"] == "standard"
+    assert row["ended_at"] is None  # the stubbed loop never reached finally
+    assert row["model_name"]
+
+
+def test_the_run_loop_closes_the_sort_run_it_opened(tmp_path) -> None:
+    from sorter.data.repository import SortRunRepo
+
+    ctrl, _, db = _make_controller(tmp_path)
+    ctrl._open_sort_run()
+    run_id = ctrl._sort_run_id
+    assert run_id is not None
+    ctrl._stop_event.set()
+    ctrl._loop()
+    assert ctrl._sort_run_id is None
+    row = next(item for item in SortRunRepo(db).recent() if item["id"] == run_id)
+    assert row["ended_at"]
+
+
+def test_manual_feed_opens_a_sort_run_lazily(tmp_path) -> None:
+    from sorter.data.repository import SortRunRepo
+
+    ctrl, _, db = _make_controller(tmp_path)
+    assert ctrl._sort_run_id is None
+    with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)):
+        ctrl.cycle_once()
+    assert ctrl._sort_run_id is not None
+    rows = SortRunRepo(db).counts(ctrl._sort_run_id)
+    assert len(rows) == 1
+    assert rows[0]["label"] == "WIN"
+    assert rows[0]["slot"] == 3
+    assert rows[0]["reason"] == "routed"
+    assert rows[0]["count"] == 1
+
+
+def test_a_sort_run_storage_failure_does_not_fail_the_case(tmp_path, monkeypatch) -> None:
+    from sorter.data.repository import SortRunRepo
+
+    ctrl, _, _ = _make_controller(tmp_path)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(SortRunRepo, "begin", boom)
+    with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)):
+        result = ctrl.run_once()
+    assert result["ok"] is True
+    assert result["slot"] == 3
+    assert ctrl._sort_run_id is None
+
+
+def test_flush_records_the_case_the_dry_sort_returned_early(tmp_path, monkeypatch) -> None:
+    from sorter.data.repository import SortRunRepo
+    from sorter.hardware import serial_broker
+
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.05)
+    ctrl, _, db = _make_controller(tmp_path)
+    ctrl.broker.set_hopper(0)
+    with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)):
+        result = ctrl.run_once()
+        assert result.get("feeder_empty") is True
+        assert result.get("ok") is not True  # not counted yet
+        with patch("sorter.hardware.image_proc.case_present", side_effect=[True, False]):
+            action = ctrl._handle_feeder_empty(result)
+    assert action == "stop"
+    assert ctrl._sort_run_id is not None
+    rows = SortRunRepo(db).counts(ctrl._sort_run_id)
+    # The pending case (recorded by the flush) plus the straggler run_once
+    # classified afterwards. Both are WIN → slot 3, so one upserted row.
+    assert len(rows) == 1
+    assert rows[0]["label"] == "WIN"
+    assert rows[0]["slot"] == 3
+    assert rows[0]["count"] == 2
+
+
+def test_auto_select_does_not_claim_a_slot_for_an_unknown_label(tmp_path) -> None:
+    """set_headstamp_slot's False return must not be reported as an assignment."""
+    ctrl, cfg, _ = _make_controller(tmp_path)
+    cfg.set_run_auto_select_trays(True)
+    events: list[dict] = []
+    ctrl.bus.subscribe("run/assignment_changed", events.append)
+    with patch("sorter.ml.classifier.classify_active", return_value=("NOPE", 100)):
+        first = ctrl.run_once()
+        second = ctrl.run_once()
+    ctrl.bus.drain()
+    assert first["reason"] == "unknown" and second["reason"] == "unknown"
+    assert first["slot"] == 0 and second["slot"] == 0
+    assert events == []
+    assert cfg.first_empty_slot() == 1
+    assert cfg.slot_for_headstamp("NOPE") is None
+
+
+def test_auto_select_in_parent_mode_assigns_the_parent_once(tmp_path) -> None:
+    """Routing reads the parent's slot, so auto-select must write that, once."""
+    from sorter.data.repository import HeadstampRepo, SettingsRepo
+
+    ctrl, cfg, db = _make_controller(tmp_path)
+    brass_id = _link_win_to_brass(db)
+    cfg.set_use_parent_classifications(True)
+    cfg.set_run_auto_select_trays(True)
+    mid = SettingsRepo(db).get_active_model_id()
+    assert mid is not None
+    child_slot = next(h for h in HeadstampRepo(db).list_for_model(mid) if h.name == "WIN").slot
+
+    events: list[dict] = []
+    ctrl.bus.subscribe("run/assignment_changed", events.append)
+    with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)):
+        first = ctrl.run_once()
+        second = ctrl.run_once()
+    ctrl.bus.drain()
+
+    assert len(events) == 1
+    assert events[0]["slot"] == 1  # FC occupies 5; the child's own slot does not
+    assert first["slot"] == 1 and first["reason"] == "routed"
+    assert second["slot"] == 1 and second["reason"] == "routed"
+    assert cfg.slot_for_headstamp("WIN") == 1
+    parent = cfg.parents_repo.get(brass_id)
+    assert parent is not None and parent.slot == 1
+    assert next(h for h in HeadstampRepo(db).list_for_model(mid) if h.name == "WIN").slot == child_slot
+
+
+def test_classifier_names_are_read_once_until_the_list_changes(tmp_path) -> None:
+    ctrl, cfg, _ = _make_controller(tmp_path)
+    with patch.object(cfg.headstamps_repo, "list_for_model", wraps=cfg.headstamps_repo.list_for_model) as listed:
+        first = ctrl._classifier_names()
+        warmed = listed.call_count
+        assert warmed >= 1
+        assert ctrl._classifier_names() == first
+        assert listed.call_count == warmed
+
+        ctrl.bus.post("run/assignment_changed", {"label": "FC", "slot": 5})
+        ctrl.bus.drain()
+        assert ctrl._classifier_names() == first
+        assert listed.call_count == warmed + 1
+
+
+def test_a_cycle_error_logs_that_the_case_was_not_recorded(tmp_path, caplog) -> None:
+    ctrl, _, _ = _make_controller(tmp_path)
+    with (
+        patch("sorter.ml.classifier.classify_active", side_effect=RuntimeError("boom")),
+        caplog.at_level(logging.ERROR, logger="sorter.control.run_controller"),
+    ):
+        result = ctrl.run_once()
+    assert result["ok"] is False
+    assert result["error"] == "boom"
+    assert "before this case was recorded" in caplog.text
+    assert "uncounted" in caplog.text
+    # The loop is what stops the run. run_once itself only reports the error.
+    assert result["slot"] is None

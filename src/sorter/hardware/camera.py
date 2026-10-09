@@ -12,12 +12,14 @@ when available) and the resolutions the device accepts.
 from __future__ import annotations
 
 import ctypes
+import json
 import logging
 import os
+import subprocess
 import sys
 import threading
 import time
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import cv2
 import numpy as np
@@ -41,11 +43,16 @@ COMMON_RESOLUTIONS: list[tuple[int, int]] = [
 ]
 
 # How long `list_cameras_with_metadata` waits for one device to open, report its
-# resolutions and hand over a frame. Sized off the slowest camera seen so far, an
-# autofocus USB webcam that needs ~2.6 s for all three, having previously been
-# dropped by a 2.5 s budget. The cost of a generous value is bounded because only
-# genuine capture nodes are ever probed (see `_candidate_indices`).
-PROBE_TIMEOUT_S = 6.0
+# resolutions and hand over a frame. The non-macOS budget is sized off the
+# slowest camera seen so far, an autofocus USB webcam that needs ~2.6 s for all
+# three, having previously been dropped by a 2.5 s budget. The cost of a
+# generous value is bounded because only genuine capture nodes are ever probed
+# (see `_candidate_indices`).
+# AVFoundation renegotiates the format on every resolution set(), and the stock
+# sorter camera behind a USB 2.0 hub takes well over 6 s to walk
+# COMMON_RESOLUTIONS, so Detect silently dropped it (measured ~12 s for that
+# camera, ~18 s total for two cameras).
+PROBE_TIMEOUT_S = 20.0 if sys.platform == "darwin" else 6.0
 
 
 class CameraInfo(TypedDict):
@@ -136,11 +143,61 @@ def _windows_camera_names() -> dict[int, str]:
         return {}
 
 
+def _names_from_camera_profiler(payload: Any) -> dict[int, str]:
+    """Map ``system_profiler SPCameraDataType -json`` to ``{index: name}``.
+
+    AVFoundation's device index is not documented to follow this list, so a
+    payload with more than one camera is returned empty rather than guessing
+    which OpenCV index is which. A single camera is index 0 — the only case
+    where the two orders cannot disagree.
+    """
+    if not isinstance(payload, dict):
+        return {}
+    cameras = payload.get("SPCameraDataType")
+    if not isinstance(cameras, list) or len(cameras) != 1:
+        return {}
+    item = cameras[0]
+    if not isinstance(item, dict):
+        return {}
+    name = item.get("_name") or item.get("spcamera_model-id")
+    if not isinstance(name, str) or not name.strip():
+        return {}
+    return {0: name.strip()}
+
+
+def _macos_camera_names() -> dict[int, str]:
+    """Camera index → name from ``system_profiler``, or {} when that is a guess.
+
+    ``system_profiler`` is a system tool, not a new dependency. A missing
+    binary, a timeout, or unusable JSON leaves detection working with no
+    friendly names — the index OpenCV opens is what matters.
+    """
+    try:
+        completed = subprocess.run(
+            ["system_profiler", "SPCameraDataType", "-json"],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    if completed.returncode != 0 or not (completed.stdout or "").strip():
+        return {}
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return {}
+    return _names_from_camera_profiler(payload)
+
+
 def camera_names() -> dict[int, str]:
     if sys.platform.startswith("linux"):
         return _linux_camera_names()
     if sys.platform.startswith("win"):
         return _windows_camera_names()
+    if sys.platform == "darwin":
+        return _macos_camera_names()
     return {}
 
 

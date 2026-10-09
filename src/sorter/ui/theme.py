@@ -57,6 +57,105 @@ _FALLBACK = {
 }
 
 
+# A toggle colour reads as stop/danger once it has enough chroma to carry a
+# hue and that hue sits within this many degrees of pure red. Below the
+# chroma floor a warm tint (Gothic's surfaces, Sepia's brown) does not.
+_STOP_CHROMA = 40
+_STOP_HUE = 15
+# Saturation at or above this is a signal colour — go, stop, or warning —
+# rather than a neutral control. Midnight Blue's focus ring stays under it;
+# Comic Book's go-blue focus ring does not.
+_SIGNAL_SATURATION = 0.60
+
+
+def _hsv(value: str) -> tuple[int, float, float] | None:
+    """Chroma (0–255), hue in degrees, and saturation (0–1) for one CSS colour."""
+    color = QColor(value)
+    if not color.isValid():
+        return None
+    red, green, blue = color.red(), color.green(), color.blue()
+    peak, floor = max(red, green, blue), min(red, green, blue)
+    chroma = peak - floor
+    if peak == 0 or chroma == 0:
+        return chroma, 0.0, 0.0
+    if peak == red:
+        sector = ((green - blue) / chroma) % 6
+    elif peak == green:
+        sector = (blue - red) / chroma + 2
+    else:
+        sector = (red - green) / chroma + 4
+    return chroma, (sector * 60) % 360, chroma / peak
+
+
+def _unfit_for_toggle(value: str) -> bool:
+    """True when a colour would paint the view toggle as stop/danger or a signal."""
+    hsv = _hsv(value)
+    if hsv is None:
+        return True
+    chroma, hue, saturation = hsv
+    if chroma < _STOP_CHROMA:
+        return False
+    if hue <= _STOP_HUE or hue >= 360 - _STOP_HUE:
+        return True
+    return saturation >= _SIGNAL_SATURATION
+
+
+def _luminance(value: str) -> float:
+    color = QColor(value)
+
+    def channel(component: int) -> float:
+        scale = component / 255
+        if scale <= 0.04045:
+            return scale / 12.92
+        return ((scale + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * channel(color.red()) + 0.7152 * channel(color.green()) + 0.0722 * channel(color.blue())
+
+
+def _contrast(left: str, right: str) -> float:
+    hi, lo = sorted((_luminance(left), _luminance(right)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _first_neutral(colors: dict[str, str], keys: tuple[str, ...]) -> str:
+    """The first role that can paint a view toggle, else the least saturated."""
+    fits = [key for key in keys if not _unfit_for_toggle(colors[key])]
+    if fits:
+        return colors[fits[0]]
+    return min((colors[key] for key in keys), key=lambda value: (_hsv(value) or (0, 0.0, 1.0))[2])
+
+
+def catch_all_mode_colors(colors: dict[str, str]) -> dict[str, str]:
+    """Fill, ink, and outline for the Catch-All Top 10 / ALL toggle.
+
+    Dark, Light, Sepia, and Midnight Blue keep the accent ramp and
+    ``border_focus``. Gothic and Comic Book define ``accent`` as a stop red
+    (and Gothic's ``border_focus`` is the same crimson; Comic Book's is the
+    saturated go blue), so those roles fall through to the text ramp, which
+    is neutral in both. The resting fill stays the ordinary button colour
+    when ``accent_dim`` is already neutral.
+    """
+    fill = _first_neutral(colors, ("accent", "text", "text_highlight", "text_muted"))
+    ink = max(
+        (colors[key] for key in ("text_inverse", "text", "text_highlight", "text_muted")),
+        key=lambda value: _contrast(value, fill),
+    )
+    rest = ""
+    if _unfit_for_toggle(colors["accent_dim"]):
+        rest = f"background-color: {_first_neutral(colors, ('bg_card', 'bg_input', 'text_subtle', 'border'))};"
+    return {
+        "fill": fill,
+        "hover": _first_neutral(colors, ("accent_hover", "text_highlight", "text", "text_muted")),
+        "press": _first_neutral(colors, ("accent_press", "text_muted", "text", "text_highlight")),
+        "outline": _first_neutral(colors, ("border_focus", "text_muted", "text", "border")),
+        "ink": ink,
+        "rest": rest,
+        "rest_press": _first_neutral(colors, ("bg_card_sel", "bg_card", "bg_input", "text_subtle")),
+        "disabled_ink": _first_neutral(colors, ("text_muted", "text_subtle", "text")),
+        "disabled_border": _first_neutral(colors, ("border", "text_muted", "text")),
+    }
+
+
 def unavailable_ink(palette: dict[str, str]) -> str:
     """The mode pair's muted ink: text_subtle pulled 45% toward the window.
 
@@ -78,6 +177,8 @@ def unavailable_ink(palette: dict[str, str]) -> str:
 def build_stylesheet(palette: dict[str, str]) -> str:
     """QSS for one palette: window, sidebar, menus, QtAds panels, buttons, fields, status bar."""
     c = {**_FALLBACK, **{k: v for k, v in palette.items() if isinstance(v, str)}}
+    mode = catch_all_mode_colors(c)
+    rest_fill = f"\n    {mode['rest']}" if mode["rest"] else ""
     return f"""
 QMainWindow, QWidget {{
     background-color: {c["bg_window"]};
@@ -512,6 +613,45 @@ QPushButton#action:hover {{
 QPushButton#action:pressed {{
     background-color: {c["action_press"]};
     border-color: {c["action_press"]};
+}}
+
+/* Catch-All Top 10 / ALL. A view switch is a selection, so it stays off
+   stop/danger hues. The lit button prefers the accent ramp, and both
+   states draw a 2px border_focus outline — what Dark, Light, Sepia and
+   Midnight Blue already are. accent is a stop red in Gothic and Comic
+   Book, Gothic's border_focus is that same crimson, and Comic Book's
+   border_focus is the saturated go blue, so those roles fall through to
+   the text ramp (text / text_highlight / text_muted). The plain border
+   role sits too close to the panel on the dark themes to be that edge.
+   Unchecked keeps the plain QPushButton fill when accent_dim is neutral. */
+QPushButton#catchAllMode {{
+    border: 2px solid {mode["outline"]};{rest_fill}
+}}
+QPushButton#catchAllMode:hover {{
+    border-color: {mode["outline"]};
+}}
+QPushButton#catchAllMode:pressed {{
+    background-color: {mode["rest_press"]};
+    border-color: {mode["outline"]};
+}}
+QPushButton#catchAllMode:checked {{
+    background-color: {mode["fill"]};
+    color: {mode["ink"]};
+    border: 2px solid {mode["outline"]};
+}}
+QPushButton#catchAllMode:checked:hover {{
+    background-color: {mode["hover"]};
+    border-color: {mode["outline"]};
+}}
+QPushButton#catchAllMode:checked:pressed {{
+    background-color: {mode["press"]};
+    border-color: {mode["outline"]};
+}}
+QPushButton#catchAllMode:disabled,
+QPushButton#catchAllMode:checked:disabled {{
+    color: {mode["disabled_ink"]};
+    background-color: transparent;
+    border: 2px solid {mode["disabled_border"]};
 }}
 
 QPushButton#update {{

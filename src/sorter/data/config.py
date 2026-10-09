@@ -844,26 +844,104 @@ class Config:
                 return slot
         return None
 
-    def assign_headstamp_to_empty_slot(self, name: str) -> int | None:
-        """Route an unassigned headstamp to the first empty slot. Returns the
-        slot it landed in, or None when there is no free slot.
+    def _parent_assignment_target(self, label: str) -> Any | None:
+        """The parent whose slot routing uses for ``label``, if it has one.
 
-        Respects existing assignments and only ever places one headstamp into
-        an empty slot.
+        A child rolls up to its parent. A label that is already a parent name
+        (a parent-trained model, or the Catch-All panel's key) is that parent.
+        An orphan headstamp and an unknown label return None so the caller
+        falls through to the per-headstamp slot.
         """
-        if not name:
+        mid = self.settings.get_active_model_id()
+        if mid is None:
             return None
-        package = self.run_package_mode
-        if package:
-            if self.slots_for_headstamp_package(name):
-                return None  # already assigned somewhere
-        elif self.slot_for_headstamp(name):
+        headstamp = next((h for h in self.headstamps_repo.list_for_model(mid) if h.name == label), None)
+        if headstamp is not None and headstamp.parent_id is not None:
+            return self.parents_repo.get(headstamp.parent_id)
+        return self.parents_repo.find_by_name(mid, label)
+
+    def _slot_in_range(self, slot: int) -> bool:
+        """True for a physical bin the board can drop into (not the catch-all)."""
+        slot_count = int(self.serial.get("slot_quantity", 8))
+        return 1 <= int(slot) < max(1, slot_count)
+
+    def _place_unassigned_label(self, label: str, slot: int) -> int | None:
+        """Write a stripped ``label`` onto ``slot``. The caller holds the transaction.
+
+        Refuses a slot outside ``1 .. slot_quantity-1``, a label that already
+        routes somewhere, and — outside package mode — a label this context
+        does not know. Package mode adds the name beside whoever is already
+        on the slot. Parent mode writes the parent's slot, because that is
+        what ``slot_for_headstamp`` reads. The setters keep the active
+        sorting template in step.
+        """
+        if not self._slot_in_range(slot):
             return None
-        slot = self.first_empty_slot(package=package)
-        if slot is None:
+        if self.run_package_mode:
+            if self.slots_for_headstamp_package(label):
+                return None
+            self.set_package_slot_headstamp(slot, label, True)
+            return slot
+        if self.use_parent_classifications:
+            parent = self._parent_assignment_target(label)
+            if parent is not None:
+                if int(parent.slot) > 0:
+                    return None
+                if not self.set_parent_slot(parent.id, slot):
+                    return None
+                return slot
+        if self.slot_for_headstamp(label):
             return None
-        if package:
-            self.set_package_slot_headstamp(slot, name, True)
-        else:
-            self.set_headstamp_slot(name, slot)
+        if not self.set_headstamp_slot(label, slot):
+            return None
         return slot
+
+    def assign_label_to_empty_slot(self, label: str) -> int | None:
+        """Place ``label`` in the first empty slot. Returns that slot, or None.
+
+        None means there is no free slot, the label is already routed, or —
+        in standard and AI Config mode — the label is not a headstamp this
+        context knows (``set_headstamp_slot`` returned False). In parent mode
+        the slot written is the *parent's*, because that is the slot
+        ``slot_for_headstamp`` reads; writing the child's slot leaves every
+        later case on the catch-all. Package mode adds the label to the first
+        empty package slot. The whole change is one transaction.
+        """
+        label = (label or "").strip()
+        if not label:
+            return None
+        with self.db.transaction():
+            slot = self.first_empty_slot()
+            if slot is None:
+                return None
+            return self._place_unassigned_label(label, slot)
+
+    def assign_label_to_slot(self, label: str, slot: int) -> int | None:
+        """Place an unassigned ``label`` on ``slot``. Returns that slot, or None.
+
+        The same rules as :meth:`assign_label_to_empty_slot`: already routed,
+        unknown outside package mode, and a slot the board does not have, all
+        return None. The target does not have to be empty or occupied — the
+        Catch-All menu is what lists only bins that already have brass, so a
+        low-count headstamp can share one. Callers that want the first free
+        bin keep using :meth:`assign_label_to_empty_slot`.
+        """
+        label = (label or "").strip()
+        if not label:
+            return None
+        try:
+            slot_n = int(slot)
+        except (TypeError, ValueError):
+            return None
+        with self.db.transaction():
+            return self._place_unassigned_label(label, slot_n)
+
+    def assign_headstamp_to_empty_slot(self, name: str) -> int | None:
+        """Route an unassigned headstamp to the first empty slot.
+
+        Returns the slot it landed in, or None when there is no free slot,
+        it is already routed, or it does not exist. Delegates to
+        :meth:`assign_label_to_empty_slot`, which is what auto-select and the
+        Catch-All panel both call.
+        """
+        return self.assign_label_to_empty_slot(name)

@@ -8,8 +8,8 @@ is its own module with a ``build_*(win)`` factory that this only wires up.
 
 The panels are Qt Advanced Docking System dock widgets (see ``_build_dock``
 and ``DOCK_HOMES``): serial monitor at the bottom, classification history,
-user guide, themes and messages on the right, all but the monitor closed until
-asked for.
+the catch-all breakdown, user guide, themes and messages on the right, all
+but the monitor closed until asked for.
 The sidebar+pages are the manager's *central* widget, which is what makes
 them a fixed anchor the panels arrange around rather than a panel themselves.
 
@@ -86,9 +86,10 @@ from ..hardware.serial_log import SerialTrafficLog
 from ..ml import classifier, local_inference
 from ..paths import app_data_dir
 from .ai_page import build_ai_page
+from .catch_all_view import build_catch_all_view
 from .community_page import build_community_page
 from .dialog_headstamp_assign import HeadstampAssignDialog, build_headstamp_assign_dialog
-from .dialog_slot_assign import CATCH_ALL_HINT, SlotAssignDialog
+from .dialog_slot_assign import SlotAssignDialog
 from .dialog_template import EditTemplateDialog, NewTemplateDialog
 from .dialog_winforms_import import (
     SECTION_NAME as WINFORMS_IMPORT_SECTION,
@@ -301,6 +302,7 @@ MIN_WINDOW_SIZE = (960, 660)
 DOCK_HOMES = (
     ("serial_dock", ads.BottomDockWidgetArea),
     ("history_dock", ads.RightDockWidgetArea),
+    ("catch_all_dock", ads.RightDockWidgetArea),
     ("help_dock", ads.RightDockWidgetArea),
     ("themes_dock", ads.RightDockWidgetArea),
     ("messages_dock", ads.RightDockWidgetArea),
@@ -497,6 +499,7 @@ class QtMainWindow(QMainWindow):
         # Docks are built before the menus: View hosts their toggle actions.
         self._build_serial_dock()
         self._build_history_dock()
+        self._build_catch_all_dock()
         self._build_help_dock()
         self._build_themes_dock()
         self._build_messages_dock()
@@ -1124,6 +1127,18 @@ class QtMainWindow(QMainWindow):
         # Supplementary, so it starts out of the way; View re-opens it.
         self.history_dock.toggleView(False)
 
+    def _build_catch_all_dock(self) -> None:
+        self.catch_all_view = build_catch_all_view(self)
+        # No scroll area: the table scrolls itself and should learn the
+        # panel's real size, the same way Classification History does.
+        self.catch_all_dock = self._build_dock(
+            "Catch-All",
+            self.catch_all_view,
+            ads.RightDockWidgetArea,
+            scroll_area=False,
+        )
+        self.catch_all_dock.toggleView(False)
+
     def _redock_panels(self) -> None:
         """Return every open panel to its home area, un-floated.
 
@@ -1550,6 +1565,9 @@ class QtMainWindow(QMainWindow):
         history_toggle = self.history_dock.toggleViewAction()
         history_toggle.setText("Classification History")
         self.menus["View"].addAction(history_toggle)
+        catch_all_toggle = self.catch_all_dock.toggleViewAction()
+        catch_all_toggle.setText("Catch-All breakdown")
+        self.menus["View"].addAction(catch_all_toggle)
         help_toggle = self.help_dock.toggleViewAction()
         help_toggle.setText("User Guide panel")
         self.menus["View"].addAction(help_toggle)
@@ -1627,9 +1645,9 @@ class QtMainWindow(QMainWindow):
         build_license_dialog(self).exec()
 
     def open_slot_editor(self, slot: int) -> None:
-        """Edit what routes to one slot. The catch-all isn't configurable."""
+        """Edit what routes to one slot. The catch-all opens its breakdown."""
         if int(slot) == 0:
-            self.set_status(CATCH_ALL_HINT)
+            self.reveal_dock(self.catch_all_dock)
             return
         dialog = SlotAssignDialog(self.config, int(slot), self)
         dialog.changed.connect(self._refresh_sort_grid)
@@ -1735,6 +1753,9 @@ class QtMainWindow(QMainWindow):
         self.slot_grid.reset_counts()
         self._master_count = 0
         self.master_count_label.setText("0")
+        view = getattr(self, "catch_all_view", None)
+        if view is not None:
+            view.reset()
 
     def reset_counts(self) -> None:
         """Zero the dashboard's counters and the run's package batches."""
@@ -1743,6 +1764,43 @@ class QtMainWindow(QMainWindow):
         if reset is not None:
             reset()
         self.set_status("Counters reset.")
+
+    def assign_from_catch_all(self, key: str, slot: int | None = None) -> None:
+        """Assign from the Catch-All panel.
+
+        ``slot`` None fills the first empty bin. A slot number shares that
+        bin with the headstamps already there. The slot a case will use is
+        fixed when it is classified, so doing this mid-run is safe: cases
+        already in the wheel still drop in the catch-all. The active template
+        follows because both writers go through the setters.
+        """
+        if slot is None:
+            placed = self.config.assign_label_to_empty_slot(key)
+            sharing = False
+        else:
+            placed = self.config.assign_label_to_slot(key, slot)
+            sharing = True
+        if placed is None:
+            return
+        log.info(
+            "slot assignment: %r -> slot %d (source=catch_all, running=%s)",
+            key,
+            placed,
+            self._is_running,
+        )
+        self.bus.post(
+            "run/assignment_changed",
+            {"label": key, "slot": placed, "source": "catch_all"},
+        )
+        self._refresh_sort_grid()
+        if sharing:
+            self.set_status(
+                f"{key} → Slot {placed}, sharing that bin. Cases already in the wheel still drop in the catch-all."
+            )
+            return
+        self.set_status(
+            f"{key} → Slot {placed}. Put an empty bin there; cases already in the wheel still drop in the catch-all."
+        )
 
     def reset_slot_count(self, slot: int) -> None:
         """Package mode: empty one bin and let it refill while the run continues."""
@@ -1911,6 +1969,8 @@ class QtMainWindow(QMainWindow):
             self.serial_monitor.apply_palette()
         if hasattr(self, "history_view"):
             self.history_view.apply_palette()
+        if hasattr(self, "catch_all_view"):
+            self.catch_all_view.apply_palette()
         if hasattr(self, "models_page"):
             self.models_page.apply_palette()
         if hasattr(self, "messages_view"):

@@ -182,8 +182,8 @@ def test_a_layout_saved_before_the_panel_existed_still_restores(window_factory, 
     area = '<Area Tabs="1" Current="Messages"><Widget Name="Messages" Closed="1"/></Area>'
     for old, new in (
         (area, ""),
-        ('Orientation="|" Count="5"', 'Orientation="|" Count="4"'),
-        ("0 0 0 0 0 ", "0 0 0 0 "),
+        ('Orientation="|" Count="6"', 'Orientation="|" Count="5"'),
+        ("0 0 0 0 0 0 ", "0 0 0 0 0 "),
     ):
         assert old in xml
         xml = xml.replace(old, new, 1)

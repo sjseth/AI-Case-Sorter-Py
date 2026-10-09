@@ -201,6 +201,9 @@ def test_the_probe_budget_default_is_the_module_constant() -> None:
     # The slowest camera measured needs ~2.6 s; anything near the old 2.5 s is
     # a regression even if it technically still passes for a faster device.
     assert camera.PROBE_TIMEOUT_S >= 4.0
+    # macOS walks COMMON_RESOLUTIONS through AVFoundation, which renegotiates
+    # on every set(); 6 s drops the stock camera behind a USB 2.0 hub.
+    assert camera.PROBE_TIMEOUT_S == (20.0 if sys.platform == "darwin" else 6.0)
 
 
 def test_a_device_that_answers_in_time_is_listed_without_comment(
@@ -234,3 +237,70 @@ def test_a_device_that_blows_the_budget_is_dropped_but_reported(
     assert "Vitade AF" in err, "name it, so the reader knows which camera went missing"
     assert "0.2" in err, "quote the budget it missed"
     assert "index 0" not in err
+
+
+def test_profiler_maps_a_single_camera_to_index_zero() -> None:
+    payload = {"SPCameraDataType": [{"_name": "  Sonix UVC Camera  "}]}
+    assert camera._names_from_camera_profiler(payload) == {0: "Sonix UVC Camera"}
+
+
+def test_profiler_refuses_to_guess_an_order_for_several_cameras() -> None:
+    """system_profiler order is not AVFoundation's index, so two names is no names."""
+    payload = {"SPCameraDataType": [{"_name": "FaceTime"}, {"_name": "Sonix"}]}
+    assert camera._names_from_camera_profiler(payload) == {}
+
+
+def test_profiler_ignores_a_payload_that_is_not_one_named_camera() -> None:
+    assert camera._names_from_camera_profiler(None) == {}
+    assert camera._names_from_camera_profiler([]) == {}
+    assert camera._names_from_camera_profiler({"SPCameraDataType": "nope"}) == {}
+    assert camera._names_from_camera_profiler({"SPCameraDataType": []}) == {}
+    assert camera._names_from_camera_profiler({"SPCameraDataType": ["string"]}) == {}
+    assert camera._names_from_camera_profiler({"SPCameraDataType": [{"_name": "  "}]}) == {}
+    # A model id is an acceptable stand-in when _name is missing.
+    assert camera._names_from_camera_profiler({"SPCameraDataType": [{"spcamera_model-id": "HD Pro"}]}) == {0: "HD Pro"}
+
+
+def test_macos_names_swallow_a_missing_or_slow_profiler(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    def missing(*_args: Any, **_kwargs: Any) -> dict[int, str]:
+        raise OSError("not found")
+
+    monkeypatch.setattr(camera.subprocess, "run", missing)
+    assert camera._macos_camera_names() == {}
+
+    def slow(*_args: Any, **_kwargs: Any) -> dict[int, str]:
+        raise subprocess.TimeoutExpired(cmd="system_profiler", timeout=8)
+
+    monkeypatch.setattr(camera.subprocess, "run", slow)
+    assert camera._macos_camera_names() == {}
+
+
+def test_macos_names_swallow_a_failed_or_unreadable_profiler(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Completed:
+        def __init__(self, returncode: int, stdout: str) -> None:
+            self.returncode = returncode
+            self.stdout = stdout
+
+    answers = iter(
+        (
+            Completed(1, ""),
+            Completed(0, "not-json"),
+            Completed(0, '{"SPCameraDataType": [{"_name": "Sonix"}]}'),
+        )
+    )
+    monkeypatch.setattr(camera.subprocess, "run", lambda *_a, **_k: next(answers))
+    assert camera._macos_camera_names() == {}
+    assert camera._macos_camera_names() == {}
+    assert camera._macos_camera_names() == {0: "Sonix"}
+
+
+def test_camera_names_asks_the_profiler_only_on_macos(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(camera.sys, "platform", "darwin")
+    monkeypatch.setattr(camera, "_macos_camera_names", lambda: {0: "Sonix"})
+    assert camera.camera_names() == {0: "Sonix"}
+
+    monkeypatch.setattr(camera.sys, "platform", "linux")
+    monkeypatch.setattr(camera, "_linux_camera_names", lambda: {0: "UVC"})
+    assert camera.camera_names() == {0: "UVC"}

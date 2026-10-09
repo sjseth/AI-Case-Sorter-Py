@@ -9,8 +9,8 @@ day, in the order you meet them.
   menus that frame everything else.
 - [Panels](#panels) — the movable side and bottom panels:
   [Serial Monitor](#serial-monitor), [Classification
-  History](#classification-history), the guide you are reading,
-  [Themes](#themes-panel) and [Messages](#messages).
+  History](#classification-history), [Catch-All](#catch-all-panel), the
+  guide you are reading, [Themes](#themes-panel) and [Messages](#messages).
 - [Sort dashboard](#sort-dashboard) — the main working screen: the current
   case, the slot cards, sorting templates and the run controls.
 - [Train](#train) — capture cases, label them, and train a model from them.
@@ -111,12 +111,13 @@ Along the bottom, from left to right:
 
 ## Panels
 
-Five panels can sit around your working screen. Each one can be moved,
+Six panels can sit around your working screen. Each one can be moved,
 tabbed together with another, torn off into its own floating window, or
 closed:
 
 - **Serial Monitor** — along the bottom, open by default.
 - **Classification History** — on the right, closed by default.
+- **Catch-All** — on the right, closed by default.
 - **User Guide** — on the right, closed by default (this guide).
 - **Themes** — on the right, closed by default.
 - **Messages** — on the right, closed by default.
@@ -184,6 +185,86 @@ of it, which is what makes watching one position work.
 **Zoom** (at the bottom of the panel, 50–200%) sets the tile size, and feeds
 the same count: bigger tiles are easier to read across a bench, smaller tiles
 mean more of them fit. Click any tile to open that case's image full size.
+
+### Catch-All panel
+
+Slot 0 is the Catch-All: cases the run could not put in a bin. Open the
+panel from **View → Catch-All breakdown**, or by clicking the Catch-All
+card on the [slot grid](#slot-cards). It shows how many cases went there
+this session, which headstamps they were, and why.
+
+The header is that count against everything sorted so far ("319 in catch-all
+of 615 sorted (52%)"). It stays the number of cases physically in the bin,
+even after you assign some of them.
+
+**Top 10** and **ALL**, at the upper right, choose how much of the list you
+see. Exactly one is lit, in a neutral highlight; the other stays an
+ordinary button. Both keep a visible outline. The panel
+opens on **Top 10**. Each row is a headstamp that would still land in the
+catch-all if it were seen now, with its remaining count, its share of the
+catch-all, and the reason:
+
+- **Below floor** — the prediction did not reach the [confidence
+  floor](#run-options). This is the only reason drawn in the warning colour.
+- **Unassigned** — the headstamp is in the model, and its slot is the Catch-All.
+- **Unknown** — the label was empty, or it is not one of this model's headstamps.
+- **Upside down** — the case was classified as upside down, which has no bin
+  of its own. That is a normal trained class, not a failure.
+- **Batch full** — [package mode](#package-mode), and every slot for that
+  headstamp was already full.
+
+**Top 10** keeps the ten fullest of those rows. Anything past them is one
+greyed **Other** row ("Other: 2 headstamps, 4 cases"). It cannot be selected.
+**ALL** lists every such headstamp, in the same order, with no Other row.
+The table scrolls when that list is longer than the panel. Opening the panel,
+and switching between the two, leaves the panel the size you last had it.
+The lit choice lasts until you quit.
+
+A headstamp grouped under a parent is listed as the parent; point at the
+reason and the tooltip names the child labels and the full count of each
+reason.
+
+Giving a headstamp a slot — from this panel, from a slot card, or from
+**Assign by headstamp** — takes it off that list, and the next one moves up.
+That only removes the **Unassigned** cases, and an **Unknown** label that
+now has a slot. **Below floor**, **Upside down** and **Batch full** stay,
+because a bin does not fix them; a row that was a mix of those and
+unassigned cases shrinks to the part that is left. Take the slot away again
+and the headstamp comes back at its full count.
+
+Under the table, a line keeps what left the list: "Assigned this session:
+BPS → #6 (42 already in bin 0), IK → #7 (17)". Those cases are still in the
+Catch-All bin; the next run is what puts them in the new slot. **Reset
+counts** clears the line with the rest of the tally.
+
+**Assign {name} to empty slot #N**, under the table, puts the selected
+headstamp in the first empty bin and then selects the next headstamp that
+can still be assigned, so you can work down the list. It does this for any
+row, including one that only **ALL** shows. The button is
+unavailable, and says why, when nothing is selected, when there is no empty
+slot, when the label is unknown, or when it already has a slot — the button
+then reads **→ #N**. A row that is only below the confidence floor, for a
+headstamp that already has a slot, is the same: those cases missed the
+floor, and assigning them again would not move them.
+
+**Add to existing slot…**, beside that button, lists the bins that already
+have brass ("#4 WMA, WMA NATO"), in slot order. Pick one and the selected
+headstamp shares that bin with whatever is already there — useful when a
+headstamp shows up rarely and does not need a bin of its own. It is
+unavailable, and says why, when nothing is selected, when the label is
+unknown, when it already has a slot, or when no slot has a headstamp yet.
+Assign to empty slot stays the main button. Either choice selects the next
+headstamp that can still be assigned. The menu stays open while cases keep
+arriving, so a bin can be picked during a run; the table catches up when
+the menu closes.
+
+You can assign during a run. The case already in the wheel still drops in
+the Catch-All; put an empty bin in the slot you just filled, and the next
+case of that headstamp uses it. In parent mode the assignment is the
+parent's slot, which is the slot the run actually reads.
+
+The counts follow the slot cards: they survive Stop and Start, and **Reset
+counts** clears them together with the cards.
 
 ### Themes panel
 
@@ -253,6 +334,10 @@ routed to a slot; the rest are your bins. A card shows:
 - every headstamp currently routed to it, listed in full — the card grows to
   fit the list rather than truncating it
 
+Click the **Catch-All** card (it says "🔍 Click for breakdown") to open the
+[Catch-All panel](#catch-all-panel). The other cards say "✎ Click to edit"
+and open the [assignment editor](#editing-an-assignment).
+
 Above the grid: **Assign by headstamp…** opens the
 [headstamp-first view](#assigning-by-headstamp) of the whole layout,
 **Sorted this run** counts every case this run has sorted,
@@ -262,9 +347,10 @@ picker names the layout the cards are showing.
 
 ### Editing an assignment
 
-Click any card except Catch-All to open its assignment editor. Tick a
-headstamp to route it to that slot; unticking sends it back to the
-Catch-All. Outside of [package mode](#package-mode) a headstamp can only be
+Click a numbered slot's card to open its assignment editor. The Catch-All
+card opens the [Catch-All panel](#catch-all-panel) instead — slot 0 is not
+a bin you configure from that editor. Tick a headstamp to route it to the
+slot; unticking sends it back to the Catch-All. Outside of [package mode](#package-mode) a headstamp can only be
 assigned to one slot at a time — ticking it here moves it off whichever slot
 it was in before, and the row tells you which one that was.
 
@@ -343,7 +429,10 @@ changes how a run behaves:
 - **Confidence floor** — the percentage a prediction has to reach to be
   trusted. Below it, the case goes to the Catch-All.
 - **Automatically select trays** — when a confident prediction has no slot,
-  route it to the first empty one and keep the assignment.
+  route it to the first empty one and keep the assignment. With parent
+  classifications on, that assignment is the parent's slot, which is what
+  the run actually uses — assigning the child on its own would leave the
+  cases in the Catch-All. A label the model does not have is left alone.
 - **Package mode** and **Batch size** — see [package mode](#package-mode).
 
 ### Start, Stop, and Manual feed

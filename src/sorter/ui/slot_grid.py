@@ -43,8 +43,7 @@ class SlotCard(QFrame):
         super().__init__(parent)
         self.slot_number = slot_number
         self.setObjectName("slotCard")
-        if slot_number > 0:
-            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         column = QVBoxLayout(self)
         column.setContentsMargins(10, 8, 10, 8)
         column.setSpacing(2)
@@ -75,9 +74,8 @@ class SlotCard(QFrame):
         self.names_label.setWordWrap(True)
         self.names_label.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.edit_hint = QLabel("✎ Click to edit", self)
+        self.edit_hint = QLabel("🔍 Click for breakdown" if slot_number == 0 else "✎ Click to edit", self)
         self.edit_hint.setObjectName("slotEdit")
-        self.edit_hint.setVisible(slot_number > 0)
 
         column.addWidget(self.title_label)
         column.addLayout(count_row)

@@ -31,7 +31,7 @@ import json
 import shutil
 import sqlite3
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +40,7 @@ from sqlite_utils.migrations import Migrations
 
 from .. import paths
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Split out of SCHEMA_DDL because the v3 -> v4 ladder step replays it verbatim;
 # one copy means the step cannot drift from the schema.
@@ -62,6 +62,34 @@ CREATE TABLE IF NOT EXISTS slot_templates (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_slot_templates_name
   ON slot_templates(IFNULL(model_id, -1), mode, name COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_slot_templates_scope ON slot_templates(model_id, mode);
+"""
+
+# One row per Start (or per stretch of Manual feeds) and one counter row per
+# (label, slot, reason) inside it. Replayed by 0007_sort_runs; IF NOT EXISTS
+# so the DDL pass and the migration cannot drift.
+SORT_RUNS_DDL = """
+CREATE TABLE IF NOT EXISTS sort_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  model_id INTEGER REFERENCES models(id) ON DELETE SET NULL,
+  model_name TEXT,
+  mode TEXT NOT NULL CHECK(mode IN ('standard','package')),
+  template_name TEXT,
+  confidence_floor INTEGER,
+  slot_quantity INTEGER,
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sort_runs_model_started
+  ON sort_runs(model_id, started_at);
+CREATE TABLE IF NOT EXISTS sort_run_counts (
+  run_id INTEGER NOT NULL REFERENCES sort_runs(id) ON DELETE CASCADE,
+  label TEXT NOT NULL,
+  parent TEXT,
+  slot INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (run_id, label, slot, reason)
+);
 """
 
 # Split out of SCHEMA_DDL for the same reason as SLOT_TEMPLATES_DDL: the
@@ -136,6 +164,7 @@ CREATE TABLE IF NOT EXISTS headstamps (
 CREATE INDEX IF NOT EXISTS idx_headstamps_model ON headstamps(model_id);
 """
     + SLOT_TEMPLATES_DDL
+    + SORT_RUNS_DDL
     + """
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -303,6 +332,77 @@ def _models_checkpoint_env(db: sqlite_utils.Database) -> None:
     _add_missing_model_columns(db.conn)
 
 
+@MIGRATIONS(name="0007_sort_runs")
+def _sort_runs(db: sqlite_utils.Database) -> None:
+    """Per-run slot counts: ``sort_runs`` plus ``sort_run_counts``.
+
+    Replays the shared ``SORT_RUNS_DDL`` constant (all IF NOT EXISTS), so the
+    step cannot drift from the schema. A fresh database already has the
+    tables from the DDL pass; this is what an older file receives.
+    """
+    _execute_script(db.conn, SORT_RUNS_DDL)
+
+
+class LockedRow:
+    """One result row, copied off the cursor before the connection lock drops.
+
+    ``sqlite3.Row`` keeps the cursor's column description. Another thread
+    running a statement on the same connection can swap that description
+    before ``row["id"]`` indexes the values, which raises
+    ``IndexError: tuple index out of range``. This holds names and values
+    that no longer point at the cursor. A missing name raises ``IndexError``,
+    matching ``sqlite3.Row`` (``Model.from_row`` relies on that).
+    """
+
+    def __init__(self, names: Sequence[str], values: tuple[Any, ...]) -> None:
+        self._names = tuple(names)
+        self._values = values
+        self._index = {name: i for i, name in enumerate(self._names)}
+
+    def __getitem__(self, key: str | int) -> Any:
+        if isinstance(key, int):
+            return self._values[key]
+        try:
+            return self._values[self._index[key]]
+        except KeyError:
+            raise IndexError(key) from None
+
+    def keys(self) -> list[str]:
+        return list(self._names)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __iter__(self) -> Iterator[Any]:
+        # ``dict(row)`` follows ``keys()``; iteration follows the values, as
+        # ``sqlite3.Row`` does.
+        return iter(self._values)
+
+
+class _Fetched:
+    """A statement's rows, already fetched. ``fetchone`` / ``fetchall`` / iteration."""
+
+    def __init__(self, rows: list[LockedRow], lastrowid: int | None) -> None:
+        self._rows = rows
+        self._index = 0
+        self.lastrowid = lastrowid
+
+    def fetchall(self) -> list[LockedRow]:
+        rows = self._rows[self._index :]
+        self._index = len(self._rows)
+        return rows
+
+    def fetchone(self) -> LockedRow | None:
+        if self._index >= len(self._rows):
+            return None
+        row = self._rows[self._index]
+        self._index += 1
+        return row
+
+    def __iter__(self) -> Iterator[LockedRow]:
+        yield from self.fetchall()
+
+
 class Database:
     """Owns a single sqlite3.Connection for the lifetime of the app."""
 
@@ -310,14 +410,12 @@ class Database:
         self.path = Path(path) if path is not None else paths.db_path()
         self._conn: sqlite3.Connection | None = None
         # Worker threads (RunController, training manager, community
-        # downloader) read/write the DB while the UI thread does the same.
-        # sqlite3 raises "objects created in a thread can only be used in
-        # that same thread" by default; check_same_thread=False allows the
-        # cross-thread access and this RLock serialises multi-statement
-        # transactions so two threads can't interleave a BEGIN/COMMIT pair.
-        # Single-statement execute() calls are atomic at the SQLite layer
-        # so they don't need the lock, but transaction() / SAVEPOINT blocks
-        # do.
+        # downloader) read and write this connection while the UI thread does
+        # the same. ``check_same_thread=False`` is what allows that; it does
+        # not make the connection safe. ``execute`` and ``transaction`` both
+        # hold this RLock for the whole statement, including the fetch — a
+        # ``sqlite3.Row`` is only coherent if nothing else uses the connection
+        # until its values have been copied off (see ``LockedRow``).
         self._lock = threading.RLock()
 
     @property
@@ -349,9 +447,8 @@ class Database:
 
         Reentrant: when called within an existing transaction, uses a
         SAVEPOINT so nested `with db.transaction()` blocks compose naturally.
-        The RLock serialises across threads so concurrent transactions
-        from worker threads (test_once, training subprocess wire-up,
-        community downloads) and the UI thread don't interleave.
+        The RLock is the same one ``execute`` takes, so a transaction and a
+        single-statement read from another thread cannot interleave.
         """
         with self._lock:
             conn = self.conn
@@ -373,6 +470,26 @@ class Database:
                 except Exception:
                     conn.execute("ROLLBACK")
                     raise
+
+    def execute(
+        self,
+        sql: str,
+        parameters: Sequence[Any] | Mapping[str, Any] = (),
+    ) -> _Fetched:
+        """Run one statement and copy its rows out, under the connection lock.
+
+        The lock covers ``execute`` and ``fetchall``. Releasing it before the
+        fetch is the race: the next statement on this connection can rebind
+        the cursor description to a different row shape. Reentrant, so a
+        repository call made inside ``transaction()`` joins that transaction
+        instead of starting another.
+        """
+        with self._lock:
+            cur = self.conn.execute(sql, parameters)
+            names = tuple(column[0] for column in cur.description) if cur.description else ()
+            values = [tuple(row) for row in cur.fetchall()]
+            lastrowid = cur.lastrowid
+        return _Fetched([LockedRow(names, row) for row in values], lastrowid)
 
     def ensure_initialized(self, legacy_config_json: Path | None = None) -> None:
         """Create the DB if missing, run DDL, and migrate from legacy JSON.
@@ -537,5 +654,5 @@ class Database:
     # ----- raw dump helper (debug) -------------------------------------------
 
     def dump_table(self, table: str) -> list[dict[str, Any]]:
-        rows = self.conn.execute(f"SELECT * FROM {table}").fetchall()
+        rows = self.execute(f"SELECT * FROM {table}").fetchall()
         return [dict(r) for r in rows]

@@ -53,10 +53,13 @@ def test_clicking_a_card_opens_that_slots_editor(window, monkeypatch) -> None:
     assert opened == [3]
 
 
-def test_the_catch_all_has_nothing_to_configure(window) -> None:
+def test_the_catch_all_opens_its_breakdown_instead_of_an_editor(window) -> None:
+    assert window.catch_all_dock.isClosed()
+
     window.open_slot_editor(0)
 
-    assert "ends up here" in window.statusBar().currentMessage()
+    assert not window.catch_all_dock.isClosed()
+    assert window.catch_all_dock.windowTitle() == "Catch-All"
 
 
 def test_editor_lists_every_headstamp_of_the_active_model(config, editor) -> None:

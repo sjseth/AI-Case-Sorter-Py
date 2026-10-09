@@ -10,20 +10,35 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 from .. import paths
 from ..community.feedback import FeedbackService
 from ..data.config import Config
-from ..data.repository import ModelRepo
+from ..data.repository import ModelRepo, SortRunRepo
 from ..hardware import image_proc, serial_broker
 from ..ml import classifier
 from ..training.dataset import save_training_image
+from .catch_all import classify_reason
 from .events import EventBus
 
 log = logging.getLogger(__name__)
 
 SlotCallback = Callable[[int], None]
+
+
+class Destination(NamedTuple):
+    """Where one prediction goes, and why.
+
+    ``reason`` is a :mod:`sorter.control.catch_all` code. ``halt`` is only
+    ever True in package mode, when every slot for the headstamp is full.
+    """
+
+    slot: int
+    above_floor: bool
+    halt: bool
+    reason: str
+
 
 DISCONNECT_ERROR = "Serial disconnected"
 
@@ -63,6 +78,18 @@ class RunController:
         # in the right slot. Default 0 (catch-all) on a fresh controller —
         # the first Manual feed click or continuous Run prime sends that.
         self._last_classified_slot = 0
+        # The open sort_runs row, if storage is willing. None when there is
+        # no db, or the last open failed (logged, and not retried until the
+        # next start() — a broken disk must not spam the log once per case).
+        self._sort_run_id: int | None = None
+        self._sort_run_broken = False
+        # The classifier prompt's headstamp names. Slot routing still reads
+        # the DB every case so a mid-run assignment applies immediately; only
+        # the name list is cached, and dropped when the model or the
+        # assignments change (an added headstamp posts one of these).
+        self._headstamp_names: list[str] | None = None
+        bus.subscribe("run/assignment_changed", self._invalidate_headstamp_names)
+        bus.subscribe("mode/changed", self._invalidate_headstamp_names)
 
     @property
     def is_running(self) -> bool:
@@ -75,6 +102,12 @@ class RunController:
         # NB: package batch counters are intentionally NOT reset here — a run
         # that's stopped and restarted resumes its batches where it left off.
         # They clear only via the Reset counters button or a per-slot reset.
+        # A Manual-feed stretch may have left a run open; close it so this
+        # Start is its own row, then open the new one before the thread
+        # starts (the loop's finally is what closes it).
+        self._close_sort_run()
+        self._sort_run_broken = False
+        self._open_sort_run()
         self._thread = threading.Thread(target=self._loop, name="RunController", daemon=True)
         self._thread.start()
         self.bus.post("run/started", None)
@@ -100,6 +133,24 @@ class RunController:
             self.broker.stop_run()
         except Exception:
             pass
+
+    def _invalidate_headstamp_names(self, _payload: Any = None) -> None:
+        self._headstamp_names = None
+
+    def _classifier_names(self) -> list[str]:
+        """Headstamp names for the classifier prompt.
+
+        Read once and reused until ``run/assignment_changed`` or
+        ``mode/changed``. The list is what the model is allowed to answer
+        with; it does not carry slots, so a slot edit that does not add or
+        remove a name is still safe to keep until the next invalidation
+        reloads it.
+        """
+        names = self._headstamp_names
+        if names is None:
+            names = [str(entry["name"]) for entry in self.config.headstamps if entry.get("name")]
+            self._headstamp_names = names
+        return names
 
     def _parent_label(self, label: str) -> str | None:
         """Resolve a prediction's parent group, but only in parent mode.
@@ -132,30 +183,51 @@ class RunController:
         Below-floor predictions are forced to the catch-all (slot 0). Returns
         ``(slot, above_floor)``.
         """
-        slot, above_floor, _halt = self._resolve_destination(label, confidence)
-        return slot, above_floor
+        dest = self._resolve_destination(label, confidence)
+        return dest.slot, dest.above_floor
 
-    def _resolve_destination(self, label: str, confidence: float) -> tuple[int, bool, bool]:
-        """Full routing decision for a prediction: ``(slot, above_floor, halt)``.
+    def _label_known(self, label: str) -> bool:
+        """True when ``label`` is a headstamp (or parent name) of the active model.
+
+        ``slot_for_headstamp`` returns None for a label the model does not
+        have and 0 for a known headstamp left on the catch-all. An empty
+        label is never known.
+        """
+        if not (label or "").strip():
+            return False
+        return self.config.slot_for_headstamp(label) is not None
+
+    def _resolve_destination(self, label: str, confidence: float) -> Destination:
+        """Full routing decision for a prediction.
 
         Order:
-          1. confidence floor (below → catch-all),
+          1. confidence floor (below → catch-all, reason ``below_floor``),
           2. auto-select trays (assign an unmapped headstamp to an empty slot),
           3. package-mode batch routing OR plain single-slot routing.
 
         ``halt`` is only ever True in package mode when every slot configured
-        for the headstamp is already full.
+        for the headstamp is already full (reason ``batch_full``). The other
+        catch-all reasons — ``unassigned``, ``unknown``, ``special`` — come
+        from :func:`sorter.control.catch_all.classify_reason`.
         """
         above_floor = self._above_floor(confidence)
         if above_floor:
             self._maybe_auto_select(label)
         if self.config.run_package_mode:
             slot, halt = self._route_slot_package(label, above_floor)
-            return slot, above_floor, halt
-        if not above_floor:
-            return 0, False, False
-        slot = self.config.slot_for_headstamp(label)
-        return (slot if slot is not None else 0), above_floor, False
+        elif not above_floor:
+            slot, halt = 0, False
+        else:
+            looked_up = self.config.slot_for_headstamp(label)
+            slot, halt = (looked_up if looked_up is not None else 0), False
+        reason = classify_reason(
+            label=label,
+            slot=slot,
+            above_floor=above_floor,
+            halt=halt,
+            known=self._label_known(label),
+        )
+        return Destination(slot, above_floor, halt, reason)
 
     def _maybe_auto_select(self, label: str) -> None:
         """Assign an above-floor, unmapped headstamp to the first empty slot.
@@ -208,6 +280,108 @@ class RunController:
             self.bus.post("run/package_full", {"slot": slot, "label": label, "count": count})
         return count
 
+    def _log_case(self, result: dict[str, Any]) -> None:
+        """One DEBUG line per classified case. The slot used to be unlogged."""
+        try:
+            confidence = float(result.get("confidence") or 0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        try:
+            slot = int(result.get("slot") or 0)
+        except (TypeError, ValueError):
+            slot = 0
+        log.debug(
+            "case: label=%r parent=%r confidence=%.1f slot=%d reason=%s above_floor=%s",
+            result.get("label", ""),
+            result.get("parent"),
+            confidence,
+            slot,
+            result.get("reason", ""),
+            bool(result.get("above_floor")),
+        )
+
+    def _open_sort_run(self) -> None:
+        """Insert a ``sort_runs`` row. A failure is logged and disables retries."""
+        if self._sort_run_id is not None or self.db is None or self._sort_run_broken:
+            return
+        try:
+            config = self.config
+            mode = config.slot_template_mode()
+            model_id = config.settings.get_active_model_id()
+            model_name = None
+            if model_id is not None:
+                model = ModelRepo(self.db).get(model_id)
+                model_name = model.name if model is not None else None
+            template_name = None
+            stored = config.settings.get(config._active_template_key(mode))
+            if stored is not None:
+                template = config.templates_repo.get(int(stored))
+                template_name = template.name if template is not None else None
+            try:
+                slot_quantity = int(config.serial.get("slot_quantity", 8))
+            except (TypeError, ValueError):
+                slot_quantity = 8
+            self._sort_run_id = SortRunRepo(self.db).begin(
+                model_id=model_id,
+                model_name=model_name,
+                mode=mode,
+                template_name=template_name,
+                confidence_floor=int(config.run_confidence_floor),
+                slot_quantity=slot_quantity,
+            )
+        except Exception:
+            log.exception("opening a sort run failed")
+            self._sort_run_broken = True
+            self._sort_run_id = None
+
+    def _close_sort_run(self) -> None:
+        """Stamp ``ended_at`` on the open run. A failure never stops the loop."""
+        run_id = self._sort_run_id
+        self._sort_run_id = None
+        if run_id is None or self.db is None:
+            return
+        try:
+            SortRunRepo(self.db).end(run_id)
+        except Exception:
+            log.exception("closing a sort run failed")
+
+    def _record_sorted_case(self, result: dict[str, Any]) -> None:
+        """Count one case that actually dropped. Opens a run lazily if needed.
+
+        Manual feed never calls ``start()``, so the first successful feed is
+        what opens the row. A storage error is logged and swallowed: the case
+        has already been sorted.
+        """
+        if self.db is None:
+            return
+        self._open_sort_run()
+        if self._sort_run_id is None:
+            return
+        parent = result.get("parent")
+        parent_name = str(parent).strip() if parent else None
+        try:
+            slot = int(result.get("slot") or 0)
+        except (TypeError, ValueError):
+            slot = 0
+        try:
+            SortRunRepo(self.db).record(
+                self._sort_run_id,
+                label=str(result.get("label") or ""),
+                parent=parent_name or None,
+                slot=slot,
+                reason=str(result.get("reason") or ""),
+            )
+        except Exception:
+            log.exception("recording a sort-run count failed")
+
+    def _apply_destination(self, result: dict[str, Any], dest: Destination) -> None:
+        """Copy a routing decision onto ``result`` and log it."""
+        result["slot"] = dest.slot
+        result["halt"] = dest.halt
+        result["reason"] = dest.reason
+        result["above_floor"] = dest.above_floor
+        self._log_case(result)
+
     def _post_history(self, result: dict[str, Any]) -> None:
         """Feed the Monitor window one record (image + classification)."""
         if result.get("cropped") is None:
@@ -220,6 +394,7 @@ class RunController:
                 "parent": result.get("parent"),
                 "confidence": result.get("confidence", 0),
                 "slot": result.get("slot", 0),
+                "reason": result.get("reason", ""),
             },
         )
 
@@ -412,7 +587,7 @@ class RunController:
             self.bus.post("test/status", "Classifying…")
             label, confidence = classifier.classify_active(
                 cropped,
-                [h["name"] for h in self.config.headstamps if "name" in h],
+                self._classifier_names(),
                 self.config.api,
                 self.db,
             )
@@ -449,7 +624,7 @@ class RunController:
         Bus topics emitted during the cycle:
           run/status     (str) human-readable stage label
           run/cropped    (np.ndarray) cropped frame ready to show
-          run/classified ({"label","confidence","slot"}) result before the sort step
+          run/classified ({"label","confidence","slot","reason"}) result before the sort step
 
         Extra result keys beyond the happy path: ``feeder_empty`` (the bare
         sort saw a dry feed gate; ``prev_slot``/``above_floor`` accompany it
@@ -493,7 +668,7 @@ class RunController:
             self.bus.post("run/status", "Classifying…")
             label, confidence = classifier.classify_active(
                 cropped,
-                [h["name"] for h in self.config.headstamps if "name" in h],
+                self._classifier_names(),
                 self.config.api,
                 self.db,
             )
@@ -502,9 +677,9 @@ class RunController:
             result["confidence"] = confidence
 
             # Floor → auto-select → package/plain routing (see _resolve_destination).
-            slot, above_floor, halt = self._resolve_destination(label, confidence)
-            result["slot"] = slot
-            result["halt"] = halt
+            dest = self._resolve_destination(label, confidence)
+            slot, above_floor = dest.slot, dest.above_floor
+            self._apply_destination(result, dest)
             self._maybe_store_run_image(cropped, label, above_floor)
             # Continuous run: wish-list capture is in play (see _loop).
             self._maybe_capture_feedback(cropped, label, confidence, wish_list=True)
@@ -514,7 +689,13 @@ class RunController:
             self._last_classified_slot = slot
             self.bus.post(
                 "run/classified",
-                {"label": label, "parent": result["parent"], "confidence": confidence, "slot": slot},
+                {
+                    "label": label,
+                    "parent": result["parent"],
+                    "confidence": confidence,
+                    "slot": slot,
+                    "reason": dest.reason,
+                },
             )
             self._post_history(result)
 
@@ -551,10 +732,20 @@ class RunController:
             self._commit_package_count(slot, label, above_floor)
 
             result["ok"] = True
+            self._record_sorted_case(result)
             return result
         except Exception as exc:
             result["error"] = str(exc) or exc.__class__.__name__
-            log.exception("run_once failed")
+            # The run still stops (_loop posts run/error and breaks). Say so
+            # here: the status line is only the exception text, and a case
+            # that died before ok=True is otherwise absent from the tally and
+            # from sort_runs.
+            log.exception(
+                "run_once failed before this case was recorded (label=%r slot=%s); "
+                "the run will stop and the case stays uncounted",
+                result.get("label") or "",
+                result.get("slot"),
+            )
             return result
 
     # ----- continuous loop ----------------------------------------------------
@@ -613,28 +804,40 @@ class RunController:
             self.bus.post("run/status", "Classifying…")
             label, confidence = classifier.classify_active(
                 cropped,
-                [h["name"] for h in self.config.headstamps if "name" in h],
+                self._classifier_names(),
                 self.config.api,
                 self.db,
             )
             result["label"] = label
             result["parent"] = self._parent_label(label)
             result["confidence"] = confidence
-            slot, above_floor, _halt = self._resolve_destination(label, confidence)
-            result["slot"] = slot
+            dest = self._resolve_destination(label, confidence)
+            slot, above_floor = dest.slot, dest.above_floor
+            self._apply_destination(result, dest)
             result["ok"] = True
+            self._record_sorted_case(result)
             self._maybe_store_run_image(cropped, label, above_floor)
             # Manual feed isn't a run: confidence-only feedback, no wish list.
             self._maybe_capture_feedback(cropped, label, confidence)
             self.bus.post(
                 "run/classified",
-                {"label": label, "parent": result["parent"], "confidence": confidence, "slot": slot},
+                {
+                    "label": label,
+                    "parent": result["parent"],
+                    "confidence": confidence,
+                    "slot": slot,
+                    "reason": dest.reason,
+                },
             )
             self._post_history(result)
             # Stash for the next Manual feed click or continuous Run prime.
             self._last_classified_slot = slot
         except Exception as exc:
-            log.exception("cycle_once failed")
+            log.exception(
+                "cycle_once failed before this case was recorded (label=%r slot=%s); the case stays uncounted",
+                result.get("label") or "",
+                result.get("slot"),
+            )
             result["error"] = str(exc) or exc.__class__.__name__
         self.bus.post("run/result", result)
         if result.get("error"):
@@ -670,8 +873,10 @@ class RunController:
         outcome = self.broker.cancel_pending_feed()
         if outcome == "resumed":
             # Brass landed just before the stop; the waiting feed fired and
-            # the sort completed for real. Count it and keep sorting.
+            # the sort completed for real. Count it and keep sorting. run_once
+            # returned before ok, so this is the only place the case is recorded.
             self._commit_package_count(slot, label, above_floor)
+            self._record_sorted_case(result)
             self.bus.post("run/status", "Brass arrived — resuming.")
             return "resume"
         if outcome != "clean":
@@ -686,6 +891,9 @@ class RunController:
             self.bus.post("run/error", self._board_error("Flush failed"))
             return "stop"
         self._commit_package_count(slot, label, above_floor)
+        # The dry sort returned before ok, so the case that started the flush
+        # never reached _record_sorted_case. Count it now that it has dropped.
+        self._record_sorted_case(result)
         flushed = 1
         prev_slot = slot
 
@@ -779,4 +987,5 @@ class RunController:
                 if self._stop_event.wait(timeout=0.05):
                     break
         finally:
+            self._close_sort_run()
             self.bus.post("run/stopped", None)

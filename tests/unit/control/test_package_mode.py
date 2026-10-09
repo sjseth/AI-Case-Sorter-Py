@@ -128,6 +128,7 @@ def test_package_fills_then_advances_then_halts(tmp_path) -> None:
     assert [s for s, _ in slots] == [1, 1, 2, 2]
     assert r5["halt"] is True
     assert r5["slot"] == 0
+    assert r5["reason"] == "batch_full"
     # A package_full bell fired for each completed batch.
     assert len(full_events) == 2
     assert halt_events == []  # halt event is posted by _loop, not run_once
@@ -182,6 +183,7 @@ def test_package_unconfigured_label_goes_catch_all(tmp_path) -> None:
         r = ctrl.run_once()
     assert r["slot"] == 0
     assert r.get("halt") is not True
+    assert r["reason"] == "unassigned"  # FC is a known headstamp with no package slot
 
 
 # ----- auto-select trays ------------------------------------------------------

@@ -1,17 +1,18 @@
 """Repository facade — every SQL statement that mutates the DB lives here.
 
 Repositories receive a `Database` instance and expose dataclass-shaped CRUD.
-UI code never touches `sqlite3` directly.
+UI code never touches `sqlite3` directly. Statements go through
+`Database.execute`, which holds the connection lock until the rows are copied
+off the cursor.
 """
 
 from __future__ import annotations
 
 import builtins
 import json
-import sqlite3
-from typing import Any
+from typing import Any, Protocol
 
-from .db import Database
+from .db import Database, LockedRow
 from .models import (
     MODEL_MODES,
     SLOT_TEMPLATE_MODES,
@@ -23,13 +24,17 @@ from .models import (
 )
 
 
-def _require_rowid(cursor: sqlite3.Cursor) -> int:
-    """`Cursor.lastrowid` is typed `int | None` in the stdlib stubs because it's
-    `None` before any statement runs, or after one that isn't an INSERT — but a
-    successful `INSERT` against one of this module's rowid tables always sets
-    it. `None` here would mean the statement above didn't actually insert a
-    row, which is a programming error in this module, not a condition callers
-    should have to handle.
+class _Inserted(Protocol):
+    lastrowid: int | None
+
+
+def _require_rowid(cursor: _Inserted) -> int:
+    """`lastrowid` is `int | None` because it's `None` before any statement
+    runs, or after one that isn't an INSERT — but a successful `INSERT`
+    against one of this module's rowid tables always sets it. `None` here
+    would mean the statement above didn't actually insert a row, which is a
+    programming error in this module, not a condition callers should have to
+    handle.
     """
     if cursor.lastrowid is None:
         raise RuntimeError("INSERT did not return a row id")
@@ -44,19 +49,19 @@ class CartridgeRepo:
     # method literally named `list` shadows the builtin within this class body
     # for every annotation written after it, including its own.
     def list(self) -> builtins.list[Cartridge]:
-        rows = self.db.conn.execute("SELECT id, name FROM cartridges ORDER BY name COLLATE NOCASE").fetchall()
+        rows = self.db.execute("SELECT id, name FROM cartridges ORDER BY name COLLATE NOCASE").fetchall()
         return [Cartridge.from_row(r) for r in rows]
 
     def get(self, cartridge_id: int) -> Cartridge | None:
-        row = self.db.conn.execute("SELECT id, name FROM cartridges WHERE id = ?", (cartridge_id,)).fetchone()
+        row = self.db.execute("SELECT id, name FROM cartridges WHERE id = ?", (cartridge_id,)).fetchone()
         return Cartridge.from_row(row) if row else None
 
     def find_by_name(self, name: str) -> Cartridge | None:
-        row = self.db.conn.execute("SELECT id, name FROM cartridges WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
+        row = self.db.execute("SELECT id, name FROM cartridges WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
         return Cartridge.from_row(row) if row else None
 
     def create(self, name: str) -> Cartridge:
-        cur = self.db.conn.execute("INSERT INTO cartridges(name) VALUES (?)", (name,))
+        cur = self.db.execute("INSERT INTO cartridges(name) VALUES (?)", (name,))
         return Cartridge(id=_require_rowid(cur), name=name)
 
     def get_or_create(self, name: str) -> Cartridge:
@@ -66,11 +71,11 @@ class CartridgeRepo:
         return self.create(name)
 
     def rename(self, cartridge_id: int, new_name: str) -> None:
-        self.db.conn.execute("UPDATE cartridges SET name = ? WHERE id = ?", (new_name, cartridge_id))
+        self.db.execute("UPDATE cartridges SET name = ? WHERE id = ?", (new_name, cartridge_id))
 
     def delete(self, cartridge_id: int) -> None:
         # Will raise IntegrityError if any models still reference this cartridge.
-        self.db.conn.execute("DELETE FROM cartridges WHERE id = ?", (cartridge_id,))
+        self.db.execute("DELETE FROM cartridges WHERE id = ?", (cartridge_id,))
 
 
 class ModelRepo:
@@ -90,18 +95,18 @@ class ModelRepo:
     # method literally named `list` shadows the builtin within this class body
     # for every annotation written after it, including its own.
     def list(self) -> builtins.list[Model]:
-        rows = self.db.conn.execute("SELECT * FROM models ORDER BY name COLLATE NOCASE").fetchall()
+        rows = self.db.execute("SELECT * FROM models ORDER BY name COLLATE NOCASE").fetchall()
         return [Model.from_row(r) for r in rows]
 
     def list_by_cartridge(self, cartridge_id: int) -> builtins.list[Model]:
-        rows = self.db.conn.execute(
+        rows = self.db.execute(
             "SELECT * FROM models WHERE cartridge_id = ? ORDER BY name COLLATE NOCASE",
             (cartridge_id,),
         ).fetchall()
         return [Model.from_row(r) for r in rows]
 
     def get(self, model_id: int) -> Model | None:
-        row = self.db.conn.execute("SELECT * FROM models WHERE id = ?", (model_id,)).fetchone()
+        row = self.db.execute("SELECT * FROM models WHERE id = ?", (model_id,)).fetchone()
         return Model.from_row(row) if row else None
 
     def find_by_community_uid(self, uid: str) -> Model | None:
@@ -114,7 +119,7 @@ class ModelRepo:
         oldest, so an update and the Community tab's installed/update badge
         always agree on which row they mean.
         """
-        row = self.db.conn.execute(
+        row = self.db.execute(
             """
             SELECT m.* FROM models m
             LEFT JOIN settings s ON s.key = 'default_model_id'
@@ -127,17 +132,18 @@ class ModelRepo:
         return Model.from_row(row) if row else None
 
     def count_in_cartridge(self, cartridge_id: int) -> int:
-        return self.db.conn.execute(
+        row = self.db.execute(
             "SELECT COUNT(*) FROM models WHERE cartridge_id = ?",
             (cartridge_id,),
-        ).fetchone()[0]
+        ).fetchone()
+        return int(row[0]) if row is not None else 0
 
     # ---- write ---------------------------------------------------------------
 
     def create(self, model: Model) -> Model:
         if model.model_mode not in MODEL_MODES:
             raise ValueError(f"Unsupported model_mode: {model.model_mode!r}")
-        cur = self.db.conn.execute(
+        cur = self.db.execute(
             """
             INSERT INTO models(
                 name, cartridge_id, model_mode, model_type, community_model_uid,
@@ -183,7 +189,7 @@ class ModelRepo:
             raise ValueError("Cannot update a model with no id")
         if model.model_mode not in MODEL_MODES:
             raise ValueError(f"Unsupported model_mode: {model.model_mode!r}")
-        self.db.conn.execute(
+        self.db.execute(
             """
             UPDATE models SET
                 name = ?, cartridge_id = ?, model_mode = ?, model_type = ?,
@@ -246,7 +252,7 @@ class ModelRepo:
             if replacement is None or replacement.id == model_id:
                 raise ValueError("Replacement model not found.")
             settings_repo.set_active_model_id(replacement.id)
-        self.db.conn.execute("DELETE FROM models WHERE id = ?", (model_id,))
+        self.db.execute("DELETE FROM models WHERE id = ?", (model_id,))
 
 
 class HeadstampRepo:
@@ -254,7 +260,7 @@ class HeadstampRepo:
         self.db = db
 
     def list_for_model(self, model_id: int) -> list[Headstamp]:
-        rows = self.db.conn.execute(
+        rows = self.db.execute(
             "SELECT id, name, model_id, slot, parent_id FROM headstamps "
             "WHERE model_id = ? ORDER BY name COLLATE NOCASE",
             (model_id,),
@@ -262,30 +268,30 @@ class HeadstampRepo:
         return [Headstamp.from_row(r) for r in rows]
 
     def add(self, model_id: int, name: str, slot: int = 0) -> Headstamp:
-        cur = self.db.conn.execute(
+        cur = self.db.execute(
             "INSERT INTO headstamps(name, model_id, slot) VALUES (?, ?, ?)",
             (name, model_id, slot),
         )
         return Headstamp(id=_require_rowid(cur), name=name, model_id=model_id, slot=slot)
 
     def update_slot(self, headstamp_id: int, slot: int) -> None:
-        self.db.conn.execute("UPDATE headstamps SET slot = ? WHERE id = ?", (slot, headstamp_id))
+        self.db.execute("UPDATE headstamps SET slot = ? WHERE id = ?", (slot, headstamp_id))
 
     def set_parent(self, headstamp_id: int, parent_id: int | None) -> None:
         """Assign (or clear, with ``None``) a headstamp's parent classification."""
-        self.db.conn.execute(
+        self.db.execute(
             "UPDATE headstamps SET parent_id = ? WHERE id = ?",
             (parent_id, headstamp_id),
         )
 
     def rename(self, headstamp_id: int, new_name: str) -> None:
-        self.db.conn.execute("UPDATE headstamps SET name = ? WHERE id = ?", (new_name, headstamp_id))
+        self.db.execute("UPDATE headstamps SET name = ? WHERE id = ?", (new_name, headstamp_id))
 
     def delete(self, headstamp_id: int) -> None:
-        self.db.conn.execute("DELETE FROM headstamps WHERE id = ?", (headstamp_id,))
+        self.db.execute("DELETE FROM headstamps WHERE id = ?", (headstamp_id,))
 
     def clear_for_model(self, model_id: int) -> None:
-        self.db.conn.execute("DELETE FROM headstamps WHERE model_id = ?", (model_id,))
+        self.db.execute("DELETE FROM headstamps WHERE model_id = ?", (model_id,))
 
     def replace_for_model(self, model_id: int, entries: list[dict[str, Any]]) -> None:
         """Atomically replace the headstamp set for a model."""
@@ -313,52 +319,52 @@ class HeadstampParentRepo:
         self.db = db
 
     def list_for_model(self, model_id: int) -> list[HeadstampParent]:
-        rows = self.db.conn.execute(
+        rows = self.db.execute(
             "SELECT id, name, model_id, slot FROM headstamp_parents WHERE model_id = ? ORDER BY name COLLATE NOCASE",
             (model_id,),
         ).fetchall()
         return [HeadstampParent.from_row(r) for r in rows]
 
     def get(self, parent_id: int) -> HeadstampParent | None:
-        row = self.db.conn.execute(
+        row = self.db.execute(
             "SELECT id, name, model_id, slot FROM headstamp_parents WHERE id = ?",
             (parent_id,),
         ).fetchone()
         return HeadstampParent.from_row(row) if row else None
 
     def find_by_name(self, model_id: int, name: str) -> HeadstampParent | None:
-        row = self.db.conn.execute(
+        row = self.db.execute(
             "SELECT id, name, model_id, slot FROM headstamp_parents WHERE model_id = ? AND name = ? COLLATE NOCASE",
             (model_id, name),
         ).fetchone()
         return HeadstampParent.from_row(row) if row else None
 
     def add(self, model_id: int, name: str) -> HeadstampParent:
-        cur = self.db.conn.execute(
+        cur = self.db.execute(
             "INSERT INTO headstamp_parents(name, model_id) VALUES (?, ?)",
             (name, model_id),
         )
         return HeadstampParent(id=_require_rowid(cur), name=name, model_id=model_id)
 
     def rename(self, parent_id: int, new_name: str) -> None:
-        self.db.conn.execute(
+        self.db.execute(
             "UPDATE headstamp_parents SET name = ? WHERE id = ?",
             (new_name, parent_id),
         )
 
     def update_slot(self, parent_id: int, slot: int) -> None:
         """Set the physical bin a parent routes to in parent-classification mode."""
-        self.db.conn.execute("UPDATE headstamp_parents SET slot = ? WHERE id = ?", (slot, parent_id))
+        self.db.execute("UPDATE headstamp_parents SET slot = ? WHERE id = ?", (slot, parent_id))
 
     def delete(self, parent_id: int) -> None:
         # Children are unlinked via ON DELETE SET NULL; also clear explicitly so
         # the result is correct even if foreign keys are disabled on this
         # connection.
-        self.db.conn.execute(
+        self.db.execute(
             "UPDATE headstamps SET parent_id = NULL WHERE parent_id = ?",
             (parent_id,),
         )
-        self.db.conn.execute("DELETE FROM headstamp_parents WHERE id = ?", (parent_id,))
+        self.db.execute("DELETE FROM headstamp_parents WHERE id = ?", (parent_id,))
 
 
 class SlotTemplateRepo:
@@ -372,28 +378,29 @@ class SlotTemplateRepo:
         self.db = db
 
     def list_for_scope(self, model_id: int | None, mode: str) -> list[SlotTemplate]:
-        rows = self.db.conn.execute(
+        rows = self.db.execute(
             "SELECT * FROM slot_templates WHERE model_id IS ? AND mode = ? ORDER BY name COLLATE NOCASE",
             (model_id, mode),
         ).fetchall()
         return [SlotTemplate.from_row(r) for r in rows]
 
     def get(self, template_id: int) -> SlotTemplate | None:
-        row = self.db.conn.execute("SELECT * FROM slot_templates WHERE id = ?", (template_id,)).fetchone()
+        row = self.db.execute("SELECT * FROM slot_templates WHERE id = ?", (template_id,)).fetchone()
         return SlotTemplate.from_row(row) if row else None
 
     def find_by_name(self, model_id: int | None, mode: str, name: str) -> SlotTemplate | None:
-        row = self.db.conn.execute(
+        row = self.db.execute(
             "SELECT * FROM slot_templates WHERE model_id IS ? AND mode = ? AND name = ? COLLATE NOCASE",
             (model_id, mode, name),
         ).fetchone()
         return SlotTemplate.from_row(row) if row else None
 
     def count_for_scope(self, model_id: int | None, mode: str) -> int:
-        return self.db.conn.execute(
+        row = self.db.execute(
             "SELECT COUNT(*) FROM slot_templates WHERE model_id IS ? AND mode = ?",
             (model_id, mode),
-        ).fetchone()[0]
+        ).fetchone()
+        return int(row[0]) if row is not None else 0
 
     def create(
         self,
@@ -405,7 +412,7 @@ class SlotTemplateRepo:
         if mode not in SLOT_TEMPLATE_MODES:
             raise ValueError(f"Unsupported slot-template mode: {mode!r}")
         payload = assignments or {}
-        cur = self.db.conn.execute(
+        cur = self.db.execute(
             "INSERT INTO slot_templates(model_id, mode, name, assignments_json) VALUES (?, ?, ?, ?)",
             (model_id, mode, name, json.dumps(payload)),
         )
@@ -418,19 +425,101 @@ class SlotTemplateRepo:
         )
 
     def rename(self, template_id: int, new_name: str) -> None:
-        self.db.conn.execute(
+        self.db.execute(
             "UPDATE slot_templates SET name = ?, updated_at = datetime('now') WHERE id = ?",
             (new_name, template_id),
         )
 
     def update_assignments(self, template_id: int, assignments: dict[str, Any]) -> None:
-        self.db.conn.execute(
+        self.db.execute(
             "UPDATE slot_templates SET assignments_json = ?, updated_at = datetime('now') WHERE id = ?",
             (json.dumps(assignments or {}), template_id),
         )
 
     def delete(self, template_id: int) -> None:
-        self.db.conn.execute("DELETE FROM slot_templates WHERE id = ?", (template_id,))
+        self.db.execute("DELETE FROM slot_templates WHERE id = ?", (template_id,))
+
+
+class SortRunRepo:
+    """One row per sort run, and upserted per-label counts inside it.
+
+    ``record`` is an ``INSERT … ON CONFLICT DO UPDATE`` so a run thread can
+    add one case at a time without reading the counter first. Storage errors
+    are the caller's to catch: this class does not swallow them.
+    """
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    def begin(
+        self,
+        *,
+        model_id: int | None,
+        model_name: str | None,
+        mode: str,
+        template_name: str | None,
+        confidence_floor: int,
+        slot_quantity: int,
+    ) -> int:
+        if mode not in SLOT_TEMPLATE_MODES:
+            raise ValueError(f"Unsupported sort-run mode: {mode!r}")
+        cur = self.db.execute(
+            """INSERT INTO sort_runs(
+                   model_id, model_name, mode, template_name, confidence_floor, slot_quantity
+               ) VALUES (?, ?, ?, ?, ?, ?)""",
+            (model_id, model_name, mode, template_name, int(confidence_floor), int(slot_quantity)),
+        )
+        return _require_rowid(cur)
+
+    def record(
+        self,
+        run_id: int,
+        *,
+        label: str,
+        parent: str | None,
+        slot: int,
+        reason: str,
+    ) -> None:
+        """Add one case. The same ``(run, label, slot, reason)`` increments."""
+        self.db.execute(
+            """INSERT INTO sort_run_counts(run_id, label, parent, slot, reason, count)
+               VALUES (?, ?, ?, ?, ?, 1)
+               ON CONFLICT(run_id, label, slot, reason) DO UPDATE SET count = count + 1""",
+            (int(run_id), label or "", parent or None, int(slot), reason),
+        )
+
+    def end(self, run_id: int) -> None:
+        """Stamp ``ended_at`` once. A second call leaves the first stamp."""
+        self.db.execute(
+            "UPDATE sort_runs SET ended_at = datetime('now') WHERE id = ? AND ended_at IS NULL",
+            (int(run_id),),
+        )
+
+    def counts(self, run_id: int) -> list[LockedRow]:
+        return list(
+            self.db.execute(
+                """SELECT run_id, label, parent, slot, reason, count
+                   FROM sort_run_counts WHERE run_id = ?
+                   ORDER BY count DESC, label COLLATE NOCASE, slot, reason""",
+                (int(run_id),),
+            ).fetchall()
+        )
+
+    def recent(self, limit: int = 20, model_id: int | None = None) -> list[LockedRow]:
+        """Newest runs first. ``model_id=None`` is every run, not "AI Config"."""
+        if model_id is None:
+            return list(
+                self.db.execute(
+                    "SELECT * FROM sort_runs ORDER BY started_at DESC, id DESC LIMIT ?",
+                    (int(limit),),
+                ).fetchall()
+            )
+        return list(
+            self.db.execute(
+                "SELECT * FROM sort_runs WHERE model_id = ? ORDER BY started_at DESC, id DESC LIMIT ?",
+                (int(model_id), int(limit)),
+            ).fetchall()
+        )
 
 
 class SettingsRepo:
@@ -440,7 +529,7 @@ class SettingsRepo:
         self.db = db
 
     def get(self, key: str, default: Any = None) -> Any:
-        row = self.db.conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        row = self.db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         if row is None:
             return default
         try:
@@ -449,13 +538,13 @@ class SettingsRepo:
             return default
 
     def set(self, key: str, value: Any) -> None:
-        self.db.conn.execute(
+        self.db.execute(
             "INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)",
             (key, json.dumps(value)),
         )
 
     def delete(self, key: str) -> None:
-        self.db.conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+        self.db.execute("DELETE FROM settings WHERE key = ?", (key,))
 
     # ---- active model helpers ------------------------------------------------
 

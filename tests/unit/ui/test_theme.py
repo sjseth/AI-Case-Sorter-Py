@@ -26,6 +26,179 @@ def test_stylesheet_carries_the_palette(name: str) -> None:
         assert palette[role] in qss, f"{name}: {role} missing from the stylesheet"
 
 
+def _hsv(value: str) -> tuple[int, float, float]:
+    """Chroma, hue in degrees, saturation. Independent of theme.py's copy."""
+    from PySide6.QtGui import QColor
+
+    color = QColor(value)
+    red, green, blue = color.red(), color.green(), color.blue()
+    peak, floor = max(red, green, blue), min(red, green, blue)
+    chroma = peak - floor
+    if peak == 0 or chroma == 0:
+        return chroma, 0.0, 0.0
+    if peak == red:
+        sector = ((green - blue) / chroma) % 6
+    elif peak == green:
+        sector = (blue - red) / chroma + 2
+    else:
+        sector = (red - green) / chroma + 4
+    return chroma, (sector * 60) % 360, chroma / peak
+
+
+def _red_hued(value: str) -> bool:
+    """Stop/danger red: enough chroma to carry a hue, and that hue is red."""
+    chroma, hue, _saturation = _hsv(value)
+    return chroma >= 40 and (hue <= 15 or hue >= 345)
+
+
+def _hexes(text: str) -> list[str]:
+    found = []
+    start = 0
+    while True:
+        mark = text.find("#", start)
+        if mark < 0 or mark + 7 > len(text):
+            break
+        token = text[mark : mark + 7]
+        if all(char in "0123456789abcdefABCDEF" for char in token[1:]):
+            found.append(token.lower())
+        start = mark + 1
+    return found
+
+
+def _catch_all_rules(qss: str) -> str:
+    return "\n".join(part for part in qss.split("}") if "catchAllMode" in part)
+
+
+def _contrast(left: str, right: str) -> float:
+    from PySide6.QtGui import QColor
+
+    def luminance(value: str) -> float:
+        color = QColor(value)
+
+        def channel(component: int) -> float:
+            scale = component / 255
+            if scale <= 0.04045:
+                return scale / 12.92
+            return ((scale + 0.055) / 1.055) ** 2.4
+
+        return 0.2126 * channel(color.red()) + 0.7152 * channel(color.green()) + 0.0722 * channel(color.blue())
+
+    hi, lo = sorted((luminance(left), luminance(right)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+# fill, hover, press, outline, ink, unchecked-pressed. The first four themes
+# keep the accent ramp; Gothic and Comic Book fall through to the text ramp
+# because their accent (and Gothic's focus ring) is a stop red.
+_CATCH_ALL_ROLES = {
+    "Dark": ("accent", "accent_hover", "accent_press", "border_focus", "text_inverse", "bg_card_sel"),
+    "Light": ("accent", "accent_hover", "accent_press", "border_focus", "text_inverse", "bg_card_sel"),
+    "Sepia": ("accent", "accent_hover", "accent_press", "border_focus", "text_inverse", "bg_card_sel"),
+    "Midnight Blue": ("accent", "accent_hover", "accent_press", "border_focus", "text_inverse", "bg_card_sel"),
+    "Gothic": ("text", "text_highlight", "text_muted", "text_muted", "text_inverse", "bg_card"),
+    "Comic Book": ("text", "text_highlight", "text_muted", "text_muted", "text_inverse", "bg_card_sel"),
+}
+
+
+@pytest.mark.parametrize("name", list(BUILTIN_THEMES))
+def test_catch_all_mode_buttons_stay_off_stop_colours(qapp, name: str) -> None:
+    """The view toggle's fill and border are never a red-hued palette value."""
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QPushButton
+
+    palette = BUILTIN_THEMES[name]
+    qss = build_stylesheet(palette)
+    rules = _catch_all_rules(qss)
+    used = _hexes(rules)
+    reds = {value.lower() for value in palette.values() if isinstance(value, str) and _red_hued(value)}
+    assert used, name
+    assert reds.isdisjoint(used), (name, reds & set(used))
+    assert all(not _red_hued(color) for color in used), name
+
+    fill, hover, press, outline_key, ink, rest_press = _CATCH_ALL_ROLES[name]
+    outline = f"border: 2px solid {palette[outline_key]}"
+    resting = block(qss, "QPushButton#catchAllMode")
+    checked = block(qss, "QPushButton#catchAllMode:checked")
+    checked_hover = block(qss, "QPushButton#catchAllMode:checked:hover")
+    checked_press = block(qss, "QPushButton#catchAllMode:checked:pressed")
+    unchecked_press = block(qss, "QPushButton#catchAllMode:pressed")
+
+    # No fill on the bare name: that would light both toggles at once.
+    # accent_dim is the ordinary button rest, and it is neutral in every builtin.
+    assert "background-color" not in resting
+    assert outline in resting
+    assert f"background-color: {palette[fill]};" in checked
+    assert f"color: {palette[ink]};" in checked
+    assert outline in checked
+    assert palette["success"] not in checked
+    assert palette["action"] not in checked
+    assert palette["danger"] not in rules
+    assert f"background-color: {palette[hover]};" in checked_hover
+    assert f"background-color: {palette[press]};" in checked_press
+    assert f"background-color: {palette[rest_press]};" in unchecked_press
+    assert not _red_hued(palette[fill])
+    assert not _red_hued(palette[outline_key])
+    assert not _red_hued(palette["accent_dim"])
+    # The outline reads against the panel; the lit fill reads against the rest.
+    assert _contrast(palette[outline_key], palette["bg_surface"]) >= 3, name
+    assert _contrast(palette[outline_key], palette["bg_window"]) >= 3, name
+    assert _contrast(palette[fill], palette["accent_dim"]) >= 3, name
+    assert _contrast(palette[ink], palette[fill]) >= 4.5, name
+
+    off = QPushButton("Top 10")
+    on = QPushButton("ALL")
+    for button in (off, on):
+        button.setObjectName("catchAllMode")
+        button.setCheckable(True)
+        button.setStyleSheet(qss)
+        button.show()
+    on.setChecked(True)
+    qapp.processEvents()
+
+    def _near(got: QColor, want: str) -> bool:
+        target = QColor(want)
+        return (
+            max(abs(got.red() - target.red()), abs(got.green() - target.green()), abs(got.blue() - target.blue())) <= 8
+        )
+
+    for button, paint in ((off, palette["accent_dim"]), (on, palette[fill])):
+        image = button.grab().toImage()
+        assert image.width() > 16 and image.height() > 4
+        assert _near(image.pixelColor(10, image.height() // 2), paint), name
+        # The left edge is the outline, clear of the label and the rounded corner.
+        assert _near(image.pixelColor(1, image.height() // 2), palette[outline_key]), name
+    off.deleteLater()
+    on.deleteLater()
+
+
+def test_a_user_theme_with_stop_colours_keeps_the_toggle_neutral() -> None:
+    """A hand-made palette whose accent is red resolves the toggle from the text ramp."""
+    palette = dict(BUILTIN_THEMES["Dark"])
+    palette.update(
+        {
+            "accent": "#d13c45",
+            "accent_hover": "#e85860",
+            "accent_press": "#a52a31",
+            "border_focus": "#c0464e",
+            "bg_card_sel": "#46181e",
+            "accent_dim": "#cf1b1b",
+        }
+    )
+    qss = build_stylesheet(palette)
+    rules = _catch_all_rules(qss)
+    used = set(_hexes(rules))
+    reds = {value.lower() for value in palette.values() if isinstance(value, str) and _red_hued(value)}
+    assert used.isdisjoint(reds)
+    resting = block(qss, "QPushButton#catchAllMode")
+    checked = block(qss, "QPushButton#catchAllMode:checked")
+    assert "background-color: #272727;" in resting
+    assert "border: 2px solid #9a9a9a" in resting
+    assert "background-color: #d4d4d4;" in checked
+    assert "color: #121212;" in checked
+    assert "#d13c45" not in rules
+    assert "#cf1b1b" not in rules
+
+
 @pytest.mark.parametrize("name", list(BUILTIN_THEMES))
 def test_stylesheet_is_well_formed(name: str) -> None:
     qss = build_stylesheet(BUILTIN_THEMES[name])

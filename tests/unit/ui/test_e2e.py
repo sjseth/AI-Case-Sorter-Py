@@ -237,9 +237,16 @@ def test_demo_a_full_sorting_session(config, window_factory, monkeypatch) -> Non
 
     # Counts survive Stop (jam-clearing): only an explicit reset
     # clears them, and that one also zeroes the run's package batches.
+    # The Catch-All panel counted the same successful cases the cards did.
+    assert window.catch_all_view.tally.total == sorted_cases
+    assert window.catch_all_view.tally.catch_all_total == counts[0]
+    window.open_slot_editor(0)
+    assert not window.catch_all_dock.isClosed()
+
     window.reset_counts()
     assert card_counts(window) == dict.fromkeys(counts, 0)
     assert window.master_count_label.text() == "0"
+    assert window.catch_all_view.tally.total == 0
 
 
 # ----- (b) settings round-trip across a restart -------------------------------
@@ -552,6 +559,7 @@ def test_demo_d_the_guide_dock_toggles_from_the_view_menu(window) -> None:
     assert set(toggles) == {
         "Serial Monitor",
         "Classification History",
+        "Catch-All breakdown",
         "User Guide panel",
         "Themes",
         "Messages",

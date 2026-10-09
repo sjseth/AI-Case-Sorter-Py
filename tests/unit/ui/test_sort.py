@@ -14,6 +14,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import Qt
+
 from sorter.control.run_controller import RunController
 from sorter.hardware.serial_emulator import EMULATED_PORT, EmulatorBroker
 from sorter.ml import classifier, local_inference
@@ -129,7 +131,10 @@ def test_a_card_never_shortens_its_headstamp_list(config, window_factory) -> Non
 def test_cards_advertise_that_they_are_editable(window) -> None:
     assert window.slot_grid.cards[1].edit_hint.text() == "✎ Click to edit"
     assert not window.slot_grid.cards[1].edit_hint.isHidden()
-    assert window.slot_grid.cards[0].edit_hint.isHidden()  # the catch-all isn't
+    # Slot 0 opens the breakdown panel rather than an assignment editor.
+    assert window.slot_grid.cards[0].edit_hint.text() == "🔍 Click for breakdown"
+    assert not window.slot_grid.cards[0].edit_hint.isHidden()
+    assert window.slot_grid.cards[0].cursor().shape() == Qt.CursorShape.PointingHandCursor
     assert "QFrame#slotCard:hover" in window.styleSheet()
 
 
