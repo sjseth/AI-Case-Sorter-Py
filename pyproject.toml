@@ -46,7 +46,7 @@ dependencies = [
     # pyside6-qtads built against that exact version exists on PyPI — check
     # its requires_dist before accepting one, or the lock becomes unsolvable.
     "PySide6-Essentials==6.11.1",
-    "pyside6-qtads==5.0.0.2",
+    "pyside6-qtads==5.1.1",
     # Windows-only: enumerates friendly DirectShow camera names so the Camera
     # settings page can show real device names instead of just "Camera N".
     "pygrabber==0.2; platform_system == 'Windows'",
