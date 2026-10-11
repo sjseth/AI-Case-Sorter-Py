@@ -16,8 +16,10 @@ Keys in the table:
 
 Every write goes through the same Config calls the per-slot dialog makes, so
 the active sorting template follows (``sync_active_slot_template``) and
-``changed`` repaints the dashboard's cards while this is still open. An edit
-updates its cell in place; only the filter rebuilds or reorders the rows.
+``changed`` repaints the dashboard's cards while this is still open. The
+window posts ``run/assignment_changed`` from that signal, which is what
+drops the Catch-All panel's slot map — including a 0 that clears a bin.
+An edit updates its cell in place; only the filter rebuilds or reorders the rows.
 
 Modes mirror ``dialog_slot_assign``: with parent classifications on, parent
 groups (plus ungrouped headstamps) carry the slot, and a Contains column —

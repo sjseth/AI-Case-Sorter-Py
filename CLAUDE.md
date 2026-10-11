@@ -955,7 +955,12 @@ tallies successful `run/result` events (the same gate as the slot 0 card)
 and re-ranks on `run/assignment_changed`. The label→slot map is read once
 and reused for later results; `run/assignment_changed`, `mode/changed`, and
 `reset` (template switches and package-mode toggles clear the counts) drop
-it. The header stays the physical slot
+it. The slot-card editor and Assign by headstamp do not go through
+`assign_from_catch_all`; each write emits `changed`, and the window posts
+`run/assignment_changed` from that signal, including a clear back to slot 0.
+That is what refreshes the ranking, the empty-slot offer, the share menu
+and the "Assigned this session" line. The sort cards repaint from `changed`
+itself. The header stays the physical slot
 0 total. **Top 10** (the default) and **ALL** are an exclusive
 `QButtonGroup` of checkable buttons, right-aligned on the top bar
 (`catchAllMode`; the checked one takes the neutral `accent` fill with

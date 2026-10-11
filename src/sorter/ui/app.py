@@ -762,6 +762,17 @@ class QtMainWindow(QMainWindow):
         if items:
             self.settings_list.setCurrentItem(items[0])
 
+    def _post_assignment_changed(self) -> None:
+        """The slot card and Assign by headstamp write Config and emit ``changed``.
+
+        The cards repaint from that signal directly. The Catch-All panel and
+        the run loop only drop their label-to-slot snapshot on
+        ``run/assignment_changed``, so a clear that never posts one leaves
+        the ranking, the empty-slot offer, the share menu and the session
+        line on the layout from before the clear.
+        """
+        self.bus.post("run/assignment_changed", {"source": "editor"})
+
     def _refresh_sort_grid(self) -> None:
         """Assignments changed (bus event, template swap, mode switch, edit)."""
         self.slot_grid.refresh_assignments()
@@ -1689,6 +1700,7 @@ class QtMainWindow(QMainWindow):
             return
         dialog = SlotAssignDialog(self.config, int(slot), self)
         dialog.changed.connect(self._refresh_sort_grid)
+        dialog.changed.connect(self._post_assignment_changed)
         dialog.exec()
         self._refresh_sort_grid()
 
@@ -1700,6 +1712,7 @@ class QtMainWindow(QMainWindow):
         """
         dialog = build_headstamp_assign_dialog(self)
         dialog.changed.connect(self._refresh_sort_grid)
+        dialog.changed.connect(self._post_assignment_changed)
         dialog.finished.connect(self._on_headstamp_assign_closed)
         self.headstamp_assign_dialog = dialog
         dialog.open()

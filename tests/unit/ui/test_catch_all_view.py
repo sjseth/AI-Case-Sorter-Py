@@ -14,6 +14,7 @@ from PySide6.QtGui import QColor, QKeySequence
 
 from sorter.data.repository import HeadstampParentRepo, HeadstampRepo
 from sorter.ui.catch_all_view import _ADD_TEXT, COL_NAME, COL_REASON, COLUMNS
+from sorter.ui.dialog_slot_assign import SlotAssignDialog
 
 from .conftest import seed_model
 
@@ -408,6 +409,72 @@ def test_an_external_assignment_drops_the_row_and_keeps_the_bin_total(window, co
     assert _names(view) == ["BPS", "IK"]
     assert view.table.item(_row(view, "BPS"), 2).text() == "4"
     assert view.assigned_label.isHidden()
+
+
+def _assign_bps_then_look_at_ik(window, config):
+    """Three BPS cases and one IK, then Assign sends BPS to the first empty bin."""
+    seed_model(config, {"BPS": 0, "IK": 0})
+    for _ in range(3):
+        _post(window, label="BPS")
+    _post(window, label="IK")
+    view = window.catch_all_view
+    _select(view, "BPS")
+    view.assign_button.click()
+    window.bus.drain()
+    assert config.slot_for_headstamp("BPS") == 1
+    assert _names(view) == ["IK"]
+    assert view.assigned_label.text() == "Assigned this session: BPS → #1 (3 already in bin 0)"
+    assert view.assign_button.text() == "Assign IK to empty slot #2"
+    assert _menu_texts(view) == ["#1 BPS"]
+    return view
+
+
+def test_clearing_a_slot_card_puts_the_headstamp_back(window, config, monkeypatch) -> None:
+    """Unticking a headstamp on its slot card has to drop the panel's slot map.
+
+    The card editor writes Config and repaints the grid. The ranking, the
+    empty-slot offer, the share menu and the session line all read a cache
+    that only ``run/assignment_changed`` throws away.
+    """
+    view = _assign_bps_then_look_at_ik(window, config)
+
+    def untick(dialog: SlotAssignDialog) -> int:
+        box = dialog.checkboxes["BPS"]
+        assert box.isChecked()
+        box.click()
+        return 0
+
+    monkeypatch.setattr(SlotAssignDialog, "exec", untick)
+    window.open_slot_editor(1)
+    window.bus.drain()
+
+    assert config.slot_for_headstamp("BPS") == 0
+    assert "BPS" not in window.slot_grid.cards[1].names_label.text()
+    assert _names(view) == ["BPS", "IK"]
+    assert view.table.item(_row(view, "BPS"), 2).text() == "3"
+    assert view.assigned_label.isHidden()
+    assert view._selected_key == "IK"
+    assert view.assign_button.text() == "Assign IK to empty slot #1"
+    assert _menu_texts(view) == []
+
+
+def test_clearing_a_row_in_the_headstamp_table_puts_it_back(window, config) -> None:
+    """0 in Assign by headstamp is the same clear, and the same event."""
+    view = _assign_bps_then_look_at_ik(window, config)
+
+    window.open_headstamp_assign()
+    dialog = window.headstamp_assign_dialog
+    assert dialog is not None
+    index = next(position for position, row in enumerate(dialog.rows) if row.name == "BPS")
+    dialog.assign(index, 0)
+    window.bus.drain()
+    dialog.close()
+
+    assert config.slot_for_headstamp("BPS") == 0
+    assert _names(view) == ["BPS", "IK"]
+    assert view.assigned_label.isHidden()
+    assert view.assign_button.text() == "Assign IK to empty slot #1"
+    assert _menu_texts(view) == []
 
 
 def test_assigning_mid_run_fills_an_empty_slot_and_says_so(window, config, caplog) -> None:

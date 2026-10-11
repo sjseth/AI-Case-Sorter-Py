@@ -3,7 +3,8 @@
 Opened by clicking a slot card. Every tick writes straight through to
 ``Config`` (which keeps the active sorting template in lock-step), then the
 rows are re-read from the DB — nothing about the assignment state is cached
-here, and the dashboard refreshes off the ``changed`` signal.
+here. ``changed`` repaints the dashboard, and the window posts
+``run/assignment_changed`` from it so the Catch-All panel drops its slot map.
 
 Three routing modes:
 
