@@ -85,6 +85,7 @@ from ..hardware.serial_emulator import EMULATED_PORT, EmulatorBroker
 from ..hardware.serial_log import SerialTrafficLog
 from ..ml import classifier, local_inference
 from ..paths import app_data_dir
+from . import desktop_integration
 from .ai_page import build_ai_page
 from .community_page import build_community_page
 from .dialog_headstamp_assign import HeadstampAssignDialog, build_headstamp_assign_dialog
@@ -381,9 +382,9 @@ class QtMainWindow(QMainWindow):
         self.ensure_torch = TorchGate(self)
 
         self.setWindowTitle(f"AI Case Sorter OSS - v{__version__} · GPL-3.0")
-        # The headstamp mark, in one fixed neutral (see icons.APP_ICON_COLOR):
-        # a taskbar owns its own background, so this one must not follow the
-        # live palette. Set application-wide as well, so dialogs inherit it.
+        # The filled launcher mark, deliberately not palette-coloured: a taskbar
+        # owns its own background (see icons' launcher block). Set
+        # application-wide as well, so dialogs inherit it.
         window_icon = app_icon()
         self.setWindowIcon(window_icon)
         QGuiApplication.setWindowIcon(window_icon)
@@ -2624,8 +2625,15 @@ def default_qpa_platform() -> None:
 
 def run_app(config: Any) -> int:
     default_qpa_platform()
+    # Before the QApplication: Qt reads RESOURCE_NAME once, when it builds the
+    # first window's WM_CLASS (desktop_integration's docstring says why).
+    desktop_integration.prepare_process()
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    desktop_integration.apply_identity()
     window = QtMainWindow(config)
     window.resize(1024, 768)
     window.show()
+    # After the window is up: this rasterises icons through Qt, and nothing it
+    # writes is needed to run. Best-effort by contract — see the module.
+    desktop_integration.ensure()
     return app.exec()

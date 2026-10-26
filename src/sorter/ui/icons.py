@@ -11,19 +11,25 @@ machine's own identity (a cartridge case, a headstamp seen base-on) rather
 than generic glyphs; AI Config, Models, Community and Settings use familiar
 metaphors.
 
-``APP`` is the exception to "colored by the theme": it is the window and
-taskbar mark, drawn heavier and detail-free so it survives 16 px, and inked
-in one fixed neutral because a taskbar owns its own background
-(``app_icon``).
+The launcher mark at the foot of this file — read from ``assets/``, not
+embedded — is the exception to every word of that: filled, full-colour and untouched by the palette, because the desktop
+draws it on a background of its own (``app_icon``, ``launcher_svg``).
 """
 
 from __future__ import annotations
+
+import logging
+from functools import cache
+from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QRectF, Qt
 from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
-APP = "app"
+from ..paths import app_root
+
+log = logging.getLogger(__name__)
+
 SORT = "sort"
 TRAIN = "train"
 AI_CONFIG = "ai_config"
@@ -43,16 +49,6 @@ def _svg(body: str) -> str:
 
 
 _SVGS: dict[str, str] = {
-    # The identity mark: a headstamp base-on, rim/primer ring/primer. Heavier
-    # strokes and no small detail at all -- this one has to survive 16 px in a
-    # taskbar, where the sidebar set's reticle and sparkle would turn to mud.
-    APP: _svg(
-        """
-        <circle cx="12" cy="12" r="8.9" stroke-width="2.6"/>
-        <circle cx="12" cy="12" r="4.2" stroke-width="2.2"/>
-        <circle cx="12" cy="12" r="1.5" fill="{color}" stroke="none"/>
-        """
-    ),
     # Upright cartridge case, with a forking arrow routing right into two bins.
     SORT: _svg(
         """
@@ -176,18 +172,82 @@ def icon(name: str, color: str, size: int) -> QIcon:
     return QIcon(pixmap(name, color, size))
 
 
-# The window icon deliberately does NOT follow the live palette: it is drawn on
-# the taskbar's background, not the app's, and that background is the desktop
-# theme's business. One fixed mid-gray reads on both a light and a dark bar
-# (~4:1 against white, ~5:1 against black) where either theme's text color
-# would vanish into one of them.
-APP_ICON_COLOR = "#808080"
-APP_ICON_SIZES = (16, 24, 32, 48, 64, 128)
+# ---------------------------------------------------------------------------
+# The launcher mark — the one icon an operating system shows
+# ---------------------------------------------------------------------------
+#
+# Everything above is themed line art drawn on our own surfaces. This is the
+# opposite by necessity: a taskbar tile, a Start Menu entry and a Dock tile are
+# drawn on a background the desktop owns, at sizes it picks, in a row of icons
+# that are all filled and saturated — where a mid-gray stroke drawing reads as
+# a disabled one. So the same motif (a headstamp base-on: rim, groove, primer
+# ring, primer) is redrawn filled, in brass on gunmetal, carrying its own
+# colors instead of the palette's.
+#
+# Two documents, and the threshold between them is the point: the groove and
+# primer ring that make the detailed mark a *case head* collapse into mud below
+# 48 px — rendered and looked at, not assumed — where three high-contrast discs
+# still read as one. Every consumer picks through :func:`launcher_svg`, so the
+# .ico, the hicolor PNGs and the .icns all switch at the same size.
+LAUNCHER_DETAIL_MIN = 48
+
+# The sizes the OS asset pipelines want between them: the Icon Theme Spec's
+# usual hicolor rungs, Windows' .ico set, and macOS's .icns set (which also
+# wants 1024 for @2x — `desktop_integration` adds it rather than putting a size
+# no other platform uses in the shared list).
+LAUNCHER_SIZES: tuple[int, ...] = (16, 24, 32, 48, 64, 128, 256, 512)
+
+# The artwork itself lives in ``assets/`` at the app root, not here, so the
+# files docs and packaging point at are the same bytes this module renders.
+LAUNCHER_ASSET = "app-icon.svg"
+LAUNCHER_SMALL_ASSET = "app-icon-small.svg"
+
+
+def assets_dir() -> Path:
+    """``<app>/assets`` — shipped in the sdist, like ``docs/guide`` for the help panel."""
+    return app_root() / "assets"
+
+
+@cache
+def _read_asset(name: str) -> str:
+    return (assets_dir() / name).read_text(encoding="utf-8")
+
+
+def launcher_svg(size: int) -> str:
+    """The launcher artwork to use at ``size`` px — detailed, or the small cut."""
+    return _read_asset(LAUNCHER_ASSET if size >= LAUNCHER_DETAIL_MIN else LAUNCHER_SMALL_ASSET)
+
+
+def launcher_pixmap(size: int) -> QPixmap:
+    """The launcher mark at exactly ``size`` **physical** pixels.
+
+    Deliberately not :func:`pixmap`, which bakes the screen's device pixel
+    ratio in: right for a widget, wrong for a file on disk, where the size in
+    the path (``48x48/apps/…``) is a promise about how many pixels are in it.
+    """
+    document = QByteArray(launcher_svg(size).encode("utf-8"))
+    canvas = QPixmap(size, size)
+    canvas.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(canvas)
+    try:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        QSvgRenderer(document).render(painter, QRectF(0, 0, size, size))
+    finally:
+        painter.end()
+    return canvas
 
 
 def app_icon() -> QIcon:
-    """The window/taskbar icon — the headstamp mark, at every size a shell asks for."""
+    """The window/taskbar icon — the launcher mark at every size a shell asks for.
+
+    An empty icon, not an exception, if the artwork is missing: the window
+    falls back to the platform default rather than the app failing to start.
+    """
     result = QIcon()
-    for size in APP_ICON_SIZES:
-        result.addPixmap(pixmap(APP, APP_ICON_COLOR, size))
+    try:
+        for size in LAUNCHER_SIZES:
+            result.addPixmap(launcher_pixmap(size))
+    except OSError:
+        log.warning("launcher artwork missing from %s; using the default window icon", assets_dir(), exc_info=True)
+        return QIcon()
     return result

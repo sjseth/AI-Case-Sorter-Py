@@ -87,6 +87,26 @@ The same checkout works on Windows: `start.bat` instead of `./start.sh`.
 Every launch re-checks the dependencies against the lockfile, so pulling a
 change that adds one needs nothing extra from you.
 
+### In your applications menu
+
+The first launch from a checkout also adds the app where your desktop expects
+to find it, so you don't have to go back to a terminal:
+
+| Platform | What gets added | Where |
+|---|---|---|
+| Linux | An applications-menu entry and its icons | `~/.local/share/applications`, `~/.local/share/icons` |
+| macOS | A small **AI Case Sorter** app that starts this checkout | `~/Applications` |
+| Windows | Handled by the installer's Start Menu shortcut | — |
+
+It is per-user, needs no `sudo`, and points at wherever you cloned the app. It
+follows the freedesktop specifications rather than any one desktop, so GNOME,
+KDE Plasma, Xfce, Cinnamon, MATE and LXQt all pick it up the same way. Move or
+rename the folder and the next launch rewrites the entry to match.
+
+Set `CASESORTER_NO_DESKTOP_ENTRY=1` to turn it off. To remove one that already
+exists, delete `~/.local/share/applications/io.github.sjseth.AICaseSorter.desktop`
+(Linux) or `~/Applications/AI Case Sorter.app` (macOS).
+
 The window opens on the [Sort dashboard](guide/GUIDE.md#sort-dashboard). A
 fresh install has nothing connected and nothing trained yet, so it shows a
 short setup panel rather than an empty slot grid —
