@@ -235,7 +235,7 @@ and the headstamp comes back at its full count.
 Under the table, a line keeps what left the list: "Assigned this session:
 BPS → #6 (42 already in bin 0), IK → #7 (17)". Those cases are still in the
 Catch-All bin; the next run is what puts them in the new slot. **Reset
-counts** clears the line with the rest of the tally.
+catch-all** and **Reset counts** both clear the line with the breakdown.
 
 **Assign {name} to empty slot #N**, under the table, puts the selected
 headstamp in the first empty bin and then selects the next headstamp that
@@ -263,8 +263,22 @@ the Catch-All; put an empty bin in the slot you just filled, and the next
 case of that headstamp uses it. In parent mode the assignment is the
 parent's slot, which is the slot the run actually reads.
 
-The counts follow the slot cards: they survive Stop and Start, and **Reset
-counts** clears them together with the cards.
+**Reset catch-all**, at the upper left of the panel, is for when you empty
+that bin. It zeroes this breakdown — the rows, the reasons, the catch-all
+total and the session line — and the Catch-All card's count, together, so
+the two still match. Your slot assignments are left as they are. **Sorted
+this run** and the other slot cards keep their counts. The header's "of N
+sorted" stays with **Sorted this run**; only the number in the catch-all
+goes back to 0. You can do this during a run. A case already in the wheel
+is counted from the new zero when it drops. In [package mode](#package-mode)
+the Catch-All card has no batch counter of its own; this button still
+clears a stored slot 0 batch count, and it leaves the numbered bins'
+batches alone.
+
+**Reset counts**, above the slot grid, still zeroes every card, this panel
+and **Sorted this run** together.
+
+The counts follow the slot cards: they survive Stop and Start.
 
 ### Themes panel
 
@@ -342,8 +356,11 @@ Above the grid: **Assign by headstamp…** opens the
 [headstamp-first view](#assigning-by-headstamp) of the whole layout,
 **Sorted this run** counts every case this run has sorted,
 **Reset counts** zeroes the counters (the grid's and the per-bin ones)
-without touching your assignments, and the [template](#sorting-templates)
-picker names the layout the cards are showing.
+without touching your assignments. The Catch-All card has no reset of its
+own; **Reset catch-all** on the [Catch-All panel](#catch-all-panel) zeroes
+that card and the panel, and leaves the other cards and **Sorted this run**
+alone. The [template](#sorting-templates) picker names the layout the cards
+are showing.
 
 ### Editing an assignment
 
@@ -549,7 +566,10 @@ to batch counting against the one **Batch size** you set, shown as
 taking that headstamp; once every slot for a given headstamp is full, the run
 halts and asks you to empty bins and reset counters. A slot card's **⟲ Reset**
 button empties just that bin's counter without stopping the run, so it can
-keep filling.
+keep filling. The Catch-All card does not show that button. Emptying the
+catch-all bin uses **Reset catch-all** on the
+[Catch-All panel](#catch-all-panel), which leaves the numbered bins'
+batches alone.
 
 ### Community model notices
 

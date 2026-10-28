@@ -3,7 +3,14 @@
 Slot 0 is where a case goes when the run cannot put it in a bin. This panel
 says which headstamps those were and why, counted from the same successful
 ``run/result`` events the slot card uses, so the header matches the card.
-Counts survive Stop/Start; ``QtMainWindow._clear_counts`` is what zeroes them.
+Counts survive Stop/Start. **Reset catch-all**, a plain button at the upper
+left of the top bar (the same styling as the dashboard's Reset counts),
+zeroes this breakdown and the slot 0 card and leaves the other cards and
+the master count alone. The header's "of N sorted" stays with that master
+count, so the catch-all number still matches the card and the denominator
+still matches **Sorted this run**. ``QtMainWindow._clear_counts`` (Reset
+counts, a template switch, package mode) still zeroes every card, the
+master count and this tally, denominator included.
 
 The table is items only — no cell widgets (CLAUDE.md §5). It ranks only
 headstamps that would still land in slot 0 if seen now: giving one a slot
@@ -11,12 +18,13 @@ drops its unassigned and unknown cases so the next one moves up. Below
 floor, upside down and batch full stay, and a mixed row shows only that
 remainder. **Top 10** (the default) paints the first 10 of that ranking
 plus a greyed Other row. **ALL** paints every one of them, and the table
-scrolls. The two are an exclusive pair at the upper right of the panel;
-the lit one uses a neutral fill — the accent ramp where that ramp is
-not a stop colour, otherwise the text ramp — and the choice lasts for
-the session. The header stays
-the physical bin total. A line under the table names what left the ranking
-and how many of those cases are already in bin 0.
+scrolls. **Reset catch-all** sits at the upper left of the top bar. Top 10
+and ALL are an exclusive pair at the upper right; the lit one uses a
+neutral fill — the accent ramp where that ramp is not a stop colour,
+otherwise the text ramp — and the choice lasts for the session. The header
+stays the physical bin total. A line under the table names what left the
+ranking and how many of those cases are already in bin 0. Reset catch-all
+and ``_clear_counts`` both clear that line with the breakdown.
 
 Two actions sit on the selection bar under the table, keyed on the
 headstamp name so a re-sort does not lose the selection. **Assign to empty
@@ -30,8 +38,9 @@ the stylesheet.
 
 Subscribes ``run/result``, ``run/assignment_changed`` and ``mode/changed``
 on ``win.bus``. A result does not re-read the database: the label-to-slot
-map is cached until an assignment, a model change, or a reset (template and
-package-mode switches clear the counts, which resets this panel).
+map is cached until an assignment, a model change, or a full reset
+(template switches, package mode, and Reset counts). Reset catch-all leaves
+the map alone: the assignments did not change.
 
 A result while the dock is open waits briefly and then repaints once, in
 place: cells, the header and the buttons change only when their text does,
@@ -208,6 +217,11 @@ _SELECT_TIP = "Select a headstamp."
 _UNKNOWN_TIP = "This label isn't in the model, so it can't be assigned to a slot."
 _NO_OCCUPIED_TIP = "No slot has a headstamp yet."
 _ADD_TIP = "Share a bin that already has brass. Cases already in the wheel still drop in the catch-all."
+_RESET_TEXT = "Reset catch-all"
+_RESET_TIP = (
+    "Zero this breakdown and the Catch-All card. Other slots and Sorted this run stay. "
+    "A case already in the wheel counts from zero when it drops."
+)
 # One paint for a burst of cases, long enough that a running sort does not
 # redraw the open slot menu, short enough that the header still feels live.
 _RESULT_REFRESH_MS = 200
@@ -276,6 +290,12 @@ class CatchAllView(QWidget):
         self._mode_group.addButton(self.all_button, _MODE_ALL)
         self.top_ten_button.setChecked(True)
         self._mode_group.idToggled.connect(self._on_mode_toggled)
+        # Plain button, same styling as the dashboard's Reset counts. Assign
+        # is the only #action control on this panel.
+        self.reset_button = QPushButton(_RESET_TEXT, self)
+        self.reset_button.setToolTip(_RESET_TIP)
+        self.reset_button.clicked.connect(self._reset_catch_all)
+        modes.addWidget(self.reset_button)
         modes.addStretch(1)
         modes.addWidget(self.top_ten_button)
         modes.addWidget(self.all_button)
@@ -355,16 +375,35 @@ class CatchAllView(QWidget):
         self.refresh()
 
     def reset(self) -> None:
-        """Zero the breakdown. The dashboard's Reset counts is the caller.
+        """Zero the breakdown, including the sorted-so-far total.
 
-        Template switches and package-mode toggles clear the counts, so this
-        is also what drops a slot map that belonged to the previous layout.
+        The dashboard's Reset counts is the caller, and so are template
+        switches and package-mode toggles. Those change the layout, so this
+        also drops a slot map that belonged to the previous one.
         """
         self.tally.reset()
         self._selected_key = None
         self._session_order.clear()
         self._invalidate_routing()
         self.refresh()
+
+    def clear_catch_all(self) -> None:
+        """Zero the breakdown and the session line. The sorted-so-far total stays.
+
+        The panel's Reset catch-all emptied the bin. The other slots were
+        not touched, and neither were the assignments, so the routing cache
+        stays. ``QtMainWindow.reset_catch_all_counts`` is what also zeroes
+        the slot 0 card.
+        """
+        self.tally.clear_catch_all()
+        self._selected_key = None
+        self._session_order.clear()
+        self.refresh()
+
+    def _reset_catch_all(self) -> None:
+        reset = getattr(self._win, "reset_catch_all_counts", None)
+        if reset is not None:
+            reset()
 
     def apply_palette(self) -> None:
         """Re-bake the below-floor brush from the live palette."""

@@ -128,7 +128,13 @@ class RunController:
             self._package_counts.clear()
 
     def reset_package_slot(self, slot: int) -> None:
-        """Zero one slot's batch counter (live reset button on a slot card)."""
+        """Zero one slot's batch counter.
+
+        A numbered card's live reset calls this, and so does the Catch-All
+        panel for slot 0. Package mode never increments slot 0
+        (``_commit_package_count`` skips it), so that call only clears a
+        counter that was stored.
+        """
         with self._package_lock:
             self._package_counts[int(slot)] = 0
 

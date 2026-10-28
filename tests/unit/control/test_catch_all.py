@@ -232,3 +232,17 @@ def test_reset_clears_totals_and_buckets() -> None:
     assert tally.catch_all_total == 0
     assert tally.top() == []
     assert tally.other() == (0, 0)
+
+
+def test_clear_catch_all_keeps_the_sorted_total() -> None:
+    tally = CatchAllTally()
+    tally.add(_ok(label="BPS"))
+    tally.add(_ok(slot=2, label="WIN", reason=ROUTED))
+    tally.clear_catch_all()
+    assert tally.total == 2
+    assert tally.catch_all_total == 0
+    assert tally.buckets() == []
+    tally.add(_ok(label="IK", reason=BELOW_FLOOR))
+    assert tally.catch_all_total == 1
+    assert tally.total == 3
+    assert [(bucket.key, bucket.reasons) for bucket in tally.buckets()] == [("IK", {BELOW_FLOOR: 1})]

@@ -1816,6 +1816,26 @@ class QtMainWindow(QMainWindow):
             reset()
         self.set_status("Counters reset.")
 
+    def reset_catch_all_counts(self) -> None:
+        """Zero slot 0 and the Catch-All breakdown. The other cards and the master count stay.
+
+        The tally's sorted-so-far total stays too, so the panel header's
+        "of N sorted" still matches the master count and the catch-all
+        number still matches the slot 0 card. Package mode's batch counter
+        for slot 0 is cleared with the same call a numbered card uses; the
+        controller never tallies that slot, so this only drops a stored
+        counter. Safe during a run: a case still in the wheel counts from
+        the new zero when it lands.
+        """
+        self.slot_grid.reset_slot(0)
+        view = getattr(self, "catch_all_view", None)
+        if view is not None:
+            view.clear_catch_all()
+        reset = getattr(self.run_controller, "reset_package_slot", None)
+        if reset is not None:
+            reset(0)
+        self.set_status("Catch-all counter reset.")
+
     def assign_from_catch_all(self, key: str, slot: int | None = None) -> None:
         """Assign from the Catch-All panel.
 
