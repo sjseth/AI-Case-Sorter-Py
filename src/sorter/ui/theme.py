@@ -20,6 +20,11 @@ GROUPBOX_TOP_MARGIN = 10
 # box, large enough to read as a control.
 INDICATOR_SIZE = 14
 
+# Gap between that indicator and its label, in px. Set explicitly: left to the
+# style, macOS uses 2px and the text sits on the box. 6px is QCommonStyle's
+# own metric, so Linux and Windows stay where they were.
+INDICATOR_LABEL_SPACING = 6
+
 # A spinbox's up/down buttons, stacked at the right edge, in px.
 SPIN_BUTTON_WIDTH = 16
 
@@ -437,7 +442,19 @@ QLabel#currentConfidence {{ font-size: 16px; font-weight: bold; }}
 
 QDialog {{ background-color: {c["bg_window"]}; }}
 QLabel#dialogHint, QLabel#rowHint {{ color: {c["text_muted"]}; }}
-QCheckBox, QRadioButton {{ background: transparent; color: {c["text"]}; }}
+/* `border: none` is load-bearing. QMacStyle insets SE_CheckBoxLayoutItem by
+   9px on the right so the Aqua focus ring can spill into the next cell, and
+   QStyleSheetStyle only cancels that inset when this rule has no native
+   border. Without it every checkbox in a row paints over the next control —
+   the serial monitor's Autoscroll / Timestamps / Pause and RX / TX / Notes
+   rows on macOS. The indicator's own border below is a separate subcontrol.
+   `spacing` is the indicator-to-text gap (see INDICATOR_LABEL_SPACING). */
+QCheckBox, QRadioButton {{
+    background: transparent;
+    color: {c["text"]};
+    border: none;
+    spacing: {INDICATOR_LABEL_SPACING}px;
+}}
 QCheckBox:disabled, QRadioButton:disabled {{ color: {c["text_subtle"]}; }}
 /* Left to the platform style these all but vanish on a dark surface, and a
    checkbox then reads as a plain label. Checked is a solid `action` fill —

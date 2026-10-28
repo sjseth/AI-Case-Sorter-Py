@@ -35,7 +35,7 @@ import time
 from collections import deque
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -100,6 +100,70 @@ _FALLBACK = {
     "success": "#22c55e",
     "error": "#ef4444",
 }
+
+
+class _ElidingLabel(QLabel):
+    """Single-line label that yields its width before the controls beside it.
+
+    ``sizeHint`` stays the full string, so a wide panel shows a port path
+    intact. ``minimumSizeHint`` drops to an ellipsis once the text is longer
+    than that, so a narrow panel shortens the path and the checkboxes beside
+    it keep their own width. ``text()`` keeps returning the full string; the
+    painted label is the elided form.
+    """
+
+    def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full = text
+        self._showing = False
+        super().setText(text)
+
+    def text(self) -> str:
+        return self._full
+
+    def setText(self, text: str) -> None:
+        self._full = text
+        self._show_elided()
+        self.updateGeometry()
+
+    def sizeHint(self) -> QSize:
+        hint = super().sizeHint()
+        return QSize(self._full_width(), max(hint.height(), self.fontMetrics().height()))
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        full = self._full_width()
+        # Shorter than the text: an ellipsis and a little of each end. Not
+        # wider than the text itself, or a short status would reserve a hole.
+        floor = min(full, self.fontMetrics().horizontalAdvance("…/…"))
+        return QSize(floor, max(hint.height(), self.fontMetrics().height()))
+
+    def resizeEvent(self, event: Any) -> None:
+        super().resizeEvent(event)
+        self._show_elided()
+
+    def _full_width(self) -> int:
+        if not self._full:
+            return 0
+        return self.fontMetrics().horizontalAdvance(self._full) + 2
+
+    def _show_elided(self) -> None:
+        if self._showing:
+            return
+        width = self.contentsRect().width()
+        if width <= 0:
+            shown = self._full
+        else:
+            shown = self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideMiddle, width)
+        self.setToolTip(self._full if shown != self._full else "")
+        self.setAccessibleName(self._full)
+        if QLabel.text(self) == shown:
+            return
+        self._showing = True
+        try:
+            QLabel.setText(self, shown)
+        finally:
+            self._showing = False
 
 
 class _CommandEdit(QLineEdit):
@@ -182,7 +246,9 @@ class SerialMonitorWidget(QWidget):
         row = QHBoxLayout()
         self._dot = QLabel("●", self)  # BLACK CIRCLE — mirrors the status-bar indicator
         row.addWidget(self._dot)
-        self._header_label = QLabel("disconnected", self)
+        # The port path is the one flexible item in this row. Checkboxes,
+        # the zoom slider and the buttons keep their text; this shortens.
+        self._header_label = _ElidingLabel("disconnected", self)
         row.addWidget(self._header_label)
         row.addStretch(1)
 

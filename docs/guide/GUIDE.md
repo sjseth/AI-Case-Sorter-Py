@@ -146,8 +146,9 @@ look when the machine does something unexpected.
 including while you are typing in its own command box.
 
 - The header shows the connection state, plus **Autoscroll**, **Timestamps**
-  and **Pause**. Pausing holds new lines back and releases them when you
-  un-pause; nothing is lost.
+  and **Pause**. A long port path shortens from the middle when the panel is
+  narrow; hover it for the full path. Pausing holds new lines back and
+  releases them when you un-pause; nothing is lost.
 - **Zoom** scales the text from 50% to 200%, for reading the log across the
   bench.
 - **Clear** empties the view. **Save…** writes what you are currently
