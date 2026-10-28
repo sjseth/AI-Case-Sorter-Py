@@ -393,6 +393,45 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Linux and macOS">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#with-the-installer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        With the installer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#from-a-checkout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From a checkout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#system-libraries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System libraries
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -596,6 +635,45 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Linux and macOS">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#with-the-installer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        With the installer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#from-a-checkout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From a checkout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#system-libraries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System libraries
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -685,7 +763,7 @@ documentation; nothing here wires anything up.</p>
 <p>Once it is installed, go on to <a href="../getting-started/">Getting Started</a>.</p>
 <h2 id="what-you-need">What you need<a class="headerlink" href="#what-you-need" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Windows or Linux.</strong> macOS runs from source.</li>
+<li><strong>Windows, Linux or macOS.</strong></li>
 <li><strong>A webcam</strong> — the app photographs each case with it.</li>
 <li><strong>The CS7.2 sorter</strong> on a USB serial port, for actual sorting. Without it
   the app still runs: pick the <strong>Emulated</strong> port and everything except moving
@@ -720,7 +798,57 @@ need it for updates — see <a href="#updating">Updating</a>.</p>
 locations are in
 <a href="https://github.com/sjseth/AI-Case-Sorter-Py/blob/main/installer/README.md"><code>installer/README.md</code></a>.</p>
 <h2 id="linux-and-macos">Linux and macOS<a class="headerlink" href="#linux-and-macos" title="Permanent link">&para;</a></h2>
-<p>Run it from a checkout. The launch script installs
+<h3 id="with-the-installer">With the installer<a class="headerlink" href="#with-the-installer" title="Permanent link">&para;</a></h3>
+<p>No git needed. In a terminal:</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-fsSLO<span class="w"> </span>https://raw.githubusercontent.com/sjseth/AI-Case-Sorter-Py/main/installer/install-unix.sh
+sh<span class="w"> </span>install-unix.sh
+</code></pre></div>
+<p>It downloads the latest release, checks it against the checksum GitHub
+publishes for it, and installs it in <code>~/.local/opt/ai-case-sorter</code> — per-user,
+<strong>no <code>sudo</code></strong>. It then puts a launcher at <code>~/.local/bin/ai-case-sorter</code>.</p>
+<p>Before it finishes, the installer sets up the app's dependencies in the same
+terminal: it fetches <a href="https://docs.astral.sh/uv/">uv</a>, the right Python and
+the packages the app needs, which takes a few minutes the first time. If a
+system library is missing (see the table below), this is where you are asked
+for your <code>sudo</code> password. The app itself is not started; when the installer
+is done, start it with:</p>
+<div class="highlight"><pre><span></span><code>ai-case-sorter
+</code></pre></div>
+<p>If that says <em>command not found</em>, <code>~/.local/bin</code> is not on your <code>PATH</code> —
+the installer warns you when that is the case. Run
+<code>~/.local/bin/ai-case-sorter</code> instead, or add the folder to your <code>PATH</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--prefix DIR</code></td>
+<td>Install somewhere else, e.g. <code>/opt/ai-case-sorter</code> (the folder must be writable by you, so updates can replace it).</td>
+</tr>
+<tr>
+<td><code>--version TAG</code></td>
+<td>Install a specific release, e.g. <code>--version 2.3.0</code>. The default is the latest.</td>
+</tr>
+<tr>
+<td><code>--no-bootstrap</code></td>
+<td>Skip the dependency setup; the first start of the app does it instead.</td>
+</tr>
+<tr>
+<td><code>--force</code></td>
+<td>Install into a folder that already has other files in it, or replace an existing <code>ai-case-sorter</code> launcher the installer did not write.</td>
+</tr>
+</tbody>
+</table>
+<p>Re-running the installer updates an existing install in place — a safe way
+to repair one. Your data is never touched. An older release pinned with
+<code>--version</code> may skip the dependency setup; the first start of the app does
+it instead.</p>
+<h3 id="from-a-checkout">From a checkout<a class="headerlink" href="#from-a-checkout" title="Permanent link">&para;</a></h3>
+<p>The alternative, if you want git. The launch script installs
 <a href="https://docs.astral.sh/uv/">uv</a> if it isn't already there, uses it to fetch
 the right Python and the dependencies, and starts the app — every time, in one
 step.</p>
@@ -728,9 +856,11 @@ step.</p>
 <span class="nb">cd</span><span class="w"> </span>AI-Case-Sorter-Py
 ./start.sh
 </code></pre></div>
+<h3 id="system-libraries">System libraries<a class="headerlink" href="#system-libraries" title="Permanent link">&para;</a></h3>
 <p>The one thing uv can't provide is system libraries. On a minimal Linux install
-the script offers to install them with <code>sudo</code>; pass <code>--auto</code> (or set
-<code>AUTO_INSTALL=1</code>) to confirm automatically.</p>
+the installer (or <code>./start.sh</code>) offers to install them with <code>sudo</code>; pass
+<code>--auto</code> to <code>./start.sh</code> (or set <code>AUTO_INSTALL=1</code> for either) to confirm
+automatically.</p>
 <table>
 <thead>
 <tr>
@@ -768,13 +898,14 @@ the script offers to install them with <code>sudo</code>; pass <code>--auto</cod
 <p>The first two are required. The third is not — without it Qt falls back to
 Wayland, where a floating <a href="../guide/GUIDE/#panels">panel</a> can't be moved or
 resized.</p>
-<p>You need <strong>some</strong> Python 3 already on the machine, new enough to run
-<code>bootstrap.py</code> — 3.12 or newer. That is not the Python the app itself runs on:
+<p>Either way, you need <strong>some</strong> Python 3 already on the machine, new enough to
+run <code>bootstrap.py</code> — 3.12 or newer. That is not the Python the app itself runs on:
 uv provisions that separately.</p>
 <p>The same checkout works on Windows: <code>start.bat</code> instead of <code>./start.sh</code>.</p>
 <h2 id="starting-the-app">Starting the app<a class="headerlink" href="#starting-the-app" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Windows, installed:</strong> Start Menu → <strong>AI Case Sorter</strong>.</li>
+<li><strong>Linux/macOS, installed:</strong> <code>ai-case-sorter</code> in a terminal.</li>
 <li><strong>From a checkout:</strong> <code>./start.sh</code> (Linux/macOS) or <code>start.bat</code> (Windows).</li>
 </ul>
 <p>Every launch re-checks the dependencies against the lockfile, so pulling a
@@ -824,7 +955,7 @@ a different version…</strong> lists every published release, older ones includ
 optionally pre-releases. See <a href="../guide/GUIDE/#updates">Updates</a> for the whole
 dialog.</p>
 <ul>
-<li><strong>Installed on Windows:</strong> never re-run the installer for an update.</li>
+<li><strong>Installed with an installer:</strong> never re-run it for an update.</li>
 <li><strong>Running from a checkout:</strong> <code>git pull</code> and launch again. The in-app updater
   still works, but a checkout is normally managed with git.</li>
 <li>Turn the automatic check off in the dialog, or set
@@ -853,7 +984,7 @@ does it, but read the CUDA-build note in the
 the two routes ship different builds, and PyPI's Windows wheel is CPU-only.</p>
 <h2 id="when-something-goes-wrong">When something goes wrong<a class="headerlink" href="#when-something-goes-wrong" title="Permanent link">&para;</a></h2>
 <p>Both halves of the launch leave a log under the data folder, in <code>logs/</code>:
-<code>install-&lt;timestamp&gt;.log</code> from the Windows installer, and <code>launch.log</code> from
+<code>install-&lt;timestamp&gt;.log</code> from the installer, and <code>launch.log</code> from
 every start of the app (the run before is kept as <code>launch.prev.log</code>).</p>
 <p>On Windows the console closes with the process and takes any traceback with
 it, so <em>"nothing happened when I clicked it"</em> is nearly always answered by
