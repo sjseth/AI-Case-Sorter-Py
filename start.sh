@@ -5,6 +5,8 @@
 #   ./start.sh                Launch the client (prompt before any sudo).
 #   ./start.sh --auto         Auto-confirm any sudo apt/dnf/pacman installs.
 #   AUTO_INSTALL=1 ./start.sh Same as --auto, for non-interactive shells.
+#   ./start.sh --setup-only   Install uv and the dependencies, then exit
+#                             without starting the app.
 #
 # All the actual bootstrap logic (Python, uv, dependency sync, staged
 # updates) lives in bootstrap.py -- this file just needs *some* Python 3 to

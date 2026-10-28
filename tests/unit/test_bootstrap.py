@@ -188,6 +188,31 @@ def test_main_consumes_auto_flags_and_forwards_the_rest(bootstrap, monkeypatch) 
     assert "value" in launched_argv
 
 
+def test_main_setup_only_syncs_but_never_launches(bootstrap, monkeypatch) -> None:
+    """install-unix.sh runs this to do the first sync up front; the flag must
+    stop before the app, and must never reach it as an app argument."""
+    monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
+    monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=False))
+    monkeypatch.setattr(bootstrap, "ensure_linux_runtime_libs", MagicMock())
+    monkeypatch.setattr(bootstrap, "ensure_qt_platform_libs", lambda *a, **kw: None)
+    monkeypatch.setattr(bootstrap.subprocess, "run", MagicMock(returncode=0))
+    monkeypatch.setattr(bootstrap, "run_app", MagicMock(return_value=0))
+
+    assert bootstrap.main([bootstrap.SETUP_ONLY_FLAG]) == 0
+
+    synced = [c.args[0] for c in bootstrap.subprocess.run.call_args_list if c.args[0][1:2] == ["sync"]]
+    assert synced, "--setup-only skipped the dependency sync"
+    bootstrap.run_app.assert_not_called()
+
+
+def test_install_unix_detects_setup_only_by_its_literal_flag(bootstrap) -> None:
+    """The installer greps the installed bootstrap.py for this exact text
+    before passing it, since an older release would forward it to the app."""
+    script = (ROOT / "installer" / "install-unix.sh").read_text(encoding="utf-8")
+    assert f'SETUP_ONLY_FLAG = "{bootstrap.SETUP_ONLY_FLAG}"' in BOOTSTRAP_PATH.read_text(encoding="utf-8")
+    assert bootstrap.SETUP_ONLY_FLAG in script
+
+
 def test_main_dash_y_is_equivalent_to_auto(bootstrap, monkeypatch) -> None:
     monkeypatch.setattr(bootstrap, "find_uv", MagicMock(return_value="/fake/uv"))
     monkeypatch.setattr(bootstrap, "apply_pending_update", MagicMock(return_value=False))

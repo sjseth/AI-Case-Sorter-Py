@@ -1,8 +1,10 @@
-# Windows installer
+# Installers
 
-For people who just want to run the app — no git, no Python, no terminal.
+For people who just want to run the app — no git. `install-windows.ps1` is
+the Windows one and most of this page; `install-unix.sh` covers Linux and
+macOS ([below](#linux-and-macos-install-unixsh)).
 
-## For users
+## For users (Windows)
 
 1. Download **`install-windows.bat`** and **`install-windows.ps1`** into the
    same folder (or grab them from a release archive).
@@ -82,7 +84,36 @@ self-contained use. The updater still works — it just won't be able to rely
 on your data being outside the app folder, so it leaves `data\` alone
 explicitly.
 
-## Testing the installer locally
+## Linux and macOS: `install-unix.sh`
+
+```bash
+sh install-unix.sh [--prefix DIR] [--version TAG] [--no-bootstrap] [--force] [--repo OWNER/REPO]
+```
+
+POSIX `sh` (dash, and macOS's bash 3.2), needing only `curl`, `tar` and
+`sha256sum` or `shasum`. It follows the Windows installer and the in-app
+updater rule for rule:
+
+| Step | Detail |
+|---|---|
+| Release | `/releases/latest`, or `--version TAG`. Tags are checked against `updater._TAG_RE`; the sdist is matched by its exact name, falling back to the tag's source archive as `_pick_asset` does. A missing release is an error, never a branch install. |
+| Checksum | The same policy as `classify_digest` / `Get-DigestCheck`: `sha256` verifies and a mismatch aborts, absent or unsupported proceeds with a warning, malformed is refused. |
+| Extract | Every entry is vetted first, as `_safe_members` does: no absolute paths, `..`, `:` or `\` in a name, and nothing but regular files and directories. The single top-level folder is stripped. |
+| Install | `~/.local/opt/ai-case-sorter` by default. A non-empty folder that is not a previous install is refused without `--force`. Re-running upgrades in place: `src/sorter` and `sorter` are replaced (the `PRUNE_ROOTS` of `apply_update.py`), everything else is copied over, and `PROTECTED_TOP_LEVEL` entries (`.venv`, `.uv`, `.env`, `data`, `portable.txt`, ...) are never written. |
+| Launcher | `~/.local/bin/ai-case-sorter`, which runs the installed `start.sh`. An existing file there that this script did not write is refused without `--force`. |
+| First run | Runs `start.sh --setup-only` — `bootstrap.py`'s whole first launch (uv, Python, `uv sync`, any `sudo` prompt for system libraries) minus starting the app — in the installer's own terminal, so a later launch from a menu has nothing slow or interactive left to do. `--no-bootstrap` skips it. A release whose `bootstrap.py` predates the flag is detected and skipped, since it would pass the flag to the app. |
+| Log | `<data root>/logs/install-<stamp>.log`, the data root resolved as `paths.app_data_dir()` does (`CASESORTER_DATA_DIR`, `portable.txt`, then the OS default). Best-effort. |
+
+It installs no system packages itself and creates no menu entries.
+
+Its tests need no network: `installer/tests/test-install-unix.sh` sources
+the script for its functions (`CASESORTER_INSTALL_LIB=1`) and drives full
+installs from a synthetic sdist through two testing hooks,
+`CASESORTER_INSTALL_RELEASE_JSON` and `CASESORTER_INSTALL_ARCHIVE`. Run it
+with `sh`, `dash` or `bash`; `tests/unit/test_installer_scripts.py` runs it
+under each one present.
+
+## Testing the Windows installer locally
 
 ### Archive-entry validation and digest checks — run on any OS
 

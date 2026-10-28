@@ -161,6 +161,10 @@ rejects and the other accepts is a bug in whichever accepts it. Everything
 else about the installer needs a real Windows machine; see
 [`installer/README.md`](installer/README.md).
 
+`installer/install-unix.sh` applies the same checks, and its tests run as
+part of `pytest` (`tests/unit/test_installer_scripts.py`), or directly with
+`sh installer/tests/test-install-unix.sh`.
+
 ## Coding guidelines
 
 - **Read [`CLAUDE.md`](CLAUDE.md) first** — it maps the architecture (event bus,
