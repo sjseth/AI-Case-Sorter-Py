@@ -523,6 +523,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#catch-all-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Catch-All panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#themes-panel" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1127,6 +1138,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#catch-all-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Catch-All panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#themes-panel" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1597,8 +1619,8 @@ day, in the order you meet them.</p>
   menus that frame everything else.</li>
 <li><a href="#panels">Panels</a> — the movable side and bottom panels:
   <a href="#serial-monitor">Serial Monitor</a>, <a href="#classification-history">Classification
-  History</a>, the guide you are reading,
-  <a href="#themes-panel">Themes</a> and <a href="#messages">Messages</a>.</li>
+  History</a>, <a href="#catch-all-panel">Catch-All</a>, the
+  guide you are reading, <a href="#themes-panel">Themes</a> and <a href="#messages">Messages</a>.</li>
 <li><a href="#sort-dashboard">Sort dashboard</a> — the main working screen: the current
   case, the slot cards, sorting templates and the run controls.</li>
 <li><a href="#train">Train</a> — capture cases, label them, and train a model from them.</li>
@@ -1721,12 +1743,13 @@ carries a button to the Models page to change it. Never a dead end.</p>
   support package…</a>, About and License.</li>
 </ul>
 <h2 id="panels">Panels<a class="headerlink" href="#panels" title="Permanent link">&para;</a></h2>
-<p>Five panels can sit around your working screen. Each one can be moved,
+<p>Six panels can sit around your working screen. Each one can be moved,
 tabbed together with another, torn off into its own floating window, or
 closed:</p>
 <ul>
 <li><strong>Serial Monitor</strong> — along the bottom, open by default.</li>
 <li><strong>Classification History</strong> — on the right, closed by default.</li>
+<li><strong>Catch-All</strong> — on the right, closed by default.</li>
 <li><strong>User Guide</strong> — on the right, closed by default (this guide).</li>
 <li><strong>Themes</strong> — on the right, closed by default.</li>
 <li><strong>Messages</strong> — on the right, closed by default.</li>
@@ -1785,6 +1808,75 @@ of it, which is what makes watching one position work.</p>
 <p><strong>Zoom</strong> (at the bottom of the panel, 50–200%) sets the tile size, and feeds
 the same count: bigger tiles are easier to read across a bench, smaller tiles
 mean more of them fit. Click any tile to open that case's image full size.</p>
+<h3 id="catch-all-panel">Catch-All panel<a class="headerlink" href="#catch-all-panel" title="Permanent link">&para;</a></h3>
+<p>Slot 0 is the Catch-All: cases the run could not put in a bin. Open the
+panel from <strong>View → Catch-All breakdown</strong>, or by clicking the Catch-All
+card on the <a href="#slot-cards">slot grid</a>. It shows how many cases went there
+this session, which headstamps they were, and why.</p>
+<p>The header is that count against everything sorted so far ("319 in catch-all
+of 615 sorted (52%)"). It stays the number of cases physically in the bin,
+even after you assign some of them.</p>
+<p><strong>Top 10</strong> and <strong>ALL</strong>, at the upper right, choose how much of the list you
+see. Exactly one is lit, in a neutral highlight; the other stays an
+ordinary button. Both keep a visible outline. The panel
+opens on <strong>Top 10</strong>. Each row is a headstamp that would still land in the
+catch-all if it were seen now, with its remaining count, its share of the
+catch-all, and the reason:</p>
+<ul>
+<li><strong>Below floor</strong> — the prediction did not reach the <a href="#run-options">confidence
+  floor</a>. This is the only reason drawn in the warning colour.</li>
+<li><strong>Unassigned</strong> — the headstamp is in the model, and its slot is the Catch-All.</li>
+<li><strong>Unknown</strong> — the label was empty, or it is not one of this model's headstamps.</li>
+<li><strong>Upside down</strong> — the case was classified as upside down, which has no bin
+  of its own. That is a normal trained class, not a failure.</li>
+<li><strong>Batch full</strong> — <a href="#package-mode">package mode</a>, and every slot for that
+  headstamp was already full.</li>
+</ul>
+<p><strong>Top 10</strong> keeps the ten fullest of those rows. Anything past them is one
+greyed <strong>Other</strong> row ("Other: 2 headstamps, 4 cases"). It cannot be selected.
+<strong>ALL</strong> lists every such headstamp, in the same order, with no Other row.
+The table scrolls when that list is longer than the panel. Opening the panel,
+and switching between the two, leaves the panel the size you last had it.
+The lit choice lasts until you quit.</p>
+<p>A headstamp grouped under a parent is listed as the parent; point at the
+reason and the tooltip names the child labels and the full count of each
+reason.</p>
+<p>Giving a headstamp a slot — from this panel, from a slot card, or from
+<strong>Assign by headstamp</strong> — takes it off that list, and the next one moves up.
+That only removes the <strong>Unassigned</strong> cases, and an <strong>Unknown</strong> label that
+now has a slot. <strong>Below floor</strong>, <strong>Upside down</strong> and <strong>Batch full</strong> stay,
+because a bin does not fix them; a row that was a mix of those and
+unassigned cases shrinks to the part that is left. Take the slot away again
+and the headstamp comes back at its full count.</p>
+<p>Under the table, a line keeps what left the list: "Assigned this session:
+BPS → #6 (42 already in bin 0), IK → #7 (17)". Those cases are still in the
+Catch-All bin; the next run is what puts them in the new slot. <strong>Reset
+counts</strong> clears the line with the rest of the tally.</p>
+<p><strong>Assign {name} to empty slot #N</strong>, under the table, puts the selected
+headstamp in the first empty bin and then selects the next headstamp that
+can still be assigned, so you can work down the list. It does this for any
+row, including one that only <strong>ALL</strong> shows. The button is
+unavailable, and says why, when nothing is selected, when there is no empty
+slot, when the label is unknown, or when it already has a slot — the button
+then reads <strong>→ #N</strong>. A row that is only below the confidence floor, for a
+headstamp that already has a slot, is the same: those cases missed the
+floor, and assigning them again would not move them.</p>
+<p><strong>Add to existing slot…</strong>, beside that button, lists the bins that already
+have brass ("#4 WMA, WMA NATO"), in slot order. Pick one and the selected
+headstamp shares that bin with whatever is already there — useful when a
+headstamp shows up rarely and does not need a bin of its own. It is
+unavailable, and says why, when nothing is selected, when the label is
+unknown, when it already has a slot, or when no slot has a headstamp yet.
+Assign to empty slot stays the main button. Either choice selects the next
+headstamp that can still be assigned. The menu stays open while cases keep
+arriving, so a bin can be picked during a run; the table catches up when
+the menu closes.</p>
+<p>You can assign during a run. The case already in the wheel still drops in
+the Catch-All; put an empty bin in the slot you just filled, and the next
+case of that headstamp uses it. In parent mode the assignment is the
+parent's slot, which is the slot the run actually reads.</p>
+<p>The counts follow the slot cards: they survive Stop and Start, and <strong>Reset
+counts</strong> clears them together with the cards.</p>
 <h3 id="themes-panel">Themes panel<a class="headerlink" href="#themes-panel" title="Permanent link">&para;</a></h3>
 <p>The whole list of themes in one place. Click one and the app repaints
 immediately, so you can try them against the room's lighting without leaving
@@ -1839,6 +1931,9 @@ routed to a slot; the rest are your bins. A card shows:</p>
 <li>every headstamp currently routed to it, listed in full — the card grows to
   fit the list rather than truncating it</li>
 </ul>
+<p>Click the <strong>Catch-All</strong> card (it says "🔍 Click for breakdown") to open the
+<a href="#catch-all-panel">Catch-All panel</a>. The other cards say "✎ Click to edit"
+and open the <a href="#editing-an-assignment">assignment editor</a>.</p>
 <p>Above the grid: <strong>Assign by headstamp…</strong> opens the
 <a href="#assigning-by-headstamp">headstamp-first view</a> of the whole layout,
 <strong>Sorted this run</strong> counts every case this run has sorted,
@@ -1846,9 +1941,10 @@ routed to a slot; the rest are your bins. A card shows:</p>
 without touching your assignments, and the <a href="#sorting-templates">template</a>
 picker names the layout the cards are showing.</p>
 <h3 id="editing-an-assignment">Editing an assignment<a class="headerlink" href="#editing-an-assignment" title="Permanent link">&para;</a></h3>
-<p>Click any card except Catch-All to open its assignment editor. Tick a
-headstamp to route it to that slot; unticking sends it back to the
-Catch-All. Outside of <a href="#package-mode">package mode</a> a headstamp can only be
+<p>Click a numbered slot's card to open its assignment editor. The Catch-All
+card opens the <a href="#catch-all-panel">Catch-All panel</a> instead — slot 0 is not
+a bin you configure from that editor. Tick a headstamp to route it to the
+slot; unticking sends it back to the Catch-All. Outside of <a href="#package-mode">package mode</a> a headstamp can only be
 assigned to one slot at a time — ticking it here moves it off whichever slot
 it was in before, and the row tells you which one that was.</p>
 <p>The list opens in three groups, alphabetical within each: what is already in
@@ -1916,7 +2012,10 @@ changes how a run behaves:</p>
 <li><strong>Confidence floor</strong> — the percentage a prediction has to reach to be
   trusted. Below it, the case goes to the Catch-All.</li>
 <li><strong>Automatically select trays</strong> — when a confident prediction has no slot,
-  route it to the first empty one and keep the assignment.</li>
+  route it to the first empty one and keep the assignment. With parent
+  classifications on, that assignment is the parent's slot, which is what
+  the run actually uses — assigning the child on its own would leave the
+  cases in the Catch-All. A label the model does not have is left alone.</li>
 <li><strong>Package mode</strong> and <strong>Batch size</strong> — see <a href="#package-mode">package mode</a>.</li>
 </ul>
 <h3 id="start-stop-and-manual-feed">Start, Stop, and Manual feed<a class="headerlink" href="#start-stop-and-manual-feed" title="Permanent link">&para;</a></h3>
@@ -1953,6 +2052,20 @@ both versions: the one the model needs and the one you have. Update PyTorch
 when the app offers to, and it will load. Nothing about this is recoverable
 by retrying, and a model that says this has not been damaged — it is simply
 newer than the software trying to open it.</p>
+<p><strong>"Update PyTorch to use this model."</strong> A different message, and a security
+one. A trained model file from somewhere else can carry code, and PyTorch
+versions older than 2.10.0 have a flaw that lets such a file run it. So a
+model file that <strong>was not trained on this machine</strong> — one downloaded from the
+<a href="#community">Community</a>, imported from a ZIP, or brought across
+<a href="#import-from-windows">from the Windows app</a> — is not loaded until PyTorch is
+updated, and there is no "not now". A model you trained here only <em>offers</em> the
+update. Models that were already in your library before this check arrived
+count as trained here, so nothing you were already sorting with changes. A
+fresh install already has a new enough PyTorch, so most people never see this.
+The check runs for every case, not just at Start: activating such a model on
+the <a href="#models">Models</a> page in the middle of a run stops the run with this
+message instead of loading it. Training the model here replaces its file with
+your own, after which it counts as trained here.</p>
 <h3 id="running-out-of-brass">Running out of brass<a class="headerlink" href="#running-out-of-brass" title="Permanent link">&para;</a></h3>
 <p>When the collator runs dry mid-run, up to three cases are still riding the
 feed wheel — fed past the sensor but not yet dropped. The app notices the
@@ -2181,7 +2294,12 @@ community ID you already have installed, the app asks whether to <strong>update 
 installed one in place</strong> — keeping its slot assignments, sorting templates and
 your name for it — or to <strong>import it as a separate copy</strong>; anything else lands
 as a new model. A ZIP you import stays <em>yours</em>: importing your own model onto
-a new machine leaves it trainable.</p>
+a new machine leaves it trainable. Its trained model file still came from
+outside this machine, though, so it needs an up-to-date PyTorch before it
+loads (see <a href="#start-stop-and-manual-feed">"Update PyTorch to use this model"</a>).</p>
+<p>An archive is refused if any image in it has a name that could point outside
+the model's folder — a drive letter or a colon in the name. Archives from this
+app and from the Windows app never have such a name.</p>
 <p>Import and export both run in the background; a model with its images can be
 large.</p>
 <h2 id="community">Community<a class="headerlink" href="#community" title="Permanent link">&para;</a></h2>
@@ -2372,7 +2490,14 @@ instead of duplicating.</p>
   summary at the end names the ones you did import.</li>
 <li><strong>A model that came from the <a href="#community">Community</a> stays read-only</strong>, the
   same as one downloaded here: the trained model file belongs to whoever
-  published it, so it is not trainable. Your own models stay trainable.</li>
+  published it, so it is not trainable. Your own models stay trainable. If you
+  already downloaded that model here, the import updates your copy and it
+  stays read-only.</li>
+<li><strong>Trained model files imported from the Windows app need PyTorch 2.10.0 or
+  newer</strong> before they load, like any model file that wasn't trained on this
+  computer (see <a href="#start-stop-and-manual-feed">"Update PyTorch to use this model"</a>).</li>
+<li><strong>Board settings that aren't whole numbers are skipped.</strong> The board only
+  takes whole numbers, so any other value stays at this app's default.</li>
 <li><strong>A Windows model set to classify over an OpenAI server imports as an
   OpenAI model here too</strong>, keeping its own endpoint, prompt and headstamps.
   Activate it and the <a href="#ai-config">AI Config</a> page edits its settings.</li>
