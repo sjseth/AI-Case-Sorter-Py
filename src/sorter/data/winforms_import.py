@@ -57,7 +57,7 @@ from .config import (
 )
 from .db import Database
 from .model_io import WINFORMS_MODELMODE_OPENAI, model_from_export_dict, unique_model_name
-from .models import AIModelConfig, Model
+from .models import CHECKPOINT_ORIGIN_IMPORTED, AIModelConfig, Model, is_foreign_model
 from .repository import (
     CartridgeRepo,
     HeadstampParentRepo,
@@ -718,6 +718,16 @@ def _import_one_model(
     if existing is not None:
         model.id = existing.id
         model.name = existing.name
+        # Ownership never downgrades on update — the rule
+        # `model_io._merge_onto_installed` applies to a ZIP. A legacy row
+        # matched by community UID says `Standard` (that is what the legacy
+        # app stores for its own copy), and taking it would hand the user
+        # training rights on a community download and lift its torch floor.
+        if is_foreign_model(existing):
+            model.model_type = existing.model_type
+        # Provenance belongs to the checkpoint on disk, which this update
+        # only replaces if a checkpoint is copied below.
+        model.checkpoint_origin = existing.checkpoint_origin
         # The user's local API credentials outlive a re-import — unless they
         # never entered any. A row first imported before "openai" was a mode
         # here has a blank local config, and keeping that blank would discard
@@ -736,6 +746,8 @@ def _import_one_model(
         # an import can actually create; the ZIP path already resolves it the
         # same way.
         model.name = unique_model_name(entry.name, model_repo)
+        # Any checkpoint this row gets is copied from the legacy folder.
+        model.checkpoint_origin = CHECKPOINT_ORIGIN_IMPORTED
         saved_id = model_repo.create(model).id
         result.models_imported += 1
     _remember_import(settings_repo, root, entry.legacy_id, saved_id)
@@ -786,7 +798,10 @@ def _import_serial(defaults: dict[str, Any], settings_json: dict[str, Any], conf
         try:
             init[key] = int(str(raw_value).strip())
         except (TypeError, ValueError):
-            init[key] = str(raw_value)
+            # Skipped, never stored as text: the value is sent to the board as
+            # `<key>:<value>`, so a string could carry a newline and with it a
+            # second, unvetted command — and the Settings pages expect an int.
+            log.warning("winforms import: skipping non-integer init value for %s: %r", key, raw_value)
     serial["init_settings"] = init
 
 
@@ -1021,6 +1036,9 @@ def import_installation(
                 saved = model_repo.get(model_id)
                 if saved is not None:
                     saved.model_path = str(dest)
+                    # Written by the legacy app's torch, not trained here, so
+                    # the torch security floor applies (`needs_torch_floor`).
+                    saved.checkpoint_origin = CHECKPOINT_ORIGIN_IMPORTED
                     model_repo.update(saved)
 
     log.info(

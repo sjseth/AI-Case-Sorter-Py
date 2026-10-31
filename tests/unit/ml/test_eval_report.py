@@ -81,3 +81,64 @@ def test_report_row_key_order_matches_winforms(tmp_path: Path) -> None:
         "raw_original_classification",
         "has_mapping",
     ]
+
+
+# ----- strings from archives stay data (security audit, 2026-10) ---------------
+
+# Both shapes were reproduced as live script in a browser against the
+# unescaped report: a markup filename (an archive picks image basenames) and a
+# `</script>` class name (a checkpoint picks its class list).
+_FILENAME_PAYLOAD = "<img src=x onerror=alert(1)>__1.jpg"
+_CLASS_PAYLOAD = "</script><script>alert(2)</script>"
+
+
+def _hostile_rows() -> list[dict]:
+    return [
+        {
+            "filename": _FILENAME_PAYLOAD,
+            "filepath": "/x/" + _FILENAME_PAYLOAD,
+            "thumbnail": "",
+            "classification": _CLASS_PAYLOAD,
+            "confidence": 0.5,
+            "original_classification": "<b>orig</b>",
+            "raw_original_classification": "'raw\"",
+            "has_mapping": True,
+        }
+    ]
+
+
+def test_row_data_cannot_close_its_script_block() -> None:
+    html = eval_report.render_html(_hostile_rows())
+    start = html.index("const data = ") + len("const data = ")
+    end = html.index(";\n", start)
+    literal = html[start:end]
+
+    assert "<" not in literal and ">" not in literal and "&" not in literal
+    # Exactly one inline script, i.e. nothing escaped into a second one.
+    assert html.count("<script>") == 1
+    # The escapes decode back to the very same strings.
+    (row,) = json.loads(literal)
+    assert row["filename"] == _FILENAME_PAYLOAD
+    assert row["classification"] == _CLASS_PAYLOAD
+
+
+def test_every_row_string_is_escaped_before_it_reaches_innerhtml() -> None:
+    """The page builds its tables with innerHTML; each archive-derived field
+    goes through the page's `esc` helper on the way in."""
+    html = eval_report.render_html([])
+    assert "function esc(value)" in html
+    for field in (
+        "row.filename",
+        "row.classification",
+        "row.original_classification",
+        "row.raw_original_classification",
+        "row.cls",
+        "row.thumbnail",
+    ):
+        assert "${" + field + "}" not in html, f"{field} is interpolated unescaped"
+        assert "${esc(" + field + ")}" in html
+
+
+def test_script_json_escapes_only_what_html_parses() -> None:
+    assert eval_report.script_json({"a": "</script>&"}) == '{"a": "\\u003c/script\\u003e\\u0026"}'
+    assert eval_report.script_json([1, "plain"]) == json.dumps([1, "plain"])

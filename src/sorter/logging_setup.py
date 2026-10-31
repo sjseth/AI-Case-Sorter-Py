@@ -86,8 +86,8 @@ def configure(force: bool = False) -> None:
     root.addHandler(console)
 
     try:
-        directory = paths.logs_dir()
-        directory.mkdir(parents=True, exist_ok=True)
+        # Owner-only: status lines can carry server-supplied URLs.
+        directory = paths.make_private_dir(paths.logs_dir())
         file_handler = RotatingFileHandler(
             directory / LOG_FILENAME,
             maxBytes=MAX_BYTES,

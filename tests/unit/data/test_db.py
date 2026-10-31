@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -32,9 +33,10 @@ MIGRATION_NAMES = [
     "0005_models_columns",
     "0006_models_checkpoint_env",
     "0007_sort_runs",
+    "0008_models_checkpoint_origin",
 ]
 # The steps that widen `models` through the same idempotent helper.
-MODEL_COLUMN_MIGRATIONS = ("0005_models_columns", "0006_models_checkpoint_env")
+MODEL_COLUMN_MIGRATIONS = ("0005_models_columns", "0006_models_checkpoint_env", "0008_models_checkpoint_origin")
 MIGRATION_SET = "casesorter"
 
 
@@ -562,3 +564,33 @@ def test_model_mode_widening_is_idempotent(tmp_path: Path) -> None:
     assert db.conn.execute("SELECT sql FROM sqlite_master WHERE name='models'").fetchone()[0] == first_sql
     assert ModelRepo(db).get(1) is not None
     db.close()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX modes; Windows relies on the %LOCALAPPDATA% ACL")
+def test_the_database_files_are_owner_only(tmp_path: Path) -> None:
+    """The settings table holds the AI Config API key in plain text."""
+    previous = os.umask(0o022)
+    try:
+        db = Database(tmp_path / "secret.db")
+        db.ensure_initialized()
+        SettingsRepo(db).set("api", {"api_key": "dummy"})
+    finally:
+        os.umask(previous)
+
+    for suffix in ("", "-wal", "-shm"):
+        f = tmp_path / f"secret.db{suffix}"
+        if f.exists():
+            assert f.stat().st_mode & 0o777 == 0o600, f.name
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX modes")
+def test_an_existing_world_readable_database_is_tightened(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    Database(path).ensure_initialized()
+    path.chmod(0o644)
+
+    reopened = Database(path)
+    reopened.ensure_initialized()
+
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert len(ModelRepo(reopened).list()) == 1, "an existing DB is reopened, not re-seeded"

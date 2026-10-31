@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import shutil
 import time
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -1126,6 +1127,31 @@ def test_a_download_installs_the_publishers_model(page, window, api, config, tmp
     assert window.notify.titles == ["Download complete"]
 
 
+@pytest.mark.parametrize("uid_kind", ["absolute", "relative"])
+def test_a_server_supplied_uid_never_names_the_download_path(page, api, config, tmp_path, uid_kind) -> None:
+    """The catalogue's ModelUID used to be the temp file's name; an absolute or
+    `../` value moved the write — and an overwrite — out of the temp dir."""
+    source = seed_exportable(config, "Source")
+    api.archive = write_archive(config, tmp_path / "m.zip", source, name="Range brass")
+    victim = tmp_path / "victim"
+    uid = str(victim / "existing") if uid_kind == "absolute" else "../../../victim/planted"
+    written: list[Path] = []
+    real_download = api.download_to
+
+    def spy(url: str, dest: Any, **kwargs: Any) -> Path:
+        written.append(Path(dest))
+        return real_download(url, dest, **kwargs)
+
+    api.download_to = spy
+
+    page._download_and_import(info(uid=uid), "Range brass", update_existing=True)
+
+    (dest,) = written
+    assert dest.name == "download.zip"
+    assert not victim.exists()
+    assert any(m.name == "Range brass" for m in ModelRepo(config.db).list())
+
+
 def test_a_download_of_a_feedback_model_explains_the_loop(page, window, api, config, tmp_path) -> None:
     source = seed_exportable(config, "Source")
     api.archive = write_archive(
@@ -1366,6 +1392,49 @@ def test_images_only_can_be_shared_without_a_checkpoint(share, config, api, qapp
     assert notified.titles == ["Model shared"]
     assert api.shares[0]["model_info"]["ModelExportMode"] == 2
     assert "images/9mm FC__1.jpg" in api.shares[0]["entries"]
+
+
+def test_a_path_shaped_stored_uid_is_replaced_not_used_as_a_filename(share, config, api, qapp) -> None:
+    """A UID an older build took from a crafted manifest is not one the server
+    issued; it must not name the share archive (`<uid>.zip`)."""
+    model = seed_exportable(config, "Range brass")
+    model.community_model_uid = "../../escaped"
+    ModelRepo(config.db).update(model)
+    dialog, notified = share()
+    select_model(dialog, "Range brass")
+
+    dialog.share()
+
+    assert pump(qapp, lambda: notified.titles != []), "the share worker never finished"
+    sent = api.shares[0]["model_info"]
+    assert sent["CommunityModelUID"] != "../../escaped"
+    uuid.UUID(sent["CommunityModelUID"])
+    # Treated as a first share, not a re-publish of someone else's UID.
+    assert sent["ModelVersion"] == model.model_version
+    assert not (paths.export_temp_dir().parent / "escaped.zip").exists()
+
+
+def test_packaging_refuses_a_uid_that_is_a_path(share, config, api) -> None:
+    model = seed_exportable(config, "Range brass")
+    dialog, _notified = share()
+
+    with pytest.raises(ValueError, match="plain token"):
+        dialog._package_and_upload(
+            lambda _msg: None,
+            model=model,
+            model_info={},
+            mode=ExportMode.MODEL_AND_IMAGES,
+            model_file=Path(model.model_path or ""),
+            images_dir=paths.model_images_dir(model.id),
+            headstamps=["9mm FC"],
+            cartridge_name="9mm",
+            uid="/tmp/planted",
+            version=1,
+            feedback_enabled=False,
+            feedback_floor=0,
+        )
+    assert api.shares == []
+    assert not Path("/tmp/planted.zip").exists()
 
 
 def test_sharing_uploads_a_real_archive_and_stamps_the_uid(share, config, api, qapp) -> None:

@@ -21,23 +21,34 @@ Critical: ZIP entry names from a Windows-produced archive use backslashes
 (`images\\foo.jpg`). On Linux this means a single flat filename containing
 backslashes, which breaks `Path` ops. Every read normalizes to forward
 slashes before any path manipulation. Path-traversal entries (``..``) are
-rejected.
+rejected, and so is an image basename carrying a colon: on Windows
+``img_dir / "D:x.jpg"`` *discards* ``img_dir`` and lands on another drive. Every
+extracted file is also checked to resolve inside the directory it was meant for.
+
+Two manifest fields are machine-local and never trusted from an archive:
+``model_type`` when the archive came from the Community page (see
+`import_model`), and ``checkpoint_origin``, which is always ``"imported"`` for a
+checkpoint this module writes. ``CommunityModelUID`` is dropped, with a
+warning, unless it is a plain token (`models.is_safe_community_uid`) — the
+share dialog uses it as a filename.
 """
 
 from __future__ import annotations
 
 import enum
 import json
+import logging
 import os
 import shutil
 import zipfile
 from collections.abc import Callable
 from dataclasses import asdict
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from .. import paths
 from .models import (
+    CHECKPOINT_ORIGIN_IMPORTED,
     MODEL_MODES,
     OPENAI_MODEL_MODE,
     AIModelConfig,
@@ -47,6 +58,7 @@ from .models import (
     Model,
     TrainingConfig,
     is_foreign_model,
+    is_safe_community_uid,
     normalize_upload_mode,
 )
 from .repository import (
@@ -54,6 +66,8 @@ from .repository import (
     HeadstampRepo,
     ModelRepo,
 )
+
+log = logging.getLogger(__name__)
 
 
 class ExportMode(str, enum.Enum):
@@ -90,11 +104,53 @@ def _is_traversal(rel: str) -> bool:
     return any(part == ".." for part in p.parts)
 
 
+def _is_safe_basename(name: str) -> bool:
+    """Can `name` be joined onto a directory without leaving it, on any OS?
+
+    `_normalize` has already turned backslashes into separators, so `name` has
+    none. What is left that escapes is Windows-only: a drive (``D:x.jpg`` makes
+    the join drop the directory) or an anchor. A colon is refused outright —
+    it is illegal in a Windows filename, so no legitimate archive carries one,
+    and on NTFS ``a:b.jpg`` would name an alternate data stream.
+    """
+    if not name or name in (".", "..") or ":" in name or "\x00" in name:
+        return False
+    win = PureWindowsPath(name)
+    return not (win.drive or win.anchor)
+
+
+def _assert_within(dest: Path, root: Path) -> None:
+    """Refuse a write that resolves outside `root` (a symlink, an odd join)."""
+    try:
+        inside = dest.resolve().is_relative_to(root.resolve())
+    except OSError:
+        inside = False
+    if not inside:
+        raise ValueError(f"Refusing to write {dest}: outside {root}")
+
+
+def _clean_community_uid(value: Any) -> str | None:
+    """The manifest's CommunityModelUID, or None when it isn't a plain token.
+
+    Dropping it costs nothing a legitimate archive has: the row just isn't
+    matched for an in-place update, and a later share mints a fresh UID.
+    """
+    if value is None or value == "":
+        return None
+    text = str(value)
+    if is_safe_community_uid(text):
+        return text
+    log.warning("Ignoring malformed CommunityModelUID %r in imported manifest", text)
+    return None
+
+
 def model_to_export_dict(m: Model) -> dict[str, Any]:
     """Serialize a Model for the manifest. Strips paths & secrets."""
     d = asdict(m)
     # Strip absolute paths so importers compute their own.
     d.pop("model_path", None)
+    # Machine-local provenance: the importer decides it, never the archive.
+    d.pop("checkpoint_origin", None)
     if d.get("training_config"):
         d["training_config"].pop("image_directory", None)
         d["training_config"].pop("output_model_path", None)
@@ -193,7 +249,7 @@ def model_from_export_dict(d: dict[str, Any]) -> Model:
         cartridge_id=0,
         model_mode=_normalize_model_mode(_g(d, "model_mode", "ModelMode")),
         model_type=_normalize_model_type(_g(d, "model_type", "ModelType", default="Standard")),
-        community_model_uid=_g(d, "community_model_uid", "CommunityModelUID"),
+        community_model_uid=_clean_community_uid(_g(d, "community_model_uid", "CommunityModelUID")),
         model_version=int(_g(d, "model_version", "ModelVersion", default=1)),
         enable_image_processing=bool(_g(d, "enable_image_processing", "EnableImageProcessing", default=True)),
         image_processing=image_processing,
@@ -393,10 +449,10 @@ def find_update_target(zip_path: Path | str, *, db: Any) -> Model | None:
     installed yet — i.e. when importing it would create a new model.
     """
     info = read_manifest(zip_path).get("ModelInfo") or {}
-    uid = _g(info, "community_model_uid", "CommunityModelUID")
+    uid = _clean_community_uid(_g(info, "community_model_uid", "CommunityModelUID"))
     if not uid:
         return None
-    return ModelRepo(db).find_by_community_uid(str(uid))
+    return ModelRepo(db).find_by_community_uid(uid)
 
 
 def _merge_onto_installed(incoming: Model, existing: Model, *, name: str) -> Model:
@@ -425,7 +481,9 @@ def _merge_onto_installed(incoming: Model, existing: Model, *, name: str) -> Mod
         incoming.model_type = existing.model_type
     # Overwritten during extraction if the archive ships a checkpoint; keep
     # the installed one so an images-only archive doesn't orphan the model.
+    # Its origin travels with it, for the same reason.
     incoming.model_path = existing.model_path
+    incoming.checkpoint_origin = existing.checkpoint_origin
     # The env describes a checkpoint, so it follows the same rule: an archive
     # that records nothing (every pre-#77 export, and everything the legacy app
     # writes) must not erase what the installed copy already knows.
@@ -503,6 +561,8 @@ def import_model(
             if rel.endswith("/") or rel == "manifest.json":
                 continue
             if posix.parts and posix.parts[0] == "images":
+                if not _is_safe_basename(posix.parts[-1]):
+                    raise ValueError(f"Refusing to import {zip_path}: unsafe image entry {entry.filename!r}")
                 if Path(posix.parts[-1]).suffix.lower() not in _VALID_IMAGE_EXTS:
                     raise ValueError(f"Refusing to import {zip_path}: unexpected image entry {entry.filename!r}")
             elif posix.parts and posix.parts[0] == "model":
@@ -563,6 +623,9 @@ def import_model(
         else:
             desired_name = model_name_override or model.name or "Imported"
             model.name = unique_model_name(desired_name, model_repo)
+            # Whatever checkpoint this row ends up with arrives from the
+            # archive, so it is imported from the start.
+            model.checkpoint_origin = CHECKPOINT_ORIGIN_IMPORTED
             saved = model_repo.create(model)
 
         # Decide target directories (per-model `<id>/images` and
@@ -588,6 +651,7 @@ def import_model(
             posix = PurePosixPath(rel)
             if posix.parts and posix.parts[0] == "images":
                 dest = img_dir / posix.parts[-1]
+                _assert_within(dest, img_dir)
                 _extract_to(zf, entry, dest)
             elif posix.parts and posix.parts[0] == "model":
                 model_basename = posix.parts[-1]
@@ -599,8 +663,13 @@ def import_model(
                 elif not suffix:
                     suffix = ".pth"
                 dest = mod_dir / f"{saved.id}{suffix}"
+                _assert_within(dest, mod_dir)
                 _extract_to(zf, entry, dest)
                 saved.model_path = str(dest)
+                # The torch floor reads this (`models.needs_torch_floor`):
+                # someone else's torch wrote this file, whoever may train
+                # the model from here on.
+                saved.checkpoint_origin = CHECKPOINT_ORIGIN_IMPORTED
                 model_repo.update(saved)
             if progress:
                 progress(i, progress_total)

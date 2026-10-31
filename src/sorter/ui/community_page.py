@@ -939,7 +939,10 @@ class CommunityPage(QWidget):
         if not url:
             raise RuntimeError("Server did not return a download URL")
         with tempfile.TemporaryDirectory() as tmpdir:
-            zip_path = Path(tmpdir) / f"{info.model_uid}.zip"
+            # A fixed name, never the catalogue's ModelUID: that string comes
+            # from the server, and an absolute or `../` value would move the
+            # write out of the temp directory (and past its cleanup).
+            zip_path = Path(tmpdir) / "download.zip"
             api.download_to(
                 url,
                 zip_path,

@@ -13,6 +13,7 @@ row exists yet.
 from __future__ import annotations
 
 import copy
+import logging
 from typing import Any
 
 from .db import Database
@@ -23,6 +24,8 @@ from .repository import (
     SettingsRepo,
     SlotTemplateRepo,
 )
+
+log = logging.getLogger(__name__)
 
 DEFAULT_INIT_SETTINGS: dict[str, int | str] = {
     "feedhomingoffset": 0,
@@ -45,6 +48,38 @@ DEFAULT_INIT_SETTINGS: dict[str, int | str] = {
     "airdropdsignalduration": 70,
     "airdroppostdelay": 50,
 }
+
+
+def clean_init_settings(raw: Any) -> dict[str, int]:
+    """Board init settings with every value an int, whatever was stored.
+
+    Each value is sent to the board as ``<key>:<value>`` and every Settings
+    page builds a spin box from it, so a non-integer is both a way to smuggle a
+    second command through an embedded newline and a crash at window build.
+    An earlier WinForms import could store one; this is the repair. A bad value
+    for a known key falls back to its default, an unknown key with a bad value
+    is dropped, and a bool becomes 0/1.
+    """
+    out: dict[str, int] = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    for key, value in raw.items():
+        if isinstance(value, bool):
+            out[key] = int(value)
+            continue
+        if isinstance(value, int):
+            out[key] = value
+            continue
+        try:
+            out[key] = int(str(value).strip())
+            continue
+        except (TypeError, ValueError):
+            pass
+        default = DEFAULT_INIT_SETTINGS.get(key)
+        log.warning("serial init setting %s has a non-integer value %r; using %r", key, value, default)
+        if isinstance(default, int):
+            out[key] = default
+    return out
 
 
 DEFAULTS: dict[str, Any] = {
@@ -182,6 +217,9 @@ class Config:
                 self.data[key] = _merge_defaults(copy.deepcopy(DEFAULTS[key]), stored)
             else:
                 self.data[key] = copy.deepcopy(DEFAULTS[key])
+        serial = self.data.get("serial")
+        if isinstance(serial, dict):
+            serial["init_settings"] = clean_init_settings(serial.get("init_settings"))
         return self
 
     def reload_headstamps_for_active_model(self) -> None:

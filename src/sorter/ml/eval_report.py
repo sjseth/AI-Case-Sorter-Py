@@ -1,6 +1,8 @@
-"""HTML evaluation report — a verbatim port of the legacy app's batch image
-report so this app produces the exact same self-contained, interactive report
-file.
+"""HTML evaluation report — a port of the legacy app's batch image report, so
+this app produces the same self-contained, interactive report file. It is
+verbatim except for escaping: row strings (archive-chosen image filenames,
+checkpoint-chosen class names) are escaped for the inline ``<script>`` and for
+every table cell built from them, which the legacy report did not do.
 
 Thumbnails are embedded as base64 data URIs, so the report is a single portable
 file. Everything here is cross-platform (pathlib + PIL only).
@@ -496,6 +498,14 @@ _HTML_TAIL = """;
         
         let currentSort = { column: null, direction: 'asc' };
         
+        // Filenames and class names come from model archives and checkpoints:
+        // every one goes through this before it reaches innerHTML.
+        function esc(value) {
+            return String(value ?? '').replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+        
         function getConfidenceClass(conf) {
             if (conf >= 0.7) return 'confidence-high';
             if (conf >= 0.4) return 'confidence-medium';
@@ -543,18 +553,18 @@ _HTML_TAIL = """;
                 // Show raw classification if different from mapped
                 const originalDisplay = row.original_classification 
                     ? (row.raw_original_classification && row.raw_original_classification !== row.original_classification
-                        ? `${row.original_classification} ${mappingBadge}<br><span class="raw-classification">(${row.raw_original_classification})</span>`
-                        : `${row.original_classification} ${mappingBadge}`)
+                        ? `${esc(row.original_classification)} ${mappingBadge}<br><span class="raw-classification">(${esc(row.raw_original_classification)})</span>`
+                        : `${esc(row.original_classification)} ${mappingBadge}`)
                     : '-';
                 
                 return `
                     <tr>
-                        <td><img src="${row.thumbnail}" class="thumbnail" alt="${row.filename}" onerror="this.style.display='none'"></td>
-                        <td><strong>${row.classification}</strong></td>
+                        <td><img src="${esc(row.thumbnail)}" class="thumbnail" alt="${esc(row.filename)}" onerror="this.style.display='none'"></td>
+                        <td><strong>${esc(row.classification)}</strong></td>
                         <td><span class="confidence ${confClass}">${confPercent}%</span></td>
                         <td>${originalDisplay}</td>
                         <td>${matchLabel}</td>
-                        <td><small>${row.filename}</small></td>
+                        <td><small>${esc(row.filename)}</small></td>
                     </tr>
                 `;
             }).join('');
@@ -726,11 +736,11 @@ _HTML_TAIL = """;
                 const highClass = getConfidenceClass(row.high);
                 const lowClass = getConfidenceClass(row.low);
                 const mismatchClass = row.mismatches > 0 ? 'mismatch-count' : 'mismatch-zero';
-                const mismatchAttr = row.mismatches > 0 ? `data-classification="${row.cls}" title="Click to filter mismatches"` : '';
+                const mismatchAttr = row.mismatches > 0 ? `data-classification="${esc(row.cls)}" title="Click to filter mismatches"` : '';
                 
                 return `
                     <tr>
-                        <td class="class-name">${row.cls}</td>
+                        <td class="class-name">${esc(row.cls)}</td>
                         <td class="count">${row.count}</td>
                         <td class="conf-avg ${avgClass}">${(row.avg * 100).toFixed(1)}%</td>
                         <td class="conf-high ${highClass}">${(row.high * 100).toFixed(1)}%</td>
@@ -831,9 +841,26 @@ _HTML_TAIL = """;
 """
 
 
+def script_json(value: Any) -> str:
+    """`value` as JSON that is inert inside an inline ``<script>``.
+
+    `json.dumps` leaves ``<``, ``>`` and ``&`` alone, so a filename or class
+    name containing ``</script>`` would end the data block and run whatever
+    follows. Their ``\\uXXXX`` escapes decode to the same string in JavaScript.
+    """
+    return json.dumps(value).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+
+
 def render_html(rows: list[dict[str, Any]]) -> str:
-    """The exact report HTML for a list of report-shaped rows."""
-    return _HTML_HEAD + json.dumps(rows) + _HTML_TAIL
+    """The report HTML for a list of report-shaped rows.
+
+    The page is the legacy report's, with one deliberate difference: row data
+    is escaped twice — for the ``<script>`` it is embedded in
+    (`script_json`) and for the table cells the page builds from it (the JS
+    ``esc`` helper). Image filenames come from model archives and class names
+    from checkpoints, so neither may be treated as markup.
+    """
+    return _HTML_HEAD + script_json(rows) + _HTML_TAIL
 
 
 def report_rows(results: list[dict[str, Any]]) -> list[dict[str, Any]]:

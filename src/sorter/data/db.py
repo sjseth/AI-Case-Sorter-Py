@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import shutil
 import sqlite3
 import threading
@@ -40,7 +41,7 @@ from sqlite_utils.migrations import Migrations
 
 from .. import paths
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Split out of SCHEMA_DDL because the v3 -> v4 ladder step replays it verbatim;
 # one copy means the step cannot drift from the schema.
@@ -124,6 +125,7 @@ CREATE TABLE IF NOT EXISTS models (
   feedback_loop_upload_mode TEXT NOT NULL DEFAULT 'Manual',
   model_path TEXT,
   checkpoint_env_json TEXT,
+  checkpoint_origin TEXT NOT NULL DEFAULT 'local',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -232,6 +234,7 @@ _LATE_MODEL_COLUMNS: tuple[tuple[str, str], ...] = (
     ("feedback_loop_upload_mode", "TEXT NOT NULL DEFAULT 'Manual'"),
     ("model_path", "TEXT"),
     ("checkpoint_env_json", "TEXT"),
+    ("checkpoint_origin", "TEXT NOT NULL DEFAULT 'local'"),
     # SQLite rejects ADD COLUMN with a non-constant default on a populated
     # table, so the two timestamps cannot carry the DDL's
     # `NOT NULL DEFAULT (datetime('now'))`. They arrive nullable and are
@@ -343,6 +346,19 @@ def _sort_runs(db: sqlite_utils.Database) -> None:
     _execute_script(db.conn, SORT_RUNS_DDL)
 
 
+@MIGRATIONS(name="0008_models_checkpoint_origin")
+def _models_checkpoint_origin(db: sqlite_utils.Database) -> None:
+    """`checkpoint_origin`: was this checkpoint trained here, or imported?
+
+    The torch security floor keys off it (`models.needs_torch_floor`). Every
+    row that exists when this runs gets the column's `'local'` default, so an
+    existing install behaves exactly as before; only checkpoints imported from
+    now on are marked `'imported'`. Same idempotent helper as 0006, for the
+    same reason.
+    """
+    _add_missing_model_columns(db.conn)
+
+
 class LockedRow:
     """One result row, copied off the cursor before the connection lock drops.
 
@@ -403,6 +419,27 @@ class _Fetched:
         yield from self.fetchall()
 
 
+def _make_private_db_files(path: Path) -> None:
+    """Owner-only (0600) database files on POSIX, before SQLite opens them.
+
+    The settings table holds the AI Config API key in plain text. A missing
+    file is created 0600 here rather than by ``sqlite3.connect`` with the
+    umask's mode, and SQLite gives the ``-wal``/``-shm`` files it creates the
+    main file's mode. Existing files — an install from before this — are
+    tightened in place. Best-effort, never fatal (`paths.restrict_permissions`).
+    """
+    if os.name != "posix":
+        return
+    try:
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, paths.PRIVATE_FILE_MODE)
+        os.close(fd)
+    except OSError:
+        return
+    for candidate in (path, path.with_name(path.name + "-wal"), path.with_name(path.name + "-shm")):
+        if candidate.exists():
+            paths.restrict_permissions(candidate, paths.PRIVATE_FILE_MODE)
+
+
 class Database:
     """Owns a single sqlite3.Connection for the lifetime of the app."""
 
@@ -427,6 +464,7 @@ class Database:
     def connect(self) -> sqlite3.Connection:
         if self._conn is None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            _make_private_db_files(self.path)
             self._conn = sqlite3.connect(
                 self.path,
                 isolation_level=None,

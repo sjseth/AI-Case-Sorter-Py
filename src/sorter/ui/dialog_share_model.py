@@ -46,7 +46,7 @@ from PySide6.QtWidgets import (
 from .. import paths
 from ..community.community_api import CartridgeInfo
 from ..data.model_io import ExportMode, export_for_share
-from ..data.models import Model
+from ..data.models import Model, is_safe_community_uid
 from ..data.repository import CartridgeRepo, HeadstampRepo, ModelRepo
 from .community_page import ApiWorker, start_worker
 
@@ -272,8 +272,13 @@ class ShareModelDialog(QDialog):
         images_dir = paths.model_images_dir(model.id)
         # Re-publishing keeps the UID and bumps the version; a first share mints
         # a UID (a standard GUID, with dashes) and publishes at the current one.
-        uid = model.community_model_uid or str(uuid4())
-        version = model.model_version + 1 if model.community_model_uid else model.model_version
+        # A stored UID that isn't a plain token can only have come from a
+        # crafted manifest imported before import_model learned to drop them;
+        # it is never one the server issued, so it is treated as no UID at all
+        # rather than used as the archive's filename.
+        existing_uid = model.community_model_uid if is_safe_community_uid(model.community_model_uid) else None
+        uid = existing_uid or str(uuid4())
+        version = model.model_version + 1 if existing_uid else model.model_version
 
         model_info = {
             "ModelName": name,
@@ -347,8 +352,13 @@ class ShareModelDialog(QDialog):
         scratch_root.mkdir(parents=True, exist_ok=True)
         tmpdir = tempfile.mkdtemp(dir=str(scratch_root))
         try:
+            # The archive is named for its UID (the server expects
+            # `<uid>.zip`), so the UID must not be able to name a directory.
+            out_zip = Path(tmpdir) / f"{uid}.zip"
+            if not is_safe_community_uid(uid) or out_zip.parent != Path(tmpdir):
+                raise ValueError(f"Refusing to package a model whose community UID is not a plain token: {uid!r}")
             zip_path, manifest_path = export_for_share(
-                Path(tmpdir) / f"{uid}.zip",
+                out_zip,
                 model,
                 cartridge_name,
                 headstamps,

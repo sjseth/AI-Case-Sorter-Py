@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -88,6 +89,47 @@ def test_ensure_directories_creates_top_level(monkeypatch, tmp_path: Path) -> No
     paths.ensure_directories()
     assert paths.config_dir().is_dir()
     assert paths.models_dir().is_dir()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes; Windows relies on the %LOCALAPPDATA% ACL")
+def test_secret_bearing_directories_are_owner_only(monkeypatch, tmp_path: Path) -> None:
+    """config/ (API key in the DB, the MSAL cache) and logs/ are 0700, and are
+    tightened on every launch — an install from before this was 0755."""
+    root = tmp_path / "data"
+    monkeypatch.setenv("CASESORTER_DATA_DIR", str(root))
+    (root / "config").mkdir(parents=True)
+    (root / "config").chmod(0o755)
+
+    paths.ensure_directories()
+
+    assert paths.config_dir().stat().st_mode & 0o777 == 0o700
+    assert paths.logs_dir().stat().st_mode & 0o777 == 0o700
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
+def test_an_existing_data_root_is_left_as_found(monkeypatch, tmp_path: Path) -> None:
+    """It may be a folder the user chose and shares on purpose."""
+    root = tmp_path / "shared"
+    root.mkdir()
+    root.chmod(0o775)
+    monkeypatch.setenv("CASESORTER_DATA_DIR", str(root))
+
+    paths.ensure_directories()
+
+    assert root.stat().st_mode & 0o777 == 0o775
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
+def test_a_data_root_created_here_is_owner_only(monkeypatch, tmp_path: Path) -> None:
+    root = tmp_path / "new-root"
+    monkeypatch.setenv("CASESORTER_DATA_DIR", str(root))
+    previous = os.umask(0o022)
+    try:
+        paths.ensure_directories()
+    finally:
+        os.umask(previous)
+
+    assert root.stat().st_mode & 0o777 == 0o700
 
 
 def test_ensure_model_subtree(monkeypatch, tmp_path: Path) -> None:

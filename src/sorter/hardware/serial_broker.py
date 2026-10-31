@@ -14,6 +14,7 @@ thread, so the difference doesn't reach a widget either way.
 from __future__ import annotations
 
 import json
+import logging
 import sys
 import threading
 import time
@@ -22,6 +23,8 @@ from typing import Any
 
 import serial
 from serial.tools import list_ports
+
+log = logging.getLogger(__name__)
 
 READ_TIMEOUT_S = 0.5  # short so the reader thread can react to stop()
 PING_INTERVAL_S = 1.0
@@ -635,9 +638,23 @@ class SerialBroker:
         return result
 
     def update_init_settings(self, settings: dict[str, Any]) -> None:
-        """Push each key:value pair to the board."""
+        """Push each key:value pair to the board — exactly one line per key.
+
+        Values are coerced to int and anything that isn't one is skipped: the
+        line is ``<key>:<value>``, so a string value with a newline in it would
+        reach the firmware as a second command of its choosing. Keys are
+        checked the same way, since they are formatted into the same line.
+        """
         for key, value in settings.items():
             if isinstance(value, bool):
                 value = 1 if value else 0
-            self.send_command(f"{key}:{value}")
+            try:
+                number = int(value)
+            except (TypeError, ValueError):
+                log.warning("not sending init setting %r: non-integer value %r", key, value)
+                continue
+            if not isinstance(key, str) or not key.isalnum():
+                log.warning("not sending init setting %r: not a plain key", key)
+                continue
+            self.send_command(f"{key}:{number}")
             time.sleep(0.03)

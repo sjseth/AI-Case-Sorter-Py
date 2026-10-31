@@ -10,6 +10,7 @@ tab is the only gated surface.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import stat
 from dataclasses import dataclass
@@ -60,17 +61,33 @@ class _FileTokenCache(msal.SerializableTokenCache):
                 pass
 
     def flush(self) -> None:
+        """Write the cache atomically, owner-only from the moment it exists.
+
+        The temp file is *created* 0600 (``os.open`` with a mode) rather than
+        written with the umask's mode and chmodded afterwards: a file that is
+        briefly 0644 can be opened by another local user in that window, and
+        an open descriptor survives a later chmod. A stale temp from a crash
+        is removed first so ``O_EXCL`` can't fail on it.
+        """
         if not self.has_state_changed:
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        paths.make_private_dir(self.path.parent)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp.write_text(self.serialize(), encoding="utf-8")
-        os.replace(tmp, self.path)
+        with contextlib.suppress(FileNotFoundError):
+            tmp.unlink()
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        fd = os.open(tmp, flags, stat.S_IRUSR | stat.S_IWUSR)
         try:
-            os.chmod(self.path, stat.S_IRUSR | stat.S_IWUSR)
-        except OSError:
-            # Windows can throw NotImplementedError for the bits we use; ignore.
-            pass
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(self.serialize())
+        except BaseException:
+            with contextlib.suppress(OSError):
+                tmp.unlink()
+            raise
+        os.replace(tmp, self.path)
+        # Belt and braces for a cache written by an older build, whose inode
+        # this replace has just retired anyway; a no-op on Windows.
+        paths.restrict_permissions(self.path, paths.PRIVATE_FILE_MODE)
 
 
 class AuthManager:
