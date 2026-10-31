@@ -258,6 +258,24 @@ def test_declining_for_an_own_model_never_unblocks_a_foreign_one(outdated_torch,
     assert len(fake_dialogs) == 2
 
 
+def test_an_imported_checkpoint_blocks_even_when_the_model_is_the_users(outdated_torch, fake_dialogs) -> None:
+    """Training ownership and checkpoint provenance are different questions.
+
+    A plain ZIP import stays `Standard` (it may be the user's own model on a
+    new machine), but its checkpoint was written elsewhere, so the floor is a
+    block, not an offer — and a decline must not run the action.
+    """
+    proceeded: list[int] = []
+    gate = TorchGate(None, dialog_factory=FakeDialog)
+    imported = Model(id=3, name="Gift", model_type="Standard", checkpoint_origin="imported")
+
+    assert gate(lambda: proceeded.append(1), model=imported) is False
+    assert fake_dialogs[0].on_cancel is None
+    assert gate(lambda: proceeded.append(2), model=imported) is False
+    assert proceeded == []
+    assert len(fake_dialogs) == 2
+
+
 def test_installing_clears_a_declined_upgrade(outdated_torch, fake_dialogs) -> None:
     """The flag describes "putting it off", and an install ends that."""
     gate = TorchGate(None, dialog_factory=FakeDialog)

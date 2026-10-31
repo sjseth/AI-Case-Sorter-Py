@@ -721,3 +721,56 @@ def test_an_update_that_records_no_floor_keeps_the_installed_one(tmp_path: Path)
     import_model(community, db=db, images_target_dir=tmp_path / "i", models_target_dir=tmp_path / "m")
 
     assert _get_model(db, model_id).checkpoint_env.torch == "2.13.0"
+
+
+# ----- path safety (security audit, 2026-10) -----------------------------------
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        # On Windows, `img_dir / "D:x.jpg"` discards img_dir and writes to
+        # drive D's current directory. Refused everywhere, so the check does
+        # not depend on which OS ran the import.
+        "images/D:evil.jpg",
+        "images\\E:evil.png",
+        # An NTFS alternate data stream, and illegal in a Windows filename.
+        "images/ab:c.jpg",
+    ],
+)
+def test_import_rejects_a_drive_or_colon_in_an_image_name(tmp_path: Path, entry: str) -> None:
+    db = _seed_db(tmp_path)
+    zip_path = tmp_path / "drive.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps(_import_manifest()))
+        zf.writestr(entry, b"\xff\xd8")
+
+    with pytest.raises(ValueError, match="unsafe image entry"):
+        import_model(zip_path, db=db, images_target_dir=tmp_path / "i", models_target_dir=tmp_path / "m")
+    assert not (tmp_path / "i").exists() or not any((tmp_path / "i").iterdir())
+
+
+@pytest.mark.parametrize("uid", ["/tmp/planted", "../../../somewhere/relplant", "C:\\x\\y", "a/b", ".hidden"])
+def test_a_path_shaped_community_uid_is_dropped_on_import(tmp_path: Path, uid: str) -> None:
+    """The share dialog names its archive `<uid>.zip`, so a UID must not be a path."""
+    assert model_from_export_dict({"Name": "Evil", "CommunityModelUID": uid}).community_model_uid is None
+
+
+def test_a_guid_community_uid_survives_import() -> None:
+    uid = "12e3af83-9d6c-4f6c-b045-7a984420543d"
+    assert model_from_export_dict({"Name": "Ok", "CommunityModelUID": uid}).community_model_uid == uid
+
+
+def test_find_update_target_ignores_a_path_shaped_uid(tmp_path: Path) -> None:
+    db = _seed_db(tmp_path)
+    repo = ModelRepo(db)
+    cart = CartridgeRepo(db).get_or_create("9mm").id
+    # A row as an older build could have stored it.
+    repo.create(Model(name="Old", cartridge_id=cart, community_model_uid="../x"))
+    zip_path = tmp_path / "u.zip"
+    manifest = _import_manifest()
+    manifest["ModelInfo"]["CommunityModelUID"] = "../x"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps(manifest))
+
+    assert find_update_target(zip_path, db=db) is None

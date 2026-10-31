@@ -18,14 +18,17 @@ A second rule sits on top of presence, and it is a security floor rather than a
 capability one: **a model that came from somewhere else may not be loaded by a
 torch below** ``local_inference.MIN_TORCH_VERSION``. CVE-2026-24747 lets a
 crafted ``.pth`` defeat the ``weights_only=True`` unpickler that ``_load``
-relies on to make an untrusted checkpoint safe, so for a community download or
-a ZIP import the gate blocks until the user upgrades. For a model the user
-trained here the upgrade is *offered* and declining is remembered for the
-session — their own checkpoint is not an attack, and a multi-GB download should
-not stand between them and sorting their own brass.
+relies on to make an untrusted checkpoint safe, so for a community download, a
+ZIP import or a WinForms import the gate blocks until the user upgrades. For a
+checkpoint trained here the upgrade is *offered* and declining is remembered
+for the session — their own checkpoint is not an attack, and a multi-GB
+download should not stand between them and sorting their own brass.
 
 That asymmetry is why callers pass ``model``: the gate decides block-vs-offer
-from ``models.is_foreign_model``, so no call site has to encode the policy.
+from ``models.needs_torch_floor`` — where the *checkpoint* came from, not who
+may train the model — so no call site has to encode the policy. The gate runs
+when an action starts; ``classifier.classify_active`` repeats the check on
+every case, which is what covers a model activated mid-run.
 
 Main thread only — it opens a modal. Never call it from a worker.
 """
@@ -35,7 +38,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from ..data.models import Model, is_foreign_model
+from ..data.models import Model, needs_torch_floor
 from ..ml import local_inference
 from .dialog_install_torch import TorchInstallDialog
 
@@ -150,7 +153,7 @@ class TorchGate:
             return True
         have = local_inference.installed_version() or "an older version"
         floor = local_inference.MIN_TORCH_VERSION
-        if model is None or is_foreign_model(model):
+        if needs_torch_floor(model):
             self._open(
                 proceed,
                 reason=(

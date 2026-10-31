@@ -10,6 +10,7 @@ objects gain fields.
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field, fields
 from typing import Any
 
@@ -434,6 +435,9 @@ class Model:
     feedback_loop_upload_mode: str = "Manual"
     model_path: str | None = None
     checkpoint_env: CheckpointEnv = field(default_factory=CheckpointEnv)
+    # Where the checkpoint at `model_path` came from — see `CHECKPOINT_ORIGINS`.
+    # Machine-local: never exported, never read from a manifest.
+    checkpoint_origin: str = "local"
 
     @classmethod
     def from_row(cls, row: Any) -> Model:
@@ -488,6 +492,10 @@ class Model:
             # Added by migration 0006, so a row read through an older shape
             # simply has none — the same "not recorded" the dataclass means.
             checkpoint_env=CheckpointEnv.from_dict(_parse(_optional("checkpoint_env_json"))),
+            # Added by migration 0008; a row from an older shape predates the
+            # distinction, which is exactly what the migration's "local"
+            # default means.
+            checkpoint_origin=normalize_checkpoint_origin(_optional("checkpoint_origin")),
         )
 
 
@@ -506,6 +514,64 @@ FOREIGN_MODEL_TYPES = frozenset({"CommunityManaged", "ReadOnly"})
 def is_foreign_model(model: Model | None) -> bool:
     """True when `model` was installed from the community rather than authored here."""
     return bool(model is not None and model.model_type in FOREIGN_MODEL_TYPES)
+
+
+# Where a model's checkpoint came from, which is a different question from who
+# may train the model (`model_type`). A plain ZIP import stays the user's to
+# train — it may well be their own model restored onto a new machine — but its
+# checkpoint was still written by someone else's torch and arrived as a file,
+# which is the delivery path CVE-2026-24747 needs. So the torch security floor
+# keys off this, not off ownership.
+#
+# - "local": produced by `train_convnext` on this machine, or present before
+#   this distinction existed (migration 0008's default — the existing-user
+#   behaviour is unchanged).
+# - "imported": written by `model_io.import_model` or the WinForms import.
+#
+# Set only by the code that writes the checkpoint file, never from manifest
+# data: an archive cannot vouch for itself.
+CHECKPOINT_ORIGIN_LOCAL = "local"
+CHECKPOINT_ORIGIN_IMPORTED = "imported"
+CHECKPOINT_ORIGINS = (CHECKPOINT_ORIGIN_LOCAL, CHECKPOINT_ORIGIN_IMPORTED)
+
+
+def normalize_checkpoint_origin(raw: Any) -> str:
+    """Any stored value → one of `CHECKPOINT_ORIGINS`.
+
+    Unknown text means a row written by something newer or hand-edited; it is
+    treated as imported, the cautious reading. Absent (None/empty) is a row
+    from before the column existed, and keeps that row's behaviour.
+    """
+    if raw is None or raw == "":
+        return CHECKPOINT_ORIGIN_LOCAL
+    return raw if raw in CHECKPOINT_ORIGINS else CHECKPOINT_ORIGIN_IMPORTED
+
+
+def needs_torch_floor(model: Model | None) -> bool:
+    """Must the installed torch meet `MIN_TORCH_VERSION` before loading this checkpoint?
+
+    True for a foreign model (a community download) and for any checkpoint that
+    arrived from outside this machine, whoever may train the model. False only
+    for a checkpoint trained here — the case where an outdated torch is an
+    inconvenience rather than an attack surface. ``None`` (provenance unknown)
+    is True.
+    """
+    if model is None:
+        return True
+    return is_foreign_model(model) or model.checkpoint_origin != CHECKPOINT_ORIGIN_LOCAL
+
+
+# A community model UID is used as a filename (the share archive is
+# `<uid>.zip`) and as a settings-key suffix, and it reaches us from manifests
+# and from the community server. Neither may choose a path, so anything but a
+# plain token — no separators, no drive colon, nothing starting with a dot —
+# is refused. GUIDs, which is what this app and the legacy one mint, pass.
+_SAFE_UID_RE = re.compile(r"[A-Za-z0-9{][A-Za-z0-9{}_.-]{0,127}")
+
+
+def is_safe_community_uid(value: Any) -> bool:
+    """True when `value` is a UID that can be used as a filename component."""
+    return isinstance(value, str) and _SAFE_UID_RE.fullmatch(value) is not None
 
 
 def is_openai_model(model: Model | None) -> bool:

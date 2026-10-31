@@ -473,6 +473,21 @@ when the app offers to, and it will load. Nothing about this is recoverable
 by retrying, and a model that says this has not been damaged — it is simply
 newer than the software trying to open it.
 
+**"Update PyTorch to use this model."** A different message, and a security
+one. A trained model file from somewhere else can carry code, and PyTorch
+versions older than 2.10.0 have a flaw that lets such a file run it. So a
+model file that **was not trained on this machine** — one downloaded from the
+[Community](#community), imported from a ZIP, or brought across
+[from the Windows app](#import-from-windows) — is not loaded until PyTorch is
+updated, and there is no "not now". A model you trained here only *offers* the
+update. Models that were already in your library before this check arrived
+count as trained here, so nothing you were already sorting with changes. A
+fresh install already has a new enough PyTorch, so most people never see this.
+The check runs for every case, not just at Start: activating such a model on
+the [Models](#models) page in the middle of a run stops the run with this
+message instead of loading it. Training the model here replaces its file with
+your own, after which it counts as trained here.
+
 ### Running out of brass
 
 When the collator runs dry mid-run, up to three cases are still riding the
@@ -734,7 +749,13 @@ community ID you already have installed, the app asks whether to **update the
 installed one in place** — keeping its slot assignments, sorting templates and
 your name for it — or to **import it as a separate copy**; anything else lands
 as a new model. A ZIP you import stays *yours*: importing your own model onto
-a new machine leaves it trainable.
+a new machine leaves it trainable. Its trained model file still came from
+outside this machine, though, so it needs an up-to-date PyTorch before it
+loads (see ["Update PyTorch to use this model"](#start-stop-and-manual-feed)).
+
+An archive is refused if any image in it has a name that could point outside
+the model's folder — a drive letter or a colon in the name. Archives from this
+app and from the Windows app never have such a name.
 
 Import and export both run in the background; a model with its images can be
 large.
@@ -931,7 +952,14 @@ A few things are worth knowing before you run it:
   summary at the end names the ones you did import.
 - **A model that came from the [Community](#community) stays read-only**, the
   same as one downloaded here: the trained model file belongs to whoever
-  published it, so it is not trainable. Your own models stay trainable.
+  published it, so it is not trainable. Your own models stay trainable. If you
+  already downloaded that model here, the import updates your copy and it
+  stays read-only.
+- **Trained model files imported from the Windows app need PyTorch 2.10.0 or
+  newer** before they load, like any model file that wasn't trained on this
+  computer (see ["Update PyTorch to use this model"](#start-stop-and-manual-feed)).
+- **Board settings that aren't whole numbers are skipped.** The board only
+  takes whole numbers, so any other value stays at this app's default.
 - **A Windows model set to classify over an OpenAI server imports as an
   OpenAI model here too**, keeping its own endpoint, prompt and headstamps.
   Activate it and the [AI Config](#ai-config) page edits its settings.

@@ -21,6 +21,7 @@ from .models import (
     HeadstampParent,
     Model,
     SlotTemplate,
+    normalize_checkpoint_origin,
 )
 
 
@@ -153,8 +154,8 @@ class ModelRepo:
                 last_training_date, last_training_duration, trained_image_count,
                 training_confusion_table, feedback_loop_enabled,
                 feedback_loop_confidence_floor, feedback_loop_upload_mode, model_path,
-                checkpoint_env_json
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                checkpoint_env_json, checkpoint_origin
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 model.name,
@@ -179,6 +180,7 @@ class ModelRepo:
                 model.feedback_loop_upload_mode,
                 model.model_path,
                 json.dumps(model.checkpoint_env.to_dict()),
+                normalize_checkpoint_origin(model.checkpoint_origin),
             ),
         )
         model.id = _require_rowid(cur)
@@ -201,7 +203,7 @@ class ModelRepo:
                 trained_image_count = ?, training_confusion_table = ?,
                 feedback_loop_enabled = ?, feedback_loop_confidence_floor = ?,
                 feedback_loop_upload_mode = ?, model_path = ?,
-                checkpoint_env_json = ?,
+                checkpoint_env_json = ?, checkpoint_origin = ?,
                 updated_at = datetime('now')
             WHERE id = ?
             """,
@@ -228,6 +230,7 @@ class ModelRepo:
                 model.feedback_loop_upload_mode,
                 model.model_path,
                 json.dumps(model.checkpoint_env.to_dict()),
+                normalize_checkpoint_origin(model.checkpoint_origin),
                 model.id,
             ),
         )

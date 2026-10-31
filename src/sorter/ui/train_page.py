@@ -70,7 +70,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import paths
-from ..data.models import CheckpointEnv, Model, is_openai_model, is_trainable, model_mode_label
+from ..data.models import CHECKPOINT_ORIGIN_LOCAL, CheckpointEnv, Model, is_openai_model, is_trainable, model_mode_label
 from ..data.repository import HeadstampRepo, ModelRepo, SettingsRepo
 from ..hardware import image_proc
 from ..ml import classifier, local_inference
@@ -539,6 +539,12 @@ class TrainPage(QWidget):
         camera = self._win.camera
         proc_config = dict(self.config.image_proc)
         predict = bool(model_path) and Path(str(model_path)).exists() and local_inference.is_installed()
+        # Declining the gate's prompt re-enters this feed; for an imported
+        # checkpoint on a torch below the security floor that must cost the
+        # prediction, not skip the floor.
+        floor_problem = classifier.untrusted_checkpoint_problem(model) if predict else None
+        if floor_problem is not None:
+            predict = False
 
         def _work() -> dict[str, Any]:
             if broker is not None:
@@ -561,6 +567,8 @@ class TrainPage(QWidget):
                 "cropped": cropped,
                 "image_proc_ms": (time.perf_counter() - started) * 1000.0,
             }
+            if floor_problem is not None:
+                result["floor_problem"] = floor_problem
             if predict and model_path:
                 try:
                     started = time.perf_counter()
@@ -597,6 +605,8 @@ class TrainPage(QWidget):
             self.status_label.setText(PREDICTED_TEXT)
         elif "classify_error" in data:
             self.status_label.setText(f"Classify failed: {data['classify_error']}")
+        elif "floor_problem" in data:
+            self.status_label.setText(f"Captured, nothing predicted. {data['floor_problem']}")
         elif classifier.has_local_checkpoint(self.active_model()) and not local_inference.is_installed():
             self.status_label.setText(NO_TORCH_TEXT)
         else:
@@ -781,6 +791,9 @@ class TrainPage(QWidget):
             env = payload.get("env")
             if isinstance(env, dict):
                 model.checkpoint_env = CheckpointEnv.from_dict(env)
+            # Trained here from this machine's images and torchvision's
+            # weights — whatever checkpoint it replaced, this one is local.
+            model.checkpoint_origin = CHECKPOINT_ORIGIN_LOCAL
             self.models.update(model)
         self.refresh()
 

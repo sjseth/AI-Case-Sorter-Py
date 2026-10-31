@@ -6,7 +6,7 @@ per process. Layout:
     <data root>/
     ├── config/
     │   ├── casesorter.db    ← SQLite database
-    │   └── msal_cache.bin   ← MSAL token cache (chmod 0600 on POSIX)
+    │   └── msal_cache.bin   ← MSAL token cache (0600 on POSIX)
     ├── models/
     │   └── <model_id>/
     │       ├── images/          ← raw training images
@@ -31,6 +31,12 @@ databases, captured images — outside that folder makes the updater safe by
 construction rather than by remembering to exclude the right paths.
 ``migrate_legacy_data_dir()`` moves an existing ``<app>/data`` up on first
 run so this is invisible to anyone upgrading.
+
+**Permissions (POSIX).** ``config/`` (the database with the AI Config API key,
+the MSAL token cache) and ``logs/`` are owner-only (0700), tightened on every
+launch; a data root this app *creates* is 0700 too. An existing data root is
+left as found — it may be a folder the user chose and shares on purpose. On
+Windows these calls do nothing and ``%LOCALAPPDATA%``'s ACL is the control.
 
 This module is deliberately **stdlib-only and import-light**: the pre-launch
 update step (``__main__.py --apply-update``) imports it before the virtualenv
@@ -292,10 +298,43 @@ def model_trained_path(model_id: int) -> Path:
     return model_trained_dir(model_id) / f"{model_id}.pth"
 
 
+PRIVATE_DIR_MODE = 0o700
+PRIVATE_FILE_MODE = 0o600
+
+
+def restrict_permissions(path: Path, mode: int) -> None:
+    """chmod `path` to `mode` on POSIX; a no-op elsewhere and on any failure.
+
+    Best-effort by design, like the logs: a filesystem that can't hold POSIX
+    modes (FAT on a USB stick, some network mounts) or a path owned by someone
+    else costs the tightening, never the launch.
+    """
+    if os.name != "posix":
+        return
+    try:
+        os.chmod(path, mode)
+    except OSError:
+        pass
+
+
+def make_private_dir(directory: Path) -> Path:
+    """Create `directory` if needed and make it owner-only (POSIX)."""
+    directory.mkdir(mode=PRIVATE_DIR_MODE, parents=True, exist_ok=True)
+    restrict_permissions(directory, PRIVATE_DIR_MODE)
+    return directory
+
+
 def ensure_directories() -> None:
-    """Create every top-level directory if missing. Safe to call repeatedly."""
-    for d in (app_data_dir(), config_dir(), models_dir()):
-        d.mkdir(parents=True, exist_ok=True)
+    """Create every top-level directory if missing. Safe to call repeatedly.
+
+    The data root gets 0700 only when this call creates it (``mkdir``'s mode
+    applies to a new directory alone); ``config/`` and ``logs/`` hold secrets
+    and are tightened every time — see the module docstring.
+    """
+    app_data_dir().mkdir(mode=PRIVATE_DIR_MODE, parents=True, exist_ok=True)
+    make_private_dir(config_dir())
+    make_private_dir(logs_dir())
+    models_dir().mkdir(parents=True, exist_ok=True)
 
 
 def ensure_model_subtree(model_id: int) -> None:

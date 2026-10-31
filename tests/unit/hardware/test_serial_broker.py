@@ -998,3 +998,29 @@ def test_darwin_skips_bluetooth_and_debug_pseudo_ports(monkeypatch: pytest.Monke
 def test_other_platforms_probe_everything(monkeypatch: pytest.MonkeyPatch, platform: str) -> None:
     monkeypatch.setattr(serial_broker.sys, "platform", platform)
     assert serial_broker.is_probe_candidate("/dev/cu.Bluetooth-Incoming-Port") is True
+
+
+# ----- init settings (security audit, 2026-10) ---------------------------------
+
+
+def test_update_init_settings_sends_exactly_one_line_per_integer_key(
+    broker: SerialBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A value is formatted into `<key>:<value>`; a string with a newline in it
+    would reach the firmware as a second command of its choosing."""
+    monkeypatch.setattr(serial_broker.time, "sleep", lambda _s: None)
+    port = _WritableSerial()
+    monkeypatch.setattr(broker, "_sp", port)
+
+    broker.update_init_settings(
+        {
+            "fan": "100\nsortto:7\nfeedsteps:9999",
+            "sortspeed": 85,
+            "feedsteps": "60",
+            "airdropenabled": True,
+            "bad key\nxf:3": 1,
+        }
+    )
+
+    written = b"".join(port.written).decode("ascii")
+    assert written.splitlines() == ["sortspeed:85", "feedsteps:60", "airdropenabled:1"]

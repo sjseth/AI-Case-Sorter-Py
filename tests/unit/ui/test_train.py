@@ -857,6 +857,12 @@ def trainable(page, window, config, monkeypatch):
 
 
 def test_training_run_reaches_the_dialog_and_adopts_the_checkpoint(trainable, page, window, config, tmp_path) -> None:
+    # Start from an imported checkpoint: training replaces it with one made
+    # here, which is what lifts the torch security floor for this model.
+    before = ModelRepo(config.db).get(trainable)
+    assert before is not None
+    before.checkpoint_origin = "imported"
+    ModelRepo(config.db).update(before)
     page.training_script = write_stub_trainer(
         tmp_path,
         """
@@ -891,6 +897,7 @@ def test_training_run_reaches_the_dialog_and_adopts_the_checkpoint(trainable, pa
     assert stored is not None
     assert stored.model_path == str(paths.model_trained_path(trainable))
     assert stored.last_training_date
+    assert stored.checkpoint_origin == "local"
     assert page.progress_dialog is None
     assert page.train_button.isEnabled()
 

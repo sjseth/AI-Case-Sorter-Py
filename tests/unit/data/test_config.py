@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sorter.data.config import DEFAULT_INIT_SETTINGS, DEFAULTS, Config
+from sorter.data.config import DEFAULT_INIT_SETTINGS, DEFAULTS, Config, clean_init_settings
 from sorter.data.db import Database
 from sorter.data.repository import ModelRepo, SettingsRepo
 
@@ -203,3 +203,32 @@ def test_headstamps_track_active_model(tmp_path: Path) -> None:
     ).fetchone()["id"]
     SettingsRepo(db).set_active_model_id(original_model_id)
     assert [h["name"] for h in cfg.headstamps] == ["FOR-MODEL-1"]
+
+
+# ----- board init settings are integers (security audit, 2026-10) -------------
+
+
+def test_a_stored_non_integer_init_value_is_repaired_on_load(tmp_path: Path) -> None:
+    """An earlier WinForms import could store text here. Left alone it would be
+    pushed to the board as extra commands and crash the Settings pages' spin
+    boxes at window build, i.e. on every launch."""
+    db = Database(tmp_path / "c.db")
+    db.ensure_initialized()
+    SettingsRepo(db).set(
+        "serial",
+        {"init_settings": {"fan": "100\nsortto:7", "sortspeed": "85", "airdropenabled": True, "custom": "x"}},
+    )
+
+    init = Config(db).load().serial["init_settings"]
+
+    assert init["fan"] == DEFAULT_INIT_SETTINGS["fan"]
+    assert init["sortspeed"] == 85
+    assert init["airdropenabled"] == 1
+    # An unknown key with an unusable value has nothing to fall back to.
+    assert "custom" not in init
+    assert all(type(v) is int for v in init.values())
+
+
+def test_clean_init_settings_tolerates_garbage() -> None:
+    assert clean_init_settings(None) == {}
+    assert clean_init_settings({"feedsteps": " 60 "}) == {"feedsteps": 60}

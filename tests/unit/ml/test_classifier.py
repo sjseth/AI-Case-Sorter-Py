@@ -176,3 +176,71 @@ def test_openai_model_needs_no_torch_and_has_no_checkpoint_problem(tmp_path: Pat
     _activate_openai_model(db)
     assert not classifier.uses_local_inference(db)
     assert classifier.checkpoint_problem(db) is None
+
+
+# ----- the torch security floor, at the load (security audit, 2026-10) ----------
+
+
+def _activate_with_checkpoint(db: Database, tmp_path: Path, **fields) -> int:
+    active_id = _activate_seeded_model(db)
+    checkpoint = tmp_path / "evil.pth"
+    checkpoint.write_bytes(b"crafted")
+    model = ModelRepo(db).get(active_id)
+    assert model is not None
+    model.model_path = str(checkpoint)
+    for name, value in fields.items():
+        setattr(model, name, value)
+    ModelRepo(db).update(model)
+    return active_id
+
+
+@pytest.fixture
+def outdated_torch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(classifier.local_inference, "is_installed", lambda: True)
+    monkeypatch.setattr(classifier.local_inference, "installed_version", lambda: "2.9.1")
+    monkeypatch.setattr(classifier.local_inference, "meets_min_version", lambda *_a, **_k: False)
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"model_type": "CommunityManaged"},
+        {"model_type": "Standard", "checkpoint_origin": "imported"},
+    ],
+    ids=["community", "plain-import"],
+)
+def test_an_untrusted_checkpoint_never_reaches_an_outdated_torch(
+    tmp_path: Path, outdated_torch: None, fields: dict
+) -> None:
+    """The backstop for a model activated mid-run: the Start gate only saw the
+    model that was active at Start, but this runs for every case."""
+    db = _seed_db(tmp_path)
+    _activate_with_checkpoint(db, tmp_path, **fields)
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    with patch("sorter.ml.classifier.local_inference.classify") as m_local:
+        with pytest.raises(classifier.UntrustedCheckpointError, match="2.9.1"):
+            classifier.classify_active(image, [], {}, db)
+    m_local.assert_not_called()
+
+
+def test_a_checkpoint_trained_here_still_loads_on_an_outdated_torch(tmp_path: Path, outdated_torch: None) -> None:
+    """Unchanged for existing users: their own models are an offer, not a block."""
+    db = _seed_db(tmp_path)
+    _activate_with_checkpoint(db, tmp_path, checkpoint_origin="local")
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    with patch("sorter.ml.classifier.local_inference.classify", return_value=("FC", 99.0)) as m_local:
+        assert classifier.classify_active(image, [], {}, db) == ("FC", 99.0)
+    m_local.assert_called_once()
+
+
+def test_a_current_torch_loads_an_imported_checkpoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(classifier.local_inference, "is_installed", lambda: True)
+    monkeypatch.setattr(classifier.local_inference, "meets_min_version", lambda *_a, **_k: True)
+    db = _seed_db(tmp_path)
+    _activate_with_checkpoint(db, tmp_path, model_type="CommunityManaged")
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    with patch("sorter.ml.classifier.local_inference.classify", return_value=("FC", 99.0)):
+        assert classifier.classify_active(image, [], {}, db) == ("FC", 99.0)

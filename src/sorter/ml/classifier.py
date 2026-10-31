@@ -19,6 +19,13 @@ infer on the user's behalf — the switch is theirs to make on the Models tab.
 Note the AI Config tab is hidden while a local model is active, so its
 endpoint isn't even reachable to configure in that state.
 
+**The torch security floor is enforced here too, not only at the UI.**
+`TorchGate` asks at Start, but the active model is re-read on every case, so a
+model activated mid-run never met the gate. `classify_active` therefore raises
+`UntrustedCheckpointError` before handing a checkpoint that needs the floor
+(`models.needs_torch_floor`) to a torch below `local_inference.MIN_TORCH_VERSION`
+— the run stops with that reason, like any other classification failure.
+
 `active_model` / `uses_local_inference` / `has_local_checkpoint` expose the
 routing decision on its own so the UI can answer "is this about to need
 PyTorch?" and "can this model actually classify?" *before* starting a run.
@@ -34,7 +41,7 @@ import numpy as np
 
 from .. import paths
 from ..data.db import Database
-from ..data.models import Model, is_openai_model
+from ..data.models import Model, is_openai_model, needs_torch_floor
 from ..data.repository import ModelRepo, SettingsRepo
 from . import api_client, local_inference
 
@@ -45,6 +52,35 @@ class NoLocalCheckpointError(Exception):
     Raised instead of silently classifying over HTTP — see the module
     docstring.
     """
+
+
+class UntrustedCheckpointError(Exception):
+    """The installed torch is below the security floor for this checkpoint.
+
+    Raised at load time as the backstop for `TorchGate`: a checkpoint that
+    arrived from outside this machine must not reach `torch.load` on a torch
+    older than `local_inference.MIN_TORCH_VERSION` (CVE-2026-24747).
+    """
+
+
+def untrusted_checkpoint_problem(model: Model | None) -> str | None:
+    """One line saying why this torch may not load `model`'s checkpoint, or None.
+
+    None when the model needs no floor (trained here), when no torch is
+    installed (nothing would load it — the install gate owns that), or when
+    the installed torch meets the floor. `meets_min_version` fails open on
+    unreadable metadata, and so does this.
+    """
+    if model is None or is_openai_model(model) or not needs_torch_floor(model):
+        return None
+    if not local_inference.is_installed() or local_inference.meets_min_version():
+        return None
+    name = model.name or f"model #{model.id}"
+    have = local_inference.installed_version() or "an older version"
+    return (
+        f"“{name}” was not trained on this machine, and PyTorch {have} is below the "
+        f"{local_inference.MIN_TORCH_VERSION} needed to load it safely — update PyTorch first."
+    )
 
 
 def has_local_checkpoint(model: Model | None) -> bool:
@@ -198,6 +234,9 @@ def classify_active(
     # `model.model_path` from `str | None` to `str` below.
     if not has_local_checkpoint(model) or not model.model_path:
         raise NoLocalCheckpointError(_checkpoint_summary(model))
+    floor = untrusted_checkpoint_problem(model)
+    if floor is not None:
+        raise UntrustedCheckpointError(floor)
 
     # Pass the trained image size from the model record so imported community
     # models (often trained at 480) get the right resolution at inference.

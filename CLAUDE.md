@@ -238,7 +238,7 @@ sanctioned way for worker threads to update the UI.
   which run on one thread. Schema: idempotent DDL plus ordered migration
   steps run through `sqlite_utils.Migrations` (`MIGRATIONS`), whose
   `_sqlite_migrations` tracking table is what decides run-once — `PRAGMA
-  user_version` (`SCHEMA_VERSION = 7`) is stamped informationally, never
+  user_version` (`SCHEMA_VERSION = 8`) is stamped informationally, never
   downgraded. A legacy DB has no tracking table, so every step runs on first
   open whatever the stamp claims; **every step is therefore presence-guarded
   and idempotent** (that same property repairs databases stamped current by a
@@ -250,7 +250,14 @@ sanctioned way for worker threads to update the UI.
   `slot_templates`, `settings`, `sort_runs`, `sort_run_counts`. `0007_sort_runs`
   replays `SORT_RUNS_DDL` (IF NOT EXISTS, the same pattern as
   `0004_slot_templates`): one row per Start or Manual-feed stretch, and one
-  counter per `(label, slot, reason)` inside it. One structural fix lives *outside* the
+  counter per `(label, slot, reason)` inside it. `0008_models_checkpoint_origin`
+  adds `models.checkpoint_origin` (§5, *Model ownership*) through the same
+  idempotent column helper as 0006; its `'local'` default is the backfill, so
+  every row that predates it keeps today's torch-gate behaviour. On POSIX
+  `connect()` creates the DB file 0600 before SQLite does and tightens an
+  existing one (and its `-wal`/`-shm`, which SQLite creates with the main
+  file's mode) — the settings table holds the AI Config API key in plain text.
+  One structural fix lives *outside* the
   ladder: `_widen_model_mode_check` rebuilds `models` when its mode CHECK
   predates `'openai'` — a CHECK can't be ALTERed, and the rebuild needs
   `PRAGMA foreign_keys` toggled, which is a silent no-op inside the
@@ -265,7 +272,10 @@ sanctioned way for worker threads to update the UI.
 - **`config.py`** — `Config`: in-memory mirror of the `settings` sections (`api`,
   `serial`, `image_proc`, `camera`) plus the canonical `DEFAULTS`. Headstamps are
   **not cached** — they're read fresh from the DB on every access (scoped to the
-  active model; AI Config mode stashes them in a settings key). Also the home of
+  active model; AI Config mode stashes them in a settings key). `load()` passes
+  `serial.init_settings` through `clean_init_settings`, so every value is an int
+  (a bad one falls back to its default) before a spin box or the board sees it.
+  Also the home of
   routing logic: `slot_for_headstamp`, package-mode slot maps, parent
   classifications, auto-select, run options (confidence floor, store-images mode),
   and the sorting-template API (see below). `assign_label_to_empty_slot` and
@@ -367,6 +377,17 @@ sanctioned way for worker threads to update the UI.
     `db.transaction()` (a SAVEPOINT), counted into a scratch `ImportResult`
     merged only on success, so a legacy row this app refuses is skipped with a
     warning instead of rolling back an install's worth of images.
+  - **Ownership never downgrades, and copied checkpoints are `imported`.** A
+    legacy row matched to an installed community model by UID keeps that row's
+    `model_type` (the legacy app calls its own copy `Standard`), the rule
+    `_merge_onto_installed` applies to a ZIP. A checkpoint copied from the
+    install, and any new row, is `checkpoint_origin = "imported"`; a re-run that
+    skips an unchanged checkpoint leaves the origin as it was.
+  - **Board init values must be integers.** `_import_serial` skips anything
+    else with a warning: the value is sent as `<key>:<value>`, and text with a
+    newline in it was a second board command plus a Settings page that raised
+    on every launch. `Config.load` runs `clean_init_settings` over whatever is
+    stored, which also repairs an install that imported one before this.
   Slot assignments are **inverted on the way in** — the legacy DB stores a slot
   listing its headstamps (`SlotConfigs[].Config`), ours stores a slot on the
   headstamp row. `Defaults.IP_*` maps to `image_proc.linescan` **only**: the
@@ -387,6 +408,13 @@ sanctioned way for worker threads to update the UI.
   `session_logs(prefix)` / `prune_session_logs(prefix, keep)` list and trim
   the per-session `logs/<prefix><stamp>.log` files; the training and serial
   logs share them.
+  **Permissions (POSIX):** `ensure_directories` makes `config/` and `logs/`
+  0700 on every launch (`make_private_dir`; `logging_setup` uses it too), and a
+  data root it *creates* is 0700; an existing data root is left as found — it
+  may be a folder the user chose to share. `restrict_permissions` is
+  best-effort (a FAT stick or a foreign-owned path costs the tightening, never
+  the launch) and a no-op on Windows, where `%LOCALAPPDATA%`'s ACL is the
+  control.
 
 ### Community backend config (`sorter/community/appenv.py`)
 - **`appenv.py`** — developer overrides for the community backend, read from the
@@ -449,7 +477,9 @@ between them from the Sort page's template dropdown.
   and reporting a timeout no different from a slow board's (#35). Key commands: `xf:0`
   (feed one), `xf:<slot>` (force feed + sort), bare `<slot>` (sort imaged case),
   `sortto:<slot>` (move arm), `getconfig` (JSON board state), `version`, `stop`,
-  `<key>:<value>` (set board param). `try_open()` does a version handshake.
+  `<key>:<value>` (set board param — `update_init_settings` sends one line per
+  key, int values and alphanumeric keys only, so no value can smuggle a second
+  command through a newline). `try_open()` does a version handshake.
   `is_probe_candidate` gates the startup auto-connect walk on macOS only:
   Bluetooth/debug pseudo-ports are skipped (probing one wastes a handshake
   timeout and can wake a paired headset); Settings → Serial still lists
@@ -582,6 +612,12 @@ between them from the Sort page's template dropdown.
   recorded floor, no torch installed, an unparseable version — because a
   missing answer costs a clearer message while a wrong one costs a run that
   was fine.
+  The *security* floor is a different check with the opposite failure mode:
+  `untrusted_checkpoint_problem` (a checkpoint that `needs_torch_floor`, on a
+  torch below `MIN_TORCH_VERSION`) makes `classify_active` raise
+  `UntrustedCheckpointError` before `local_inference.classify` is reached.
+  `TorchGate` is the friendly front door at Start; this is the backstop for the
+  model being re-read on every case (§5).
 - **`local_inference.py`** — lazy-imports torch; picks the device once
   (CUDA → MPS on Apple Silicon → CPU, each GPU probed before commit;
   `device_description()` is the status bar's read-only view of the pick —
@@ -645,9 +681,14 @@ between them from the Sort page's template dropdown.
   folder, with folder-label→model-class mapping (auto-suggest via token scoring)
   and `summarize` (per-class accuracy/confidence).
 - **`eval_report.py`** — self-contained interactive HTML report (base64 thumbnails
-  + embedded results JSON), a verbatim port of the legacy app's report. ⚠️ Result
-  rows are interpolated into a `<script>` block, so the report is only safe to
-  open for locally-evaluated, trusted image folders.
+  + embedded results JSON), a port of the legacy app's report that is verbatim
+  **except for escaping**. Image filenames come from model archives and class
+  names from checkpoints, and the page builds its tables with `innerHTML`, so
+  the row JSON goes through `script_json` (escapes `<`/`>`/`&`, so a value can't
+  close the `<script>`) and every row string interpolated into markup goes
+  through the page's `esc()` helper. Both were live script in a browser before
+  (security audit, 2026-10); `test_eval_report.py` pins that no `${row.*}`
+  reaches the template unescaped. Keep both if you touch the template.
 - **`gpu_detect.py`** — shells out to `nvidia-smi` (torch not yet installed) to
   detect a compute-capability ≥ 8.0 NVIDIA GPU for the Install-PyTorch dialog.
 - **`image_store.py`** (`sorter/data/image_store.py`) — pure pathlib helpers to
@@ -656,11 +697,22 @@ between them from the Sort page's template dropdown.
 - **`models.py` ownership helpers** (`sorter/data/models.py`) —
   `is_foreign_model` / `is_trainable` / `FOREIGN_MODEL_TYPES`: the single
   definition of "this model belongs to someone else" (see §5, *Model
-  ownership*).
+  ownership*). Beside them, `checkpoint_origin` / `CHECKPOINT_ORIGINS` /
+  `needs_torch_floor` — where the checkpoint *file* came from, the separate
+  question the torch security floor asks — and `is_safe_community_uid`, the
+  one test for a community UID that can be used as a filename.
 - **`model_io.py`** (`sorter/data/model_io.py`) — model **ZIP** import/export compatible with the WinForms
   format (`manifest.json` + `model/<id>.pth` + `images/*`). Accepts both
   snake_case and WinForms PascalCase manifest keys. Import **rejects `..`
-  traversal entries** and only uses entry basenames; export strips paths/secrets.
+  traversal entries** and only uses entry basenames; it also rejects an image
+  basename with a colon or a Windows drive (`images/D:x.jpg` would make
+  `img_dir / name` drop `img_dir` on Windows), and `_assert_within` checks every
+  extracted file resolves inside its target directory. A `CommunityModelUID`
+  that isn't `is_safe_community_uid` is dropped with a warning — the share
+  dialog names its archive `<uid>.zip`. A checkpoint this module writes is
+  stamped `checkpoint_origin = "imported"`, and a new row starts that way;
+  `checkpoint_origin` is never exported nor read from a manifest. Export strips
+  paths/secrets.
   An archive whose `community_model_uid` is already installed is an **update**:
   `import_model` refreshes that row in place (same model id → same directories,
   headstamp slots, and sorting templates) instead of creating a duplicate, and
@@ -690,7 +742,10 @@ between them from the Sort page's template dropdown.
 ### Community / cloud (`sorter/community/`)
 - **`auth.py`** — `AuthManager`: MSAL `PublicClientApplication` against Azure AD
   B2C (hardcoded tenant/client/authority/redirect, mirroring WinForms). Token
-  cache is a single file, chmod 0600 on POSIX. Decodes ID-token claims **for
+  cache is a single file, owner-only on POSIX: `flush` *creates* its temp file
+  0600 (`os.open` with a mode, `O_EXCL`) before writing the refresh token,
+  rather than writing with the umask and chmodding after the replace — an
+  open descriptor taken in that window survives a chmod. Decodes ID-token claims **for
   display only** (signature not verified — never used for authz). Auth is
   optional; the only gated surface is the Community page.
 - **`community_api.py`** — `CommunityApi`: HTTPS client for
@@ -794,7 +849,19 @@ A model installed from the **Community** page is stamped `model_type =
 publisher's, retraining forks it from the version they keep updating, and the
 archive usually ships without the images it was built from. `ReadOnly` (the
 legacy app's marker) is treated the same. `_merge_onto_installed` never lets
-an update downgrade ownership.
+an update downgrade ownership, and neither does the WinForms import's
+`_import_one_model` when it matches an installed community model by UID.
+
+**Ownership is not provenance.** `model_type` answers "who may train this";
+the torch security floor needs "who wrote this checkpoint file", and for a
+plain ZIP import the first answer is the manifest's own say-so. So each row
+also carries `checkpoint_origin` (`"local"` / `"imported"`), set only by the
+code that writes the file: `import_model` and the WinForms import stamp
+`"imported"`, a completed training run on the Train page stamps `"local"`.
+`models.needs_torch_floor` is foreign **or** not local. Rows that existed
+before migration 0008 are `"local"` — the deliberate backfill, so no existing
+install's behaviour changes; only checkpoints imported from then on are
+treated as untrusted.
 
 **`community_model_uid` is not an ownership signal** — sharing your own model
 stamps a UID onto your local copy, so a UID means "exists in the community",
@@ -823,11 +890,18 @@ load a checkpoint this app did not produce: CVE-2026-24747 lets a crafted
 `.pth` defeat the `weights_only=True` unpickler that `_load` relies on, and
 the Community page and ZIP import are exactly that delivery path. So
 `ensure_torch` takes the `model` the action will load and picks the policy
-from `models.is_foreign_model`: a **foreign** model **blocks** until the user
-upgrades; the user's **own** model gets an **offer** that proceeds on decline,
-remembered for the session (their own checkpoint isn't an attack, and a
-multi-GB download shouldn't stand between them and sorting). Omitting `model`
-takes the blocking branch — unknown provenance is treated as foreign.
+from `models.needs_torch_floor`: a checkpoint that is foreign **or imported**
+(a plain ZIP, a WinForms import — whatever its `model_type`) **blocks** until
+the user upgrades; a checkpoint **trained here** gets an **offer** that
+proceeds on decline, remembered for the session (their own checkpoint isn't an
+attack, and a multi-GB download shouldn't stand between them and sorting).
+Omitting `model` takes the blocking branch — unknown provenance is treated as
+foreign. **The gate is not the only check:** it runs when an action starts,
+but `classify_active` re-reads the active model for every case, so it raises
+`classifier.UntrustedCheckpointError` (`untrusted_checkpoint_problem`) itself
+— that is what stops a model activated on the Models page mid-run from loading
+on an old torch. Train's Feed asks the same function and skips the prediction
+rather than the floor when the user declines.
 The floor is deliberately **not** derived from the `[ml]` pin: the pin is
 "what a fresh install gets" and moves on every routine bump, while this is
 "below here the safety property is gone", moves only when an advisory says
@@ -1142,7 +1216,7 @@ and must never be committed.
 <data root>/
 ├── config/
 │   ├── casesorter.db      # SQLite (all settings, models, headstamps)
-│   └── msal_cache.bin     # MSAL token cache (chmod 0600 on POSIX)
+│   └── msal_cache.bin     # MSAL token cache (0600 on POSIX; config/ itself is 0700)
 ├── models/
 │   └── <model_id>/
 │       ├── images/          # raw training images   {label}__{ticks}.jpg
@@ -1338,6 +1412,14 @@ flowchart TD
   isn't the newest release available. **This picker is the only route to a
   release candidate** — the startup check hits `/releases/latest`, which
   excludes prereleases, so an rc is never announced.
+- **One commit per release run.** `release.yml`'s `prepare` job pins
+  `git rev-parse HEAD` of `ref` as its `sha` output; the reusable `lint.yml` /
+  `build.yml` take it as a `workflow_call` `ref` input (empty on push/PR, which
+  keeps their own triggers unchanged) and every checkout in them uses it; the
+  `release` job checks out that SHA — never the branch name again — and fails
+  if `git ls-remote` shows the branch has moved since. Without it the checks
+  tested the dispatch commit, and a push during the approval wait was what got
+  tagged. `tests/unit/test_release_commit_pinning.py` pins the plumbing.
 - **Release candidates.** `release.yml`'s `prerelease` input (`none`/`rc`/`b`/
   `a`) cuts one: everything a release does, minus the `promote` step, so the
   GitHub release stays a prerelease permanently instead of as a staging state.

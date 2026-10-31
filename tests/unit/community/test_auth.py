@@ -6,6 +6,7 @@ interaction. Real interactive login is a manual smoke test.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -271,3 +272,48 @@ def test_cache_file_persisted_and_chmod(tmp_path: Path) -> None:
     mode = os.stat(cache_path).st_mode & 0o777
     if mode != 0:
         assert mode in (0o600, 0o400, 0o700)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX modes; Windows relies on the %LOCALAPPDATA% ACL")
+def test_the_token_cache_is_never_readable_by_others_even_mid_write(tmp_path: Path, monkeypatch) -> None:
+    """The temp file holding the refresh token is *created* 0600.
+
+    The old flush wrote it with the umask's mode (0644) and chmodded only after
+    the replace, so another local user could open it in between — and an open
+    descriptor outlives a chmod. Captured at the moment of the replace.
+    """
+    previous = os.umask(0o022)
+    seen: list[int] = []
+    real_replace = os.replace
+
+    def spy(src, dst):
+        seen.append(os.stat(src).st_mode & 0o777)
+        real_replace(src, dst)
+
+    try:
+        cache_path = tmp_path / "config" / "cache.bin"
+        mgr = AuthManager(cache_path=cache_path, client_factory=_FakeClient)
+        mgr._cache.has_state_changed = True
+        monkeypatch.setattr("sorter.community.auth.os.replace", spy)
+        mgr._cache.flush()
+    finally:
+        os.umask(previous)
+
+    assert seen == [0o600]
+    assert os.stat(cache_path).st_mode & 0o777 == 0o600
+    assert os.stat(cache_path.parent).st_mode & 0o077 == 0
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX modes")
+def test_a_stale_temp_from_a_crash_does_not_block_the_next_flush(tmp_path: Path) -> None:
+    cache_path = tmp_path / "cache.bin"
+    stale = tmp_path / "cache.bin.tmp"
+    stale.write_text("half-written", encoding="utf-8")
+    stale.chmod(0o644)
+    mgr = AuthManager(cache_path=cache_path, client_factory=_FakeClient)
+    mgr._cache.has_state_changed = True
+
+    mgr._cache.flush()
+
+    assert not stale.exists()
+    assert os.stat(cache_path).st_mode & 0o777 == 0o600

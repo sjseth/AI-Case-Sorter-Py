@@ -32,12 +32,17 @@
      summary without pushing a tag or creating anything. Uncheck it to actually release.
 4. The workflow resolves the version and generates changelog notes from commits since the last
    tag via [git-cliff](https://git-cliff.org/) (`cliff.toml`), then puts both in the job
-   summary. **A dry run stops here** -- nothing else has happened.
-5. Lint and the full test matrix run, so what you approve next is already green.
+   summary, together with the **commit** the ref resolved to. That SHA is pinned for the rest
+   of the run. **A dry run stops here** -- nothing else has happened.
+5. Lint and the full test matrix run against that pinned commit, so what you approve next is
+   already green.
 6. **The run pauses for approval.** The job that tags is bound to the `stable` environment, so
    it sits pending until a required reviewer approves it on the run page. There is no draft to
    publish by hand -- this is the confirmation step.
-7. On approval it tags the ref, builds, checks the artifacts (built version matches the tag;
+7. On approval it checks out the pinned commit -- not the branch name again -- and **fails if
+   the branch has moved** since the run started (a push while approval was pending): what you
+   approved is no longer what the branch says, so dispatch the release again. Then it tags that
+   commit, builds, checks the artifacts (built version matches the tag;
    the sdist is named and stamped as the updater expects), pushes the tag, and creates the
    GitHub Release **as a prerelease with its artifacts already attached**.
 8. The Windows installer is run for real against that exact tag, and the resulting install has

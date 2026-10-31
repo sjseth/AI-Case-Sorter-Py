@@ -17,8 +17,9 @@ import pytest
 from sorter import paths
 from sorter.data.config import Config
 from sorter.data.db import Database
-from sorter.data.models import is_trainable
+from sorter.data.models import CHECKPOINT_ORIGIN_IMPORTED, Model, is_trainable, needs_torch_floor
 from sorter.data.repository import (
+    CartridgeRepo,
     HeadstampParentRepo,
     HeadstampRepo,
     ModelRepo,
@@ -929,3 +930,70 @@ def test_reimport_skips_an_unchanged_checkpoint(tmp_path: Path, db: Database, co
     assert second.checkpoints_copied == 0
     model = _model(db, "9mm Default")
     assert model.model_path is not None and Path(model.model_path).is_file()
+
+
+# ----- security audit, 2026-10 ------------------------------------------------
+
+
+def test_a_uid_match_never_downgrades_an_installed_community_model(
+    tmp_path: Path, db: Database, config: Config
+) -> None:
+    """The legacy row says `Standard`; the installed copy is the publisher's.
+
+    Taking the folder's word would make it trainable and lift its hard torch
+    floor — the rule `model_io._merge_onto_installed` already applies to a ZIP.
+    """
+    repo = ModelRepo(db)
+    cart = CartridgeRepo(db).get_or_create("9mm").id
+    installed = repo.create(
+        Model(
+            name="From the community",
+            cartridge_id=cart,
+            model_type="CommunityManaged",
+            community_model_uid="U1",
+        )
+    )
+    legacy = dict(_MODEL_OWN, CommunityModelUID="U1", ModelType=0)
+    root = _write_install(tmp_path / "legacy", models=[legacy])
+    _torch_zip(root / "training" / "models" / f"{legacy['Id']}.zip")
+
+    result = import_installation(root, db=db, config=config, options=ImportOptions())
+
+    assert result.models_updated == 1
+    after = repo.get(installed.id)
+    assert after is not None
+    assert after.model_type == "CommunityManaged"
+    assert not is_trainable(after)
+    assert needs_torch_floor(after)
+
+
+def test_a_copied_checkpoint_is_marked_imported(tmp_path: Path, db: Database, config: Config) -> None:
+    root = _write_install(tmp_path / "legacy", models=[_MODEL_OWN])
+    _torch_zip(root / "training" / "models" / f"{_MODEL_OWN['Id']}.zip")
+
+    import_installation(root, db=db, config=config, options=ImportOptions())
+
+    model = _model(db, _MODEL_OWN["Name"])
+    # Still the user's to train...
+    assert is_trainable(model)
+    # ...but the legacy app's torch wrote the checkpoint.
+    assert model.checkpoint_origin == CHECKPOINT_ORIGIN_IMPORTED
+    assert needs_torch_floor(model)
+
+
+def test_a_non_integer_init_value_is_skipped_not_stored(tmp_path: Path, db: Database, config: Config) -> None:
+    """Stored as text it would reach the board as `fan:100\\nsortto:7` — two
+    commands — and crash the Serial settings page at every launch after."""
+    defaults = dict(_DEFAULTS)
+    defaults["InitSettings"] = [
+        {"Key": "fan", "Value": "55\nsortto:7\nfeedsteps:9999"},
+        {"Key": "sortspeed", "Value": "85"},
+    ]
+    root = _write_install(tmp_path / "legacy", defaults=defaults)
+
+    import_installation(root, db=db, config=config, options=ImportOptions(models=False, serial=True))
+
+    init = Config(db).load().serial["init_settings"]
+    assert init["fan"] == 100  # the default, not the payload
+    assert init["sortspeed"] == 85
+    assert all(isinstance(v, int) for v in init.values())

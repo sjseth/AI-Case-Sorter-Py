@@ -7,6 +7,12 @@ on:
   # Callable so release.yml can gate a release on the same checks that
   # guard main, rather than reimplementing them.
   workflow_call:
+    inputs:
+      ref:
+        description: "Commit to check out. release.yml passes the SHA it will tag; empty means the triggering commit."
+        required: false
+        type: string
+        default: ""
   # Manual runs: the release-config job pins git-cliff's version mapping, which
   # can drift when that tool is upgraded rather than when this repo changes --
   # so it needs to be runnable without a commit to hang it on.
@@ -26,6 +32,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Empty on push/PR, where checkout uses the event commit; release.yml
+          # passes the exact SHA it summarised, so the checks gate that commit.
+          ref: ${{ inputs.ref }}
 
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
@@ -48,6 +57,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Empty on push/PR, where checkout uses the event commit; release.yml
+          # passes the exact SHA it summarised, so the checks gate that commit.
+          ref: ${{ inputs.ref }}
 
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
@@ -75,6 +87,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Empty on push/PR, where checkout uses the event commit; release.yml
+          # passes the exact SHA it summarised, so the checks gate that commit.
+          ref: ${{ inputs.ref }}
 
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
@@ -98,6 +113,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Empty on push/PR, where checkout uses the event commit; release.yml
+          # passes the exact SHA it summarised, so the checks gate that commit.
+          ref: ${{ inputs.ref }}
 
       # Digest-pinned: a release asset is mutable upstream.
       - name: Install actionlint
@@ -139,6 +157,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Empty on push/PR, where checkout uses the event commit; release.yml
+          # passes the exact SHA it summarised, so the checks gate that commit.
+          ref: ${{ inputs.ref }}
 
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:

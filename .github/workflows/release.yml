@@ -82,6 +82,7 @@ jobs:
       source: ${{ steps.resolve.outputs.source }}
       previous: ${{ steps.previous.outputs.tag }}
       prerelease: ${{ steps.resolve.outputs.prerelease }}
+      sha: ${{ steps.pin.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,6 +90,13 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           ref: ${{ inputs.ref || github.ref }}
+
+      # The one commit this run is about. The checks below test it, the
+      # summary describes it, and the release job tags exactly it -- `ref` is a
+      # branch name, and a branch can move while the run waits for approval.
+      - name: Pin the commit
+        id: pin
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: ./.github/actions/setup-git-cliff
 
@@ -213,6 +221,7 @@ jobs:
           AUTO: ${{ steps.resolve.outputs.auto }}
           SOURCE: ${{ steps.resolve.outputs.source }}
           REF: ${{ inputs.ref || github.ref }}
+          SHA: ${{ steps.pin.outputs.sha }}
           DRY_RUN: ${{ inputs.dry-run }}
           LATEST: ${{ steps.previous.outputs.tag }}
           PRERELEASE: ${{ steps.resolve.outputs.prerelease }}
@@ -240,6 +249,7 @@ jobs:
             echo "| Auto-detected | \`$AUTO\` |"
             echo "| Source | $SOURCE |"
             echo "| Ref | \`$REF\` |"
+            echo "| Commit | \`$SHA\` |"
             echo "| Previous tag | \`${LATEST:-(none yet)}\` |"
             echo "| Mode | $MODE |"
             echo ""
@@ -268,6 +278,8 @@ jobs:
     needs: prepare
     if: ${{ !inputs.dry-run }}
     uses: ./.github/workflows/lint.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
     permissions:
       contents: read
 
@@ -276,6 +288,8 @@ jobs:
     needs: prepare
     if: ${{ !inputs.dry-run }}
     uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
     permissions:
       contents: read
 
@@ -299,12 +313,36 @@ jobs:
     outputs:
       version: ${{ needs.prepare.outputs.version }}
     steps:
+      # The SHA prepare summarised and the checks tested -- not the branch
+      # name again, which would resolve to whatever was pushed while this job
+      # waited for approval.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
           fetch-tags: true
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      # Fails rather than silently releasing an older commit than the branch
+      # now holds: a push after approval was requested means what was approved
+      # is no longer what the branch says, so the run has to be redone. The
+      # repo is public, so ls-remote needs no credentials.
+      - name: Refuse a branch that moved since it was checked
+        env:
+          REF: ${{ inputs.ref || github.ref }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          BRANCH="${REF#refs/heads/}"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if [ "$HEAD_SHA" != "$SHA" ]; then
+            echo "::error::Checked out $HEAD_SHA, expected the pinned $SHA."
+            exit 1
+          fi
+          TIP="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
+          if [ "$TIP" != "$SHA" ]; then
+            echo "::error::'$BRANCH' is now at ${TIP:-nothing}, but this run checked and summarised $SHA. Re-run the release."
+            exit 1
+          fi
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
