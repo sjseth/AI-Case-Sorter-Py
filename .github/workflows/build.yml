@@ -7,12 +7,6 @@ on:
   # Callable so release.yml can gate a release on the same checks that
   # guard main, rather than reimplementing them.
   workflow_call:
-    inputs:
-      ref:
-        description: "Commit to check out. release.yml passes the SHA it will tag; empty means the triggering commit."
-        required: false
-        type: string
-        default: ""
   # Manual runs: re-running the matrix against main without pushing anything,
   # e.g. to check a flake or a newly released Python.
   workflow_dispatch:
@@ -42,9 +36,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # Empty on push/PR, where checkout uses the event commit; release.yml
-          # passes the exact SHA it summarised, so the checks gate that commit.
-          ref: ${{ inputs.ref }}
           # Tags, not just the tip: test_cross_version_update.py checks out the
           # previous release and runs *its* updater against this tree. Without
           # them that test self-skips, and the flat->src upgrade path is
@@ -131,9 +122,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # Empty on push/PR, where checkout uses the event commit; release.yml
-          # passes the exact SHA it summarised, so the checks gate that commit.
-          ref: ${{ inputs.ref }}
 
       # The version here is just what runs bootstrap.py itself -- bootstrap.py
       # provisions the app's actual interpreter separately via uv, per

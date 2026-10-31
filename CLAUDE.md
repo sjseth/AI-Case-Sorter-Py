@@ -1413,13 +1413,18 @@ flowchart TD
   release candidate** — the startup check hits `/releases/latest`, which
   excludes prereleases, so an rc is never announced.
 - **One commit per release run.** `release.yml`'s `prepare` job pins
-  `git rev-parse HEAD` of `ref` as its `sha` output; the reusable `lint.yml` /
-  `build.yml` take it as a `workflow_call` `ref` input (empty on push/PR, which
-  keeps their own triggers unchanged) and every checkout in them uses it; the
-  `release` job checks out that SHA — never the branch name again — and fails
-  if `git ls-remote` shows the branch has moved since. Without it the checks
-  tested the dispatch commit, and a push during the approval wait was what got
-  tagged. `tests/unit/test_release_commit_pinning.py` pins the plumbing.
+  `git rev-parse HEAD` of `ref` as its `sha` output and **fails unless it is
+  `github.sha`**, the dispatch commit — which is what the reusable `lint.yml` /
+  `build.yml` check out, since a called workflow's checkout defaults to the
+  caller's `github.sha`. The `release` job checks out that SHA — never the
+  branch name again — and fails if `git ls-remote` shows the branch has moved
+  since. Before this, dispatching from `main` with `ref: release/x` tested
+  `main`, and a push during the approval wait was what got tagged.
+  **Don't give the reusable workflows a `ref` input instead**: that was tried
+  in the same change, and CodeQL flags it high (cache poisoning) — a
+  `workflow_dispatch`-able workflow checking out a caller-chosen ref and then
+  running its local actions in the default branch's cache scope.
+  `tests/unit/test_release_commit_pinning.py` pins the plumbing.
 - **Release candidates.** `release.yml`'s `prerelease` input (`none`/`rc`/`b`/
   `a`) cuts one: everything a release does, minus the `promote` step, so the
   GitHub release stays a prerelease permanently instead of as a staging state.

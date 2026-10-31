@@ -19,7 +19,10 @@
      bumps the minor instead** (`0.1.0` + `feat!:` -> `0.2.0`), so no commit message can push
      the project to 1.0.0 on its own -- see CONTRIBUTING.md. Passing a version explicitly
      always overrides auto-detection.
-   - `ref`: branch to release from. Empty means the branch you dispatched on. **Must be
+   - `ref`: branch to release from. **Leave it empty and dispatch the workflow on the branch
+     you are releasing** (the "Use workflow from" picker). Whatever it names has to resolve
+     to the commit the run was dispatched on, because that is the commit lint and the test
+     matrix check; naming a different branch fails with a message saying so. **Must be
      `main`, `hotfix/*`, or `release/*`** — anything else is rejected before a tag is
      created. A raw commit SHA is rejected for the same reason: release from the branch
      containing it instead, so the release is traceable to a branch.
@@ -33,8 +36,9 @@
 4. The workflow resolves the version and generates changelog notes from commits since the last
    tag via [git-cliff](https://git-cliff.org/) (`cliff.toml`), then puts both in the job
    summary, together with the **commit** the ref resolved to. That SHA is pinned for the rest
-   of the run. **A dry run stops here** -- nothing else has happened.
-5. Lint and the full test matrix run against that pinned commit, so what you approve next is
+   of the run, and it must be the dispatch commit -- a branch that moved between dispatching
+   and this job starting fails here. **A dry run stops here** -- nothing else has happened.
+5. Lint and the full test matrix run against that same commit, so what you approve next is
    already green.
 6. **The run pauses for approval.** The job that tags is bound to the `stable` environment, so
    it sits pending until a required reviewer approves it on the run page. There is no draft to

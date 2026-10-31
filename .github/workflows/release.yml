@@ -48,7 +48,7 @@ on:
         options: [none, rc, b, a]
         default: none
       ref:
-        description: "Branch, tag, or commit SHA to release from. Leave empty for the branch this workflow was dispatched on."
+        description: "Branch to release from. Leave empty: it must resolve to the commit this run was dispatched on, so dispatch on the branch you are releasing."
         required: false
         type: string
       force:
@@ -91,12 +91,24 @@ jobs:
           fetch-tags: true
           ref: ${{ inputs.ref || github.ref }}
 
-      # The one commit this run is about. The checks below test it, the
-      # summary describes it, and the release job tags exactly it -- `ref` is a
-      # branch name, and a branch can move while the run waits for approval.
+      # The one commit this run is about. The checks below test it (the
+      # reusable lint/build workflows check out github.sha, the dispatch
+      # commit), the summary describes it, and the release job tags exactly
+      # it. `ref` is a branch name, and a branch can move -- before this job
+      # started, or while the run waits for approval -- so the name is resolved
+      # once, here, and has to be the commit the checks will run on.
       - name: Pin the commit
         id: pin
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        env:
+          REF: ${{ inputs.ref || github.ref }}
+        run: |
+          SHA="$(git rev-parse HEAD)"
+          if [ "$SHA" != "$GITHUB_SHA" ]; then
+            echo "::error::'$REF' is at $SHA, but this run was dispatched on $GITHUB_SHA -- the commit lint and the tests check."
+            echo "::error::Dispatch the release on the branch you are releasing (leave 'ref' empty); re-run if it moved since."
+            exit 1
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       - uses: ./.github/actions/setup-git-cliff
 
@@ -278,8 +290,6 @@ jobs:
     needs: prepare
     if: ${{ !inputs.dry-run }}
     uses: ./.github/workflows/lint.yml
-    with:
-      ref: ${{ needs.prepare.outputs.sha }}
     permissions:
       contents: read
 
@@ -288,8 +298,6 @@ jobs:
     needs: prepare
     if: ${{ !inputs.dry-run }}
     uses: ./.github/workflows/build.yml
-    with:
-      ref: ${{ needs.prepare.outputs.sha }}
     permissions:
       contents: read
 
