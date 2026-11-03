@@ -17,7 +17,10 @@ CLAUDE.md §3.
 
 The log is never re-ordered: ``_lines`` keeps every record, in arrival order,
 forever (up to the ring cap); the filter and direction toggles hide records
-without moving the ones that remain. ``matches()`` is the single predicate,
+without moving the ones that remain. The line count on that row reserves the
+width of ``"00000 of 00000 lines"`` (five digits covers ``MAX_LINES``) and
+stays right-aligned, so a growing count never shifts the RX/TX/Notes boxes.
+``matches()`` is the single predicate,
 applied on arrival, on re-render, and by ``dump()`` — always against the
 board's own text, never the rendered ``<-``/``->``/``--`` prefix or a
 timestamp that is only sometimes shown.
@@ -316,6 +319,9 @@ class SerialMonitorWidget(QWidget):
             row.addWidget(box)
 
         self.count_label = QLabel("0 lines", self)
+        # Fixed width so a growing count never shifts the RX/TX/Notes boxes.
+        self.count_label.setMinimumWidth(self.count_label.fontMetrics().horizontalAdvance("00000 of 00000 lines"))
+        self.count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         row.addWidget(self.count_label)
         return row
 

@@ -144,6 +144,13 @@ def test_palette_reapplication_preserves_the_zoomed_font(window, monitor) -> Non
 # ----- filtering ----------------------------------------------------------
 
 
+def test_count_label_reserves_width_for_five_digit_counts(monitor) -> None:
+    """MAX_LINES is 4000, so five digits cover the widest "shown of total" text."""
+    widest = "00000 of 00000 lines"
+    reserved = monitor.count_label.fontMetrics().horizontalAdvance(widest)
+    assert monitor.count_label.minimumWidth() >= reserved
+
+
 def test_filter_narrows_on_rerender(window, monitor) -> None:
     post(window, "serial/rx", "hello world")
     post(window, "serial/tx", "goodbye")
