@@ -17,7 +17,10 @@ CLAUDE.md §3.
 
 The log is never re-ordered: ``_lines`` keeps every record, in arrival order,
 forever (up to the ring cap); the filter and direction toggles hide records
-without moving the ones that remain. ``matches()`` is the single predicate,
+without moving the ones that remain. The line count on that row reserves the
+width of ``"00000 of 00000 lines"`` (five digits covers ``MAX_LINES``) and
+stays right-aligned, so a growing count never shifts the RX/TX/Notes boxes.
+``matches()`` is the single predicate,
 applied on arrival, on re-render, and by ``dump()`` — always against the
 board's own text, never the rendered ``<-``/``->``/``--`` prefix or a
 timestamp that is only sometimes shown.
@@ -35,7 +38,7 @@ import time
 from collections import deque
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -100,6 +103,80 @@ _FALLBACK = {
     "success": "#22c55e",
     "error": "#ef4444",
 }
+
+
+class _ElidingLabel(QLabel):
+    """Single-line label that yields its width before the controls beside it.
+
+    ``sizeHint`` stays the full string, so a panel that gives the label that
+    width shows a port path intact. ``minimumSizeHint`` drops to an ellipsis
+    once the text is longer than that, so a narrow panel shortens the path
+    and the checkboxes beside it keep their own width. A fixed pixel width is
+    not "wide" on every font: the same toolbar that fits the path on macOS
+    elides it on Windows. ``text()`` keeps returning the full string either
+    way; the painted label is the elided form, and the tooltip carries the
+    full path only while it is elided.
+    """
+
+    def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full = text
+        self._showing = False
+        super().setText(text)
+
+    def text(self) -> str:
+        return self._full
+
+    def setText(self, text: str) -> None:
+        self._full = text
+        self._show_elided()
+        self.updateGeometry()
+
+    def sizeHint(self) -> QSize:
+        hint = super().sizeHint()
+        return QSize(self._full_width(), max(hint.height(), self.fontMetrics().height()))
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        full = self._full_width()
+        # Shorter than the text: an ellipsis and a little of each end. Not
+        # wider than the text itself, or a short status would reserve a hole.
+        floor = min(full, self.fontMetrics().horizontalAdvance("…/…"))
+        return QSize(floor, max(hint.height(), self.fontMetrics().height()))
+
+    def resizeEvent(self, event: Any) -> None:
+        super().resizeEvent(event)
+        self._show_elided()
+
+    def _full_width(self) -> int:
+        if not self._full:
+            return 0
+        return self.fontMetrics().horizontalAdvance(self._full) + 2
+
+    def _show_elided(self) -> None:
+        if self._showing:
+            return
+        # The layout's answer is the widget width, not the contents rect.
+        # A style can inset the contents by a few pixels; eliding off that
+        # inset would shorten a path the layout had already made room for.
+        # Width 0 means we have not been laid out yet, so keep the full string
+        # until the first real resize.
+        if self.width() <= 0 or self.width() >= self._full_width():
+            shown = self._full
+        else:
+            width = self.contentsRect().width()
+            if width <= 0:
+                width = self.width()
+            shown = self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideMiddle, width)
+        self.setToolTip(self._full if shown != self._full else "")
+        self.setAccessibleName(self._full)
+        if QLabel.text(self) == shown:
+            return
+        self._showing = True
+        try:
+            QLabel.setText(self, shown)
+        finally:
+            self._showing = False
 
 
 class _CommandEdit(QLineEdit):
@@ -182,7 +259,9 @@ class SerialMonitorWidget(QWidget):
         row = QHBoxLayout()
         self._dot = QLabel("●", self)  # BLACK CIRCLE — mirrors the status-bar indicator
         row.addWidget(self._dot)
-        self._header_label = QLabel("disconnected", self)
+        # The port path is the one flexible item in this row. Checkboxes,
+        # the zoom slider and the buttons keep their text; this shortens.
+        self._header_label = _ElidingLabel("disconnected", self)
         row.addWidget(self._header_label)
         row.addStretch(1)
 
@@ -250,6 +329,9 @@ class SerialMonitorWidget(QWidget):
             row.addWidget(box)
 
         self.count_label = QLabel("0 lines", self)
+        # Fixed width so a growing count never shifts the RX/TX/Notes boxes.
+        self.count_label.setMinimumWidth(self.count_label.fontMetrics().horizontalAdvance("00000 of 00000 lines"))
+        self.count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         row.addWidget(self.count_label)
         return row
 

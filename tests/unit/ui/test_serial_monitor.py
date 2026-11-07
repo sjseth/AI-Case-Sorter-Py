@@ -144,6 +144,13 @@ def test_palette_reapplication_preserves_the_zoomed_font(window, monitor) -> Non
 # ----- filtering ----------------------------------------------------------
 
 
+def test_count_label_reserves_width_for_five_digit_counts(monitor) -> None:
+    """MAX_LINES is 4000, so five digits cover the widest "shown of total" text."""
+    widest = "00000 of 00000 lines"
+    reserved = monitor.count_label.fontMetrics().horizontalAdvance(widest)
+    assert monitor.count_label.minimumWidth() >= reserved
+
+
 def test_filter_narrows_on_rerender(window, monitor) -> None:
     post(window, "serial/rx", "hello world")
     post(window, "serial/tx", "goodbye")
@@ -324,6 +331,125 @@ def test_baud_unchanged_does_not_reconnect(window, monitor, monkeypatch) -> None
     monitor.baud_combo.activated.emit(index)
 
     assert calls == []
+
+
+# ----- toolbar geometry -------------------------------------------------------
+
+# The path from the report: long enough that a narrow panel has to give it up.
+_LONG_PORT = "/dev/cu.usbserial-2130 @ 9600 — 7.2.260128.7.1"
+
+
+def _row_widgets(layout):
+    return [layout.itemAt(i).widget() for i in range(layout.count()) if layout.itemAt(i).widget() is not None]
+
+
+def _assert_disjoint(widgets) -> None:
+    for earlier, later in zip(widgets, widgets[1:], strict=False):
+        assert later.geometry().x() >= earlier.geometry().x() + earlier.geometry().width(), (
+            f"{earlier.text()!r} runs into {later.text()!r}"
+        )
+
+
+def _assert_checkbox_fits(box) -> None:
+    from PySide6.QtWidgets import QStyle, QStyleOptionButton
+
+    option = QStyleOptionButton()
+    box.initStyleOption(option)
+    text_width = box.fontMetrics().horizontalAdvance(box.text())
+    contents = box.style().subElementRect(QStyle.SubElement.SE_CheckBoxContents, option, box)
+    indicator = box.style().pixelMetric(QStyle.PixelMetric.PM_IndicatorWidth, option, box)
+    spacing = box.style().pixelMetric(QStyle.PixelMetric.PM_CheckBoxLabelSpacing, option, box)
+    assert contents.width() >= text_width
+    assert box.sizeHint().width() >= text_width + indicator + spacing - 1
+    assert box.width() + 1 >= box.sizeHint().width()
+
+
+def _painted(label):
+    """The string QLabel actually stores, which is what gets painted.
+
+    ``_ElidingLabel.text()`` is the full path. Calling ``QLabel.text`` reaches
+    the base implementation, so this is the elided form when the layout has
+    squeezed the label and the full path when it has not.
+    """
+    from PySide6.QtWidgets import QLabel
+
+    return QLabel.text(label)
+
+
+def _assert_checkboxes_fit(monitor) -> None:
+    for box in (
+        monitor.autoscroll_check,
+        monitor.timestamps_check,
+        monitor.pause_check,
+        *monitor.show_kind_checks.values(),
+    ):
+        _assert_checkbox_fits(box)
+
+
+def test_toolbar_labels_fit_at_a_typical_width_and_the_path_elides(window, monitor, qapp) -> None:
+    """The port path is the item that shortens; the checkboxes keep the width
+    their text needs.
+
+    1020px is the width from the macOS report. It is not wide enough for this
+    path on every font — Windows elides it there — so the full path is always
+    read from ``text()``, and the painted string is required to match it only
+    once the panel is at least its own size hint.
+    """
+    monitor.setStyleSheet(window.styleSheet())
+    monitor._header_label.setText(_LONG_PORT)
+    monitor.count_label.setText("3999 of 4000 lines")
+    label = monitor._header_label
+    full_width = label.fontMetrics().horizontalAdvance(_LONG_PORT)
+
+    monitor.resize(1020, 320)
+    monitor.show()
+    qapp.processEvents()
+
+    header = _row_widgets(monitor.layout().itemAt(0).layout())
+    filters = _row_widgets(monitor.layout().itemAt(1).layout())
+    _assert_disjoint(header)
+    _assert_disjoint(filters)
+    _assert_checkboxes_fit(monitor)
+    # The holder does not depend on whether this width had to elide.
+    assert label.text() == _LONG_PORT
+    assert label.accessibleName() == _LONG_PORT
+    painted = _painted(label)
+    if label.width() >= full_width:
+        assert painted == _LONG_PORT
+        assert label.toolTip() == ""
+    else:
+        assert painted != _LONG_PORT
+        assert len(painted) < len(_LONG_PORT)
+        assert label.toolTip() == _LONG_PORT
+
+    # At the layout's own hint the path fits, on every font.
+    wide = max(monitor.sizeHint().width(), 1020)
+    monitor.resize(wide, 320)
+    qapp.processEvents()
+    _assert_disjoint(_row_widgets(monitor.layout().itemAt(0).layout()))
+    _assert_disjoint(_row_widgets(monitor.layout().itemAt(1).layout()))
+    _assert_checkboxes_fit(monitor)
+    assert label.width() >= full_width
+    assert label.text() == _LONG_PORT
+    assert _painted(label) == _LONG_PORT
+    assert label.toolTip() == ""
+
+    slack = label.sizeHint().width() - label.minimumSizeHint().width()
+    assert slack > label.fontMetrics().horizontalAdvance("usb")
+    monitor.resize(wide - slack // 2, 320)
+    qapp.processEvents()
+
+    _assert_disjoint(_row_widgets(monitor.layout().itemAt(0).layout()))
+    _assert_disjoint(_row_widgets(monitor.layout().itemAt(1).layout()))
+    _assert_checkboxes_fit(monitor)
+    assert label.width() < full_width
+    painted = _painted(label)
+    assert label.text() == _LONG_PORT
+    assert painted != _LONG_PORT
+    assert len(painted) < len(_LONG_PORT)
+    assert label.toolTip() == _LONG_PORT
+    monitor.close()
+    monitor.deleteLater()
 
 
 # ----- integration: real emulator exchange lands in the widget --------------

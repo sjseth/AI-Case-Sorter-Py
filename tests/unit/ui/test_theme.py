@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from sorter.ui.palettes import BUILTIN_THEMES
-from sorter.ui.theme import GROUPBOX_TOP_MARGIN, INDICATOR_SIZE, build_stylesheet
+from sorter.ui.theme import GROUPBOX_TOP_MARGIN, INDICATOR_LABEL_SPACING, INDICATOR_SIZE, build_stylesheet
 
 
 def block(qss: str, selector: str) -> str:
@@ -240,6 +240,41 @@ def test_check_indicators_are_sized_and_inked_from_the_palette(name: str) -> Non
     # A disabled toggle that is ON must still read as on, so :checked has to
     # come last of the two same-specificity rules.
     assert qss.index("QCheckBox::indicator:disabled") < qss.index("QCheckBox::indicator:checked")
+
+
+def test_checkbox_rule_drops_the_native_border_and_sets_label_spacing() -> None:
+    """`border: none` is what makes QStyleSheetStyle return the widget rect
+    for SE_CheckBoxLayoutItem. The spacing is the indicator-to-text gap the
+    macOS metric leaves at 2px."""
+    rule = block(build_stylesheet(BUILTIN_THEMES["Dark"]), "QCheckBox, QRadioButton")
+
+    assert "border: none;" in rule
+    assert f"spacing: {INDICATOR_LABEL_SPACING}px;" in rule
+
+
+def test_styled_toggles_keep_the_full_layout_rect(qapp) -> None:
+    """QMacStyle's SE_CheckBoxLayoutItem is 9px short on the right so an Aqua
+    focus ring can spill into the next cell. QStyleSheetStyle keeps that
+    inset unless the checkbox rule has no native border, and on every other
+    platform the same fall-through leaves the rect empty. Either way the
+    serial monitor's row of boxes paints one label over the next. `border:
+    none` makes the layout item the widget's own rect."""
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QCheckBox, QRadioButton, QStyle, QStyleOption
+
+    sheet = build_stylesheet(BUILTIN_THEMES["Dark"])
+    for cls, element in (
+        (QCheckBox, QStyle.SubElement.SE_CheckBoxLayoutItem),
+        (QRadioButton, QStyle.SubElement.SE_RadioButtonLayoutItem),
+    ):
+        widget = cls("Autoscroll")
+        widget.setStyleSheet(sheet)
+        widget.ensurePolished()
+        option = QStyleOption()
+        option.initFrom(widget)
+        option.rect = QRect(0, 0, 180, 28)
+        assert widget.style().subElementRect(element, option, widget) == option.rect
+        widget.deleteLater()
 
 
 @pytest.mark.parametrize("name", list(BUILTIN_THEMES))

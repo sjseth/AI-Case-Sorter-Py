@@ -1085,7 +1085,12 @@ are `dialog_*.py`.
   side by side, the stylesheet sized the edit field for a stacked column, and
   the edit field swallowed the up arrow's clicks (#145) —
   `test_spinbox_arrows_step_the_value_under_every_style` clicks through
-  whatever widget is really under each arrow. The few places a stylesheet can't reach (rich text in
+  whatever widget is really under each arrow. The checkbox and radio rule
+  sets `border: none` for the same kind of reason: QMacStyle insets the
+  layout cell 9px so an Aqua focus ring can spill into the next control, and
+  QStyleSheetStyle only drops that inset when the widget rule has no native
+  border — without it the serial monitor's toolbar paints each label over
+  the next one. The few places a stylesheet can't reach (rich text in
   the feed and indicators, `QPlainTextEdit` line colors, painted history
   cards) bake their colors in and are re-rendered by an explicit
   `apply_palette()` on every switch.

@@ -146,8 +146,9 @@ look when the machine does something unexpected.
 including while you are typing in its own command box.
 
 - The header shows the connection state, plus **Autoscroll**, **Timestamps**
-  and **Pause**. Pausing holds new lines back and releases them when you
-  un-pause; nothing is lost.
+  and **Pause**. A long port path shortens from the middle when the panel is
+  narrow; hover it for the full path. Pausing holds new lines back and
+  releases them when you un-pause; nothing is lost.
 - **Zoom** scales the text from 50% to 200%, for reading the log across the
   bench.
 - **Clear** empties the view. **Save…** writes what you are currently
@@ -157,8 +158,9 @@ including while you are typing in its own command box.
   [Settings → Serial](#serial).
 - **Filter** hides every line that doesn't contain what you type, and the
   **RX** / **TX** / **Notes** toggles hide a whole direction (received,
-  sent, and the monitor's own commentary). Filtering only hides: clear the
-  box and the traffic is all still there.
+  sent, and the monitor's own commentary). A line count sits at the right of
+  that row and keeps a fixed width as the log grows. Filtering only hides:
+  clear the box and the traffic is all still there.
 - The bottom row sends a command by hand — type it, pick the line ending the
   firmware expects, press **Send**. `Up` and `Down` walk back through what
   you have sent before.
