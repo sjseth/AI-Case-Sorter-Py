@@ -38,8 +38,13 @@ SORT_TIMEOUT_S = 20.0
 # End-of-brass detection. With the feed sensor enabled, the firmware prints
 # "waiting for brass" about once per second while a scheduled feed sits on a
 # dry proximity gate — so this many consecutive lines on one sort ack means
-# the hopper has been empty for that many seconds, not a case mid-fall.
+# the hopper has been empty for that many seconds, not a case mid-fall. This
+# is the default; the run passes the operator's Run options → Feed timeout.
 FEEDER_EMPTY_WAITS = 6
+# While wait_for_brass() parks a feed on the sensor, the board prints a
+# "waiting for brass" line every second. This much silence (no line at all)
+# means the board stopped answering, not that the hopper is still dry.
+BRASS_WAIT_SILENCE_S = 10.0
 # How long cancel_pending_feed() listens after `stop` for the race where a
 # case landed on the sensor just before the stop went out: the waiting feed
 # fires first and its real `done` arrives ahead of the stop's ack. Must
@@ -51,6 +56,7 @@ SORT_DONE = "done"
 SORT_EMPTY = "empty"  # the feeder is dry (FEEDER_EMPTY_WAITS consecutive waits)
 SORT_ERROR = "error"  # the board reported an error line (jam, stall)
 SORT_FAILED = "failed"  # timeout or link loss — ask is_connected which
+SORT_CANCELLED = "cancelled"  # wait_for_brass() was told to give up (Stop)
 
 
 Callback = Callable[[str], None]
@@ -514,20 +520,83 @@ class SerialBroker:
             return False
         return self._await_topic(self.on_done, SORT_TIMEOUT_S)
 
-    def sort_and_move_watched(self, slot: int) -> tuple[str, str]:
+    def sort_and_move_watched(self, slot: int, empty_wait_limit: int = FEEDER_EMPTY_WAITS) -> tuple[str, str]:
         """<slot> — sort like sort_and_move, but tell the caller *why* it ended.
 
         The continuous run uses this so an empty hopper is a state, not a
         20-second timeout: the bare sort's feed half waits on the proximity
-        sensor, and FEEDER_EMPTY_WAITS consecutive "waiting for brass" lines
-        mean the hopper is dry with up to three cases still in the wheel —
-        which cancel_pending_feed() + flush_sort_and_move() then place. An
-        `error:` reply (jam, stall) is reported as such instead of riding out
-        the timeout. Returns ``(outcome, detail)`` — see the SORT_* constants.
+        sensor, and `empty_wait_limit` consecutive "waiting for brass" lines
+        (one a second — the run's Feed timeout) mean the hopper is dry with up
+        to three cases still in the wheel — which cancel_pending_feed() +
+        flush_sort_and_move() then place. An `error:` reply (jam, stall) is
+        reported as such instead of riding out the timeout. The timeout grows
+        with the limit, so a long Feed timeout is never cut short by it.
+        Returns ``(outcome, detail)`` — see the SORT_* constants.
         """
+        limit = max(1, int(empty_wait_limit))
         if not self.send_command(str(int(slot))):
             return SORT_FAILED, ""
-        return self._await_sort_outcome(SORT_TIMEOUT_S, FEEDER_EMPTY_WAITS)
+        return self._await_sort_outcome(SORT_TIMEOUT_S + limit, limit)
+
+    def wait_for_brass(self, slot: int, cancel: threading.Event) -> tuple[str, str]:
+        """<slot> — park a sensor-gated feed and wait, with no time limit, for brass.
+
+        Run continuously's idle state, entered after the end-of-brass flush has
+        emptied the wheel. A bare sort's feed half waits on the proximity
+        sensor — the only way the firmware reports it — so `done` here means a
+        case reached the sensor and was fed into the wheel. The board's once-a-
+        second "waiting for brass" lines are its heartbeat: BRASS_WAIT_SILENCE_S
+        without one is SORT_FAILED. Setting `cancel` gives up promptly with
+        SORT_CANCELLED; the caller is the one that sends `stop` to the board
+        (RunController.stop does), whose `done` ack can land here first — so
+        check your own stop flag before trusting a SORT_DONE.
+        """
+        finished = threading.Event()
+        outcome = SORT_FAILED
+        detail = ""
+        last_heard = time.monotonic()
+
+        def _done(_payload: str) -> None:
+            nonlocal outcome
+            outcome = SORT_DONE
+            finished.set()
+
+        def _error(payload: str) -> None:
+            nonlocal outcome, detail
+            outcome = SORT_ERROR
+            detail = payload
+            finished.set()
+
+        def _waiting(_payload: str) -> None:
+            nonlocal last_heard
+            last_heard = time.monotonic()
+
+        def _abandon(_reason: str) -> None:
+            finished.set()
+
+        registrations = (
+            (self.on_done, _done),
+            (self.on_error, _error),
+            (self.on_waiting, _waiting),
+            (self.on_disconnect, _abandon),
+        )
+        for handlers, handler in registrations:
+            handlers.append(handler)
+        try:
+            if not self.send_command(str(int(slot))) or self._link_lost:
+                return SORT_FAILED, ""
+            while not finished.wait(timeout=0.1):
+                if cancel.is_set():
+                    return SORT_CANCELLED, ""
+                if time.monotonic() - last_heard > BRASS_WAIT_SILENCE_S:
+                    return SORT_FAILED, ""
+            return outcome, detail
+        finally:
+            for handlers, handler in registrations:
+                try:
+                    handlers.remove(handler)
+                except ValueError:
+                    pass
 
     def cancel_pending_feed(self) -> str:
         """stop — cancel a feed that is waiting on a dry proximity gate.

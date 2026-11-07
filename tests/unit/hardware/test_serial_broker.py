@@ -888,6 +888,60 @@ def test_watched_sort_below_the_limit_is_not_an_empty_verdict(
         t.join()
 
 
+def test_watched_sort_honours_a_custom_wait_limit(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Run options → Feed timeout: ten waits below a limit of 12 is still a
+    # sort in progress; the `done` after them completes it.
+    _writable(broker, monkeypatch)
+    lines = ["waiting for brass\n"] * 10 + ["done\n"]
+    t = _feed_when_registered(broker, broker.on_waiting, lines)
+    try:
+        assert broker.sort_and_move_watched(4, 12) == (serial_broker.SORT_DONE, "")
+    finally:
+        t.join()
+
+
+def test_wait_for_brass_returns_done_when_the_parked_feed_fires(
+    broker: SerialBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _writable(broker, monkeypatch)
+    # Far more waits than any Feed timeout: this wait has no limit.
+    lines = ["waiting for brass\n"] * 50 + ["done\n"]
+    t = _feed_when_registered(broker, broker.on_waiting, lines)
+    try:
+        assert broker.wait_for_brass(0, threading.Event()) == (serial_broker.SORT_DONE, "")
+    finally:
+        t.join()
+    assert fake.written == [b"0\n"]
+
+
+def test_wait_for_brass_gives_up_when_cancelled(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    _writable(broker, monkeypatch)
+    cancel = threading.Event()
+    threading.Timer(0.2, cancel.set).start()
+    started = time.monotonic()
+    assert broker.wait_for_brass(0, cancel) == (serial_broker.SORT_CANCELLED, "")
+    assert time.monotonic() - started < 2.0
+
+
+def test_wait_for_brass_fails_when_the_board_falls_silent(
+    broker: SerialBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _writable(broker, monkeypatch)
+    monkeypatch.setattr(serial_broker, "BRASS_WAIT_SILENCE_S", 0.2)
+    assert broker.wait_for_brass(0, threading.Event()) == (serial_broker.SORT_FAILED, "")
+
+
+def test_wait_for_brass_reports_a_board_error(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
+    _writable(broker, monkeypatch)
+    t = _feed_when_registered(broker, broker.on_error, ["error:feed stallguard\n"])
+    try:
+        outcome, detail = broker.wait_for_brass(0, threading.Event())
+    finally:
+        t.join()
+    assert outcome == serial_broker.SORT_ERROR
+    assert detail == "error:feed stallguard"
+
+
 def test_cancel_with_only_the_stop_ack_is_clean(broker: SerialBroker, monkeypatch: pytest.MonkeyPatch) -> None:
     # The firmware answers `stop` with one `done` even when idle. One done in
     # the window = the wait died dry = safe to flush.

@@ -15,7 +15,9 @@ from typing import Any
 
 from . import serial_broker
 from .serial_broker import (
+    BRASS_WAIT_SILENCE_S,
     FEEDER_EMPTY_WAITS,
+    SORT_CANCELLED,
     SORT_DONE,
     SORT_EMPTY,
     SORT_ERROR,
@@ -39,7 +41,9 @@ class EmulatorBroker:
         # bare sort answers "waiting for brass" once per delay tick — exactly
         # what the firmware's prox-gated feed does on a dry hopper — until a
         # `stop` cancels it (answered with `done`, as the real firmware does
-        # via FeedCycleComplete) or an `xf:` forces the feed through.
+        # via FeedCycleComplete), an `xf:` forces the feed through, or
+        # set_hopper() refills it (brass reaching the sensor: the parked feed
+        # fires and answers `done`).
         self._hopper = hopper
         self._feed_waiting = False
         self._state_lock = threading.Lock()
@@ -163,6 +167,16 @@ class EmulatorBroker:
         with self._state_lock:
             if not self._feed_waiting or not self.is_connected:
                 return
+            # Brass reached the sensor while the feed was parked on it: the
+            # feed fires and the sort completes, exactly like the firmware.
+            arrived = self._hopper is None or self._hopper > 0
+            if arrived:
+                if self._hopper is not None:
+                    self._hopper -= 1
+                self._feed_waiting = False
+        if arrived:
+            self._dispatch("done")
+            return
         self._dispatch("waiting for brass")
         timer = threading.Timer(self._response_delay_s, self._emit_waiting)
         timer.daemon = True
@@ -242,8 +256,9 @@ class EmulatorBroker:
     def sort_and_move(self, slot: int) -> bool:
         return self._send_and_await(str(int(slot)), self.on_done, 20.0)
 
-    def sort_and_move_watched(self, slot: int) -> tuple[str, str]:
+    def sort_and_move_watched(self, slot: int, empty_wait_limit: int = FEEDER_EMPTY_WAITS) -> tuple[str, str]:
         """Parity with SerialBroker.sort_and_move_watched."""
+        limit = max(1, int(empty_wait_limit))
         done = threading.Event()
         outcome = SORT_FAILED
         detail = ""
@@ -263,7 +278,7 @@ class EmulatorBroker:
         def _waiting(_payload: str) -> None:
             nonlocal outcome, waits
             waits += 1
-            if waits >= FEEDER_EMPTY_WAITS:
+            if waits >= limit:
                 outcome = SORT_EMPTY
                 done.set()
 
@@ -281,7 +296,56 @@ class EmulatorBroker:
         try:
             if not self.send_command(str(int(slot))):
                 return SORT_FAILED, ""
-            done.wait(timeout=20.0)
+            done.wait(timeout=20.0 + limit * self._response_delay_s)
+            return outcome, detail
+        finally:
+            for handlers, handler in registrations:
+                try:
+                    handlers.remove(handler)
+                except ValueError:
+                    pass
+
+    def wait_for_brass(self, slot: int, cancel: threading.Event) -> tuple[str, str]:
+        """Parity with SerialBroker.wait_for_brass."""
+        finished = threading.Event()
+        outcome = SORT_FAILED
+        detail = ""
+        last_heard = time.monotonic()
+
+        def _done(_payload: str) -> None:
+            nonlocal outcome
+            outcome = SORT_DONE
+            finished.set()
+
+        def _error(payload: str) -> None:
+            nonlocal outcome, detail
+            outcome = SORT_ERROR
+            detail = payload
+            finished.set()
+
+        def _waiting(_payload: str) -> None:
+            nonlocal last_heard
+            last_heard = time.monotonic()
+
+        def _abandon(_reason: str) -> None:
+            finished.set()
+
+        registrations = (
+            (self.on_done, _done),
+            (self.on_error, _error),
+            (self.on_waiting, _waiting),
+            (self.on_disconnect, _abandon),
+        )
+        for handlers, handler in registrations:
+            handlers.append(handler)
+        try:
+            if not self.send_command(str(int(slot))):
+                return SORT_FAILED, ""
+            while not finished.wait(timeout=0.02):
+                if cancel.is_set():
+                    return SORT_CANCELLED, ""
+                if time.monotonic() - last_heard > BRASS_WAIT_SILENCE_S:
+                    return SORT_FAILED, ""
             return outcome, detail
         finally:
             for handlers, handler in registrations:

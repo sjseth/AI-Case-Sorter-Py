@@ -54,6 +54,15 @@ DISCONNECT_ERROR = "Serial disconnected"
 # full speed instead of walking the whole hopper at flush pace.
 FLUSH_RESUME_CASES = 6
 
+# Run continuously. Once the flush has emptied the wheel the run parks a
+# sensor-gated feed (broker.wait_for_brass) instead of ending; that feed
+# firing is the board saying brass reached the sensor and was fed into the
+# wheel. The new case is then walked to the camera with forced feeds, at most
+# this many — the wheel's pipeline depth between the feed and the camera, with
+# one to spare — so an empty pocket is never classified and counted as a case.
+RESUME_WALK_CYCLES = 4
+WAITING_FOR_BRASS_STATUS = "Out of brass — waiting for brass. The run resumes when a case reaches the feed sensor."
+
 
 class RunController:
     def __init__(self, *, config: Config, broker, camera, bus: EventBus, db: Any = None) -> None:
@@ -713,7 +722,7 @@ class RunController:
                 # sort_and_move drops the current case at `slot` AND feeds the
                 # next case into the imaging area before responding 'done'. The
                 # next iteration's capture will see that next case.
-                outcome, detail = self.broker.sort_and_move_watched(slot)
+                outcome, detail = self.broker.sort_and_move_watched(slot, self.config.run_feed_timeout_s)
                 if outcome == serial_broker.SORT_EMPTY:
                     # The feed half of the sort is waiting on a dry proximity
                     # gate — the hopper looks empty, with this case's sort
@@ -859,10 +868,12 @@ class RunController:
         every case in its true slot.
 
         Returns "resume" when the run should continue at full speed (the
-        end-of-brass call was a false alarm), or "stop" when the run is over
-        (out of brass, a jam, or the operator pressed Stop mid-flush). Jams
-        during the flush never home-and-refeed blind — remaining stragglers
-        stay in the wheel for the operator.
+        end-of-brass call was a false alarm), "drained" when the flush emptied
+        the wheel (out of brass — the run ends, or with Run continuously waits
+        for more), or "stop" when the run is over for any other reason (a jam,
+        or the operator pressed Stop mid-flush). Jams during the flush never
+        home-and-refeed blind — remaining stragglers stay in the wheel for
+        the operator.
         """
         label = result.get("label", "")
         slot = int(result["slot"])
@@ -909,12 +920,15 @@ class RunController:
                 # forced feed executes the final queued drop; the wheel is
                 # now empty. Best-effort — the cases are already counted.
                 self.broker.feed_one()
-                self.bus.post("run/out_of_brass", {"flushed": flushed})
+                self.bus.post(
+                    "run/out_of_brass",
+                    {"flushed": flushed, "continuous": self.config.run_continuous},
+                )
                 self.bus.post(
                     "run/status",
                     f"Out of brass — {flushed} in-flight case(s) flushed to their slots.",
                 )
-                return "stop"
+                return "drained"
             if flush_result.get("error"):
                 self.bus.post("run/error", flush_result["error"])
                 return "stop"
@@ -933,6 +947,76 @@ class RunController:
                 # must not ping-pong the run between flush and resume forever.
                 self.bus.post("run/status", "Brass still flowing — resuming the run.")
                 return "resume_after_flush"
+
+    def _wait_for_brass(self) -> bool:
+        """Run continuously: park on the feed sensor until brass arrives.
+
+        Entered with the wheel empty, after the flush's close-out feed. The
+        parked sort sends slot 0: that feed queued 0, so the arm moves to the
+        catch-all over an empty drop port, and 0 is what the firmware's queue
+        holds when the first new case is classified — hence
+        ``_last_classified_slot`` is reset to match. When the feed fires the
+        case is walked to the camera (``_walk_to_camera``) and the run resumes
+        on it; a trigger that never shows up at the camera (a bounce on the
+        sensor) just parks the feed again.
+
+        Returns True to resume the run, False when it is over (Stop, a board
+        error, or the board falling silent — each reported on ``run/error``
+        except Stop).
+        """
+        self._last_classified_slot = 0
+        while not self._stop_event.is_set():
+            self.bus.post("run/status", WAITING_FOR_BRASS_STATUS)
+            outcome, detail = self.broker.wait_for_brass(0, self._stop_event)
+            # Stop sends `stop`, which the board acks with a `done` — that is
+            # not brass, whichever order the two arrive in.
+            if self._stop_event.is_set():
+                return False
+            if outcome == serial_broker.SORT_ERROR:
+                self.bus.post("run/error", f"Board error: {detail}" if detail else "Board error")
+                return False
+            if outcome != serial_broker.SORT_DONE:
+                self.bus.post(
+                    "run/error",
+                    self._board_error("The board stopped answering while waiting for brass"),
+                )
+                return False
+            arrived = self._walk_to_camera()
+            if arrived is None:
+                return False
+            if arrived:
+                self.bus.post("run/status", "Brass detected — resuming the run.")
+                self.bus.post("run/resumed", None)
+                return True
+            log.info("feed sensor fired but no case reached the camera; waiting for brass again")
+        return False
+
+    def _walk_to_camera(self) -> bool | None:
+        """Forced-feed a just-fed case up to the camera without classifying air.
+
+        True once the camera sees a case, False if ``RESUME_WALK_CYCLES``
+        forced feeds bring none (the wheel stays empty — the caller waits
+        again), None when the run must end (Stop, a camera or board failure;
+        failures are posted on ``run/error``). Every forced feed queues slot
+        0, the same target the parked sort left, so the arm queue stays where
+        ``_last_classified_slot`` says it is.
+        """
+        for walked in range(RESUME_WALK_CYCLES + 1):
+            if self._stop_event.is_set():
+                return None
+            frame = self.camera.capture_frame()
+            if frame is None:
+                self.bus.post("run/error", "Camera capture failed")
+                return None
+            if image_proc.case_present(frame, self.config.image_proc):
+                return True
+            if walked == RESUME_WALK_CYCLES:
+                return False
+            self.bus.post("run/status", "Brass detected — feeding it to the camera…")
+            if not self.broker.force_sort_and_move(0):
+                self.bus.post("run/error", self._board_error("Feed timeout"))
+                return None
+        return False
 
     def _loop(self) -> None:
         try:
@@ -967,6 +1051,14 @@ class RunController:
                         )
                         break
                     action = self._handle_feeder_empty(result)
+                    if action == "drained":
+                        # Run continuously: the wheel is empty; park on the
+                        # feed sensor and pick back up when brass arrives. The
+                        # resume came from a real feed, so it is validated.
+                        if not self.config.run_continuous or not self._wait_for_brass():
+                            break
+                        resume_unvalidated = False
+                        continue
                     if action == "stop":
                         break
                     resume_unvalidated = action == "resume_after_flush"

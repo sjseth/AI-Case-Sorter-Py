@@ -104,6 +104,8 @@ def collect_data(config: Any, db: Any) -> dict[str, Any]:
             "package_mode": config.run_package_mode,
             "package_size": config.run_package_size,
             "auto_select_trays": config.run_auto_select_trays,
+            "feed_timeout_s": config.run_feed_timeout_s,
+            "run_continuous": config.run_continuous,
         },
         "training_config": training,
         "image_processing": {

@@ -155,3 +155,14 @@ def test_set_hopper_refills_a_dry_feeder() -> None:
     em.cancel_pending_feed()
     em.set_hopper(1)
     assert em.sort_and_move_watched(3) == (SORT_DONE, "")
+
+
+def test_refilling_the_hopper_fires_a_parked_feed() -> None:
+    import threading
+
+    from sorter.hardware.serial_broker import SORT_DONE
+
+    em = EmulatorBroker(response_delay_s=0.01, hopper=0)
+    em.try_open()
+    threading.Timer(0.1, em.set_hopper, args=(1,)).start()
+    assert em.wait_for_brass(0, threading.Event()) == (SORT_DONE, "")

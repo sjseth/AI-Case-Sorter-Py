@@ -232,3 +232,40 @@ def test_a_stored_non_integer_init_value_is_repaired_on_load(tmp_path: Path) -> 
 def test_clean_init_settings_tolerates_garbage() -> None:
     assert clean_init_settings(None) == {}
     assert clean_init_settings({"feedsteps": " 60 "}) == {"feedsteps": 60}
+
+
+def test_feed_timeout_defaults_clamps_and_persists(tmp_path) -> None:
+    from sorter.data.config import (
+        DEFAULT_FEED_TIMEOUT_S,
+        MAX_FEED_TIMEOUT_S,
+        MIN_FEED_TIMEOUT_S,
+        Config,
+    )
+    from sorter.data.db import Database
+    from sorter.hardware.serial_broker import FEEDER_EMPTY_WAITS
+
+    db = Database(tmp_path / "t.db")
+    db.ensure_initialized()
+    cfg = Config(db).load()
+    # The default is the historical, hard-coded end-of-brass limit.
+    assert cfg.run_feed_timeout_s == DEFAULT_FEED_TIMEOUT_S == FEEDER_EMPTY_WAITS
+    cfg.set_run_feed_timeout_s(15)
+    assert Config(db).load().run_feed_timeout_s == 15
+    cfg.set_run_feed_timeout_s(0)
+    assert cfg.run_feed_timeout_s == MIN_FEED_TIMEOUT_S
+    cfg.set_run_feed_timeout_s(10**6)
+    assert cfg.run_feed_timeout_s == MAX_FEED_TIMEOUT_S
+    cfg.settings.set("run_feed_timeout_s", "junk")
+    assert cfg.run_feed_timeout_s == DEFAULT_FEED_TIMEOUT_S
+
+
+def test_run_continuously_defaults_off_and_persists(tmp_path) -> None:
+    from sorter.data.config import Config
+    from sorter.data.db import Database
+
+    db = Database(tmp_path / "t.db")
+    db.ensure_initialized()
+    cfg = Config(db).load()
+    assert cfg.run_continuous is False
+    cfg.set_run_continuous(True)
+    assert Config(db).load().run_continuous is True

@@ -438,8 +438,11 @@ def test_feeder_empty_flushes_the_wheel_and_ends_the_run(tmp_path, monkeypatch) 
             action = ctrl._handle_feeder_empty(result)
     ctrl.bus.drain()
 
-    assert action == "stop"
+    # "drained", not "stop": the wheel is empty, which is what lets Run
+    # continuously tell out-of-brass from a jam or a Stop press.
+    assert action == "drained"
     assert ended and ended[0]["flushed"] == 2  # the pending case + the straggler
+    assert ended[0]["continuous"] is False
     # The pending WIN sort was re-issued as a flush (arm to the previous sort's
     # slot 0, forced feed queuing WIN's slot 3), the straggler flushed after
     # it, and the close-out feed executed the final drop.
@@ -518,6 +521,161 @@ def test_stop_during_flush_aborts_without_blind_feeding(tmp_path, monkeypatch) -
             action = ctrl._handle_feeder_empty(result)
 
     assert action == "stop"
+
+
+# ----- feed timeout / run continuously ----------------------------------------
+
+
+def test_the_feed_timeout_sets_how_long_a_dry_gate_waits(tmp_path) -> None:
+    ctrl, cfg, _ = _make_controller(tmp_path)
+    cfg.set_run_feed_timeout_s(9)
+    waits: list[str] = []
+    ctrl.broker.on_waiting.append(waits.append)
+    ctrl.broker.set_hopper(0)
+    try:
+        with patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)):
+            result = ctrl.run_once()
+    finally:
+        ctrl.broker.stop()
+
+    assert result["feeder_empty"] is True
+    # One "waiting for brass" line a second: nine of them is nine seconds.
+    assert len(waits) >= 9
+
+
+def _run_dry_loop(ctrl, *, case_present, until_stop_after=None):
+    """Drive `_loop` to the end of brass on this thread.
+
+    `until_stop_after` presses Stop from a timer, for the runs that would
+    otherwise wait for brass forever.
+    """
+    import threading
+
+    timer = None
+    if until_stop_after is not None:
+        timer = threading.Timer(until_stop_after, ctrl.stop)
+        timer.start()
+    try:
+        with (
+            patch("sorter.ml.classifier.classify_active", return_value=("WIN", 100)),
+            patch("sorter.hardware.image_proc.case_present", side_effect=case_present),
+        ):
+            ctrl._loop()
+    finally:
+        if timer is not None:
+            timer.cancel()
+        ctrl.broker.stop()
+    ctrl.bus.drain()
+
+
+def test_without_run_continuously_the_drain_ends_the_run(tmp_path, monkeypatch) -> None:
+    from sorter.hardware import serial_broker
+
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.05)
+    ctrl, cfg, _ = _make_controller(tmp_path)
+    cfg.set_run_feed_timeout_s(2)
+    ctrl.broker.set_hopper(1)  # the prime consumes nothing; one case, then dry
+    sent: list[str] = []
+    ctrl.broker.on_sent.append(sent.append)
+    stopped: list[object] = []
+    ctrl.bus.subscribe("run/stopped", stopped.append)
+
+    _run_dry_loop(ctrl, case_present=lambda *_a: False)
+
+    assert stopped
+    assert not any(c == "0" for c in sent), "no sensor wait without Run continuously"
+
+
+def test_run_continuously_waits_for_brass_and_resumes(tmp_path, monkeypatch) -> None:
+    import threading
+
+    from sorter.hardware import serial_broker
+
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.05)
+    ctrl, cfg, _ = _make_controller(tmp_path)
+    cfg.set_run_feed_timeout_s(2)
+    cfg.set_run_continuous(True)
+    ctrl.broker.set_hopper(1)
+    sent: list[str] = []
+    ctrl.broker.on_sent.append(sent.append)
+    statuses: list[str] = []
+    ctrl.bus.subscribe("run/status", statuses.append)
+    resumed = threading.Event()
+    results: list[dict] = []
+
+    def _on_sent(cmd: str) -> None:
+        # The parked sensor wait is a bare "0". Refill the hopper once it is
+        # out: brass reaching the sensor fires that feed.
+        if cmd == "0" and not resumed.is_set():
+            resumed.set()
+            ctrl.broker.set_hopper(2)
+
+    ctrl.broker.on_sent.append(_on_sent)
+    ctrl.bus.subscribe("run/result", results.append)
+
+    # Drain: the pending case, then an empty camera. After the sensor fires,
+    # the first look already sees the new case; then the run carries on until
+    # the hopper is dry again, and Stop ends the second wait.
+    present = iter([False, True] + [False] * 50)
+    _run_dry_loop(ctrl, case_present=lambda *_a: next(present), until_stop_after=1.5)
+
+    assert resumed.is_set(), "the run must park a sensor-gated feed after the drain"
+    assert "Brass detected — resuming the run." in statuses
+    # Parked on slot 0 right after the close-out feed (xf:0).
+    first_wait = sent.index("0")
+    assert sent[first_wait - 1] == "xf:0"
+    # Sorting resumed after the wait: more bare sorts to WIN's slot 3 followed.
+    assert "3" in sent[first_wait + 1 :]
+    assert sum(1 for r in results if r.get("feeder_empty")) == 2
+
+
+def test_stop_while_waiting_for_brass_ends_the_run(tmp_path, monkeypatch) -> None:
+    import time
+
+    from sorter.hardware import serial_broker
+
+    monkeypatch.setattr(serial_broker, "CANCEL_LISTEN_S", 0.05)
+    ctrl, cfg, _ = _make_controller(tmp_path)
+    cfg.set_run_feed_timeout_s(2)
+    cfg.set_run_continuous(True)
+    ctrl.broker.set_hopper(0)
+    errors: list[str] = []
+    resumed: list[object] = []
+    stopped: list[object] = []
+    ctrl.bus.subscribe("run/error", errors.append)
+    ctrl.bus.subscribe("run/resumed", resumed.append)
+    ctrl.bus.subscribe("run/stopped", stopped.append)
+
+    started = time.monotonic()
+    _run_dry_loop(ctrl, case_present=lambda *_a: False, until_stop_after=0.5)
+
+    # Stop's own `done` ack is not brass: no resume, no error, run over.
+    assert stopped
+    assert not resumed
+    assert not errors
+    assert time.monotonic() - started < 5.0
+
+
+def test_a_sensor_trigger_that_never_reaches_the_camera_waits_again(tmp_path) -> None:
+    from sorter.control import run_controller as rc
+
+    ctrl, _, _ = _make_controller(tmp_path)
+    ctrl.broker.set_hopper(0)
+    sent: list[str] = []
+    ctrl.broker.on_sent.append(sent.append)
+    with patch("sorter.hardware.image_proc.case_present", return_value=False):
+        assert ctrl._walk_to_camera() is False
+    # Bounded: the walk never feeds blind past the pipeline depth.
+    assert sent == ["xf:0"] * rc.RESUME_WALK_CYCLES
+
+
+def test_the_walk_stops_feeding_once_the_case_is_at_the_camera(tmp_path) -> None:
+    ctrl, _, _ = _make_controller(tmp_path)
+    sent: list[str] = []
+    ctrl.broker.on_sent.append(sent.append)
+    with patch("sorter.hardware.image_proc.case_present", side_effect=[False, False, True]):
+        assert ctrl._walk_to_camera() is True
+    assert sent == ["xf:0", "xf:0"]
 
 
 def test_run_once_logs_the_slot_and_reason(tmp_path, caplog) -> None:
@@ -651,7 +809,7 @@ def test_flush_records_the_case_the_dry_sort_returned_early(tmp_path, monkeypatc
         assert result.get("ok") is not True  # not counted yet
         with patch("sorter.hardware.image_proc.case_present", side_effect=[True, False]):
             action = ctrl._handle_feeder_empty(result)
-    assert action == "stop"
+    assert action == "drained"
     assert ctrl._sort_run_id is not None
     rows = SortRunRepo(db).counts(ctrl._sort_run_id)
     # The pending case (recorded by the flush) plus the straggler run_once

@@ -921,6 +921,32 @@ def test_auto_select_control_persists(window, config) -> None:
     assert config.run_auto_select_trays is False
 
 
+def test_feed_timeout_and_run_continuously_controls_persist(window, config) -> None:
+    assert window.feed_timeout_spin.value() == config.run_feed_timeout_s
+    assert window.run_continuous_check.isChecked() is False
+
+    window.feed_timeout_spin.setValue(20)
+    assert config.run_feed_timeout_s == 20
+
+    window.run_continuous_check.setChecked(True)
+    assert config.run_continuous is True
+    window.run_continuous_check.setChecked(False)
+    assert config.run_continuous is False
+
+
+def test_out_of_brass_status_says_whether_the_run_is_waiting(window) -> None:
+    window.beep = lambda: None
+    window.bus.post("run/out_of_brass", {"flushed": 2, "continuous": False})
+    window.bus.drain()
+    assert "run finished" in window.statusBar().currentMessage()
+
+    window.bus.post("run/out_of_brass", {"flushed": 2, "continuous": True})
+    window.bus.drain()
+    message = window.statusBar().currentMessage()
+    assert "Waiting for more brass" in message
+    assert "run finished" not in message
+
+
 # ----- the action row --------------------------------------------------------
 
 

@@ -162,6 +162,20 @@ DEFAULT_PACKAGE_SIZE = 50
 # any slot is auto-routed to the first empty slot.
 _RUN_AUTO_SELECT_KEY = "run_auto_select_trays"
 
+# End of brass. Feed timeout is how many seconds the feed gate may sit dry
+# (the firmware prints "waiting for brass" once a second) before the run
+# drains the wheel; the default is the historical FEEDER_EMPTY_WAITS. Run
+# continuously keeps the run alive after that drain, parked on the feed
+# sensor, and resumes it when brass arrives (RunController._wait_for_brass).
+_RUN_FEED_TIMEOUT_KEY = "run_feed_timeout_s"
+DEFAULT_FEED_TIMEOUT_S = 6
+# Two, not one: the first "waiting" line can be a case still bouncing on the
+# sensor (the firmware's debounce pause), and a one-line verdict would drain
+# the wheel mid-fall.
+MIN_FEED_TIMEOUT_S = 2
+MAX_FEED_TIMEOUT_S = 600
+_RUN_CONTINUOUS_KEY = "run_continuous"
+
 # Sorting templates: named layouts of the Run tab's slot assignments, so one
 # model can carry several bin arrangements. The live assignments (the
 # `headstamps`/`headstamp_parents` slot columns and the package slot map) stay
@@ -836,6 +850,36 @@ class Config:
 
     def set_run_auto_select_trays(self, value: bool) -> None:
         self.settings.set(_RUN_AUTO_SELECT_KEY, bool(value))
+
+    # ----- end of brass: feed timeout / run continuously ----------------------
+
+    @property
+    def run_feed_timeout_s(self) -> int:
+        """Seconds of a dry feed gate before the run drains the wheel.
+
+        Clamped to [MIN_FEED_TIMEOUT_S, MAX_FEED_TIMEOUT_S]; a non-integer
+        stored value reads as the default.
+        """
+        try:
+            value = int(self.settings.get(_RUN_FEED_TIMEOUT_KEY, DEFAULT_FEED_TIMEOUT_S))
+        except (TypeError, ValueError):
+            return DEFAULT_FEED_TIMEOUT_S
+        return max(MIN_FEED_TIMEOUT_S, min(MAX_FEED_TIMEOUT_S, value))
+
+    def set_run_feed_timeout_s(self, value: int) -> None:
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return
+        self.settings.set(_RUN_FEED_TIMEOUT_KEY, max(MIN_FEED_TIMEOUT_S, min(MAX_FEED_TIMEOUT_S, value)))
+
+    @property
+    def run_continuous(self) -> bool:
+        """After the end-of-brass drain, wait for brass and resume instead of ending."""
+        return bool(self.settings.get(_RUN_CONTINUOUS_KEY, False))
+
+    def set_run_continuous(self, value: bool) -> None:
+        self.settings.set(_RUN_CONTINUOUS_KEY, bool(value))
 
     @property
     def sort_while_training(self) -> bool:
