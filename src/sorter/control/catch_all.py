@@ -187,7 +187,23 @@ class CatchAllTally:
         return self._catch_all
 
     def reset(self) -> None:
+        """Zero the breakdown and the sorted-so-far total.
+
+        Reset counts, a template switch and a package-mode toggle use this:
+        the master counter is cleared in the same step, so the header's
+        denominator has to go with it.
+        """
         self._total = 0
+        self._catch_all = 0
+        self._buckets.clear()
+
+    def clear_catch_all(self) -> None:
+        """Zero the catch-all breakdown and leave :attr:`total` in place.
+
+        The panel's own reset empties the bin's tally. The header's
+        denominator stays so it still matches the master counter, which that
+        reset does not touch.
+        """
         self._catch_all = 0
         self._buckets.clear()
 

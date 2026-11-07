@@ -954,8 +954,14 @@ The Catch-All dock follows the history dock: right-hand, closed at startup,
 tallies successful `run/result` events (the same gate as the slot 0 card)
 and re-ranks on `run/assignment_changed`. The label→slot map is read once
 and reused for later results; `run/assignment_changed`, `mode/changed`, and
-`reset` (template switches and package-mode toggles clear the counts) drop
-it. The header stays the physical slot
+a full `reset` (template switches, package-mode toggles, and Reset counts)
+drop it. The panel's own catch-all reset does not: the assignments did not
+change. The slot-card editor and Assign by headstamp do not go through
+`assign_from_catch_all`; each write emits `changed`, and the window posts
+`run/assignment_changed` from that signal, including a clear back to slot 0.
+That is what refreshes the ranking, the empty-slot offer, the share menu
+and the "Assigned this session" line. The sort cards repaint from `changed`
+itself. The header stays the physical slot
 0 total. **Top 10** (the default) and **ALL** are an exclusive
 `QButtonGroup` of checkable buttons, right-aligned on the top bar
 (`catchAllMode`; the checked one takes the neutral `accent` fill with
@@ -974,8 +980,20 @@ cleared), while `below_floor`, `special` and `batch_full` stay and a mixed
 row shows only the remainder. `_ranked` is that visible list, and `_bucket`
 searches it, so Assign and Add work on a row past the tenth. A line under the table
 ("Assigned this session: …") names what left and how many cases are already
-in bin 0; `_clear_counts` clears it with the tally. Counts survive
-Stop/Start. The assign button is a selection-bar `#action` control — items
+in bin 0. **Reset catch-all** is a plain button at the upper left of the
+panel's top bar (the same styling as **Reset counts**).
+`QtMainWindow.reset_catch_all_counts` zeroes the breakdown — buckets,
+reasons, the catch-all total, the session line — and the slot 0 card, and
+calls `RunController.reset_package_slot(0)`. Package mode never tallies
+slot 0 (`_commit_package_count` skips `slot <= 0`), so that call only
+clears a stored counter. The tally's sorted-so-far `total` stays, so the
+header's "of N sorted" still matches **Sorted this run** and the catch-all
+number still matches the slot 0 card. Other slot cards and the master count
+stay. It is safe mid-run: a case already in the wheel counts from the new
+zero when its `run/result` arrives. `_clear_counts` (Reset counts, a
+template switch, a package-mode toggle) still zeroes every card, the master
+count, the whole tally including that denominator, and every package batch.
+Counts survive Stop/Start. The assign button is a selection-bar `#action` control — items
 only in the table, selection kept by headstamp key. Beside it, **Add to
 existing slot…** (`catchAllAdd`, not an action colour) opens a menu of
 occupied slots (`#4 WMA, WMA NATO`, the same occupancy as the slot cards)

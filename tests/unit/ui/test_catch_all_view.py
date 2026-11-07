@@ -14,6 +14,7 @@ from PySide6.QtGui import QColor, QKeySequence
 
 from sorter.data.repository import HeadstampParentRepo, HeadstampRepo
 from sorter.ui.catch_all_view import _ADD_TEXT, COL_NAME, COL_REASON, COLUMNS
+from sorter.ui.dialog_slot_assign import SlotAssignDialog
 
 from .conftest import seed_model
 
@@ -77,10 +78,15 @@ def test_a_fresh_panel_is_empty_and_closed(window) -> None:
     assert view._mode_group.exclusive()
     assert not view._show_all
     assert view.table.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded
+    # Plain button, same styling as the dashboard's Reset counts. Assign is #action.
+    assert view.reset_button.text() == "Reset catch-all"
+    assert view.reset_button.objectName() == ""
+    assert "Sorted this run" in view.reset_button.toolTip()
     row = view.layout().itemAt(0).layout()
-    assert row.itemAt(0).spacerItem() is not None
-    assert row.itemAt(1).widget() is view.top_ten_button
-    assert row.itemAt(2).widget() is view.all_button
+    assert row.itemAt(0).widget() is view.reset_button
+    assert row.itemAt(1).spacerItem() is not None
+    assert row.itemAt(2).widget() is view.top_ten_button
+    assert row.itemAt(3).widget() is view.all_button
 
 
 def test_the_header_matches_the_slot_card_and_ignores_failures(window) -> None:
@@ -408,6 +414,72 @@ def test_an_external_assignment_drops_the_row_and_keeps_the_bin_total(window, co
     assert _names(view) == ["BPS", "IK"]
     assert view.table.item(_row(view, "BPS"), 2).text() == "4"
     assert view.assigned_label.isHidden()
+
+
+def _assign_bps_then_look_at_ik(window, config):
+    """Three BPS cases and one IK, then Assign sends BPS to the first empty bin."""
+    seed_model(config, {"BPS": 0, "IK": 0})
+    for _ in range(3):
+        _post(window, label="BPS")
+    _post(window, label="IK")
+    view = window.catch_all_view
+    _select(view, "BPS")
+    view.assign_button.click()
+    window.bus.drain()
+    assert config.slot_for_headstamp("BPS") == 1
+    assert _names(view) == ["IK"]
+    assert view.assigned_label.text() == "Assigned this session: BPS → #1 (3 already in bin 0)"
+    assert view.assign_button.text() == "Assign IK to empty slot #2"
+    assert _menu_texts(view) == ["#1 BPS"]
+    return view
+
+
+def test_clearing_a_slot_card_puts_the_headstamp_back(window, config, monkeypatch) -> None:
+    """Unticking a headstamp on its slot card has to drop the panel's slot map.
+
+    The card editor writes Config and repaints the grid. The ranking, the
+    empty-slot offer, the share menu and the session line all read a cache
+    that only ``run/assignment_changed`` throws away.
+    """
+    view = _assign_bps_then_look_at_ik(window, config)
+
+    def untick(dialog: SlotAssignDialog) -> int:
+        box = dialog.checkboxes["BPS"]
+        assert box.isChecked()
+        box.click()
+        return 0
+
+    monkeypatch.setattr(SlotAssignDialog, "exec", untick)
+    window.open_slot_editor(1)
+    window.bus.drain()
+
+    assert config.slot_for_headstamp("BPS") == 0
+    assert "BPS" not in window.slot_grid.cards[1].names_label.text()
+    assert _names(view) == ["BPS", "IK"]
+    assert view.table.item(_row(view, "BPS"), 2).text() == "3"
+    assert view.assigned_label.isHidden()
+    assert view._selected_key == "IK"
+    assert view.assign_button.text() == "Assign IK to empty slot #1"
+    assert _menu_texts(view) == []
+
+
+def test_clearing_a_row_in_the_headstamp_table_puts_it_back(window, config) -> None:
+    """0 in Assign by headstamp is the same clear, and the same event."""
+    view = _assign_bps_then_look_at_ik(window, config)
+
+    window.open_headstamp_assign()
+    dialog = window.headstamp_assign_dialog
+    assert dialog is not None
+    index = next(position for position, row in enumerate(dialog.rows) if row.name == "BPS")
+    dialog.assign(index, 0)
+    window.bus.drain()
+    dialog.close()
+
+    assert config.slot_for_headstamp("BPS") == 0
+    assert _names(view) == ["BPS", "IK"]
+    assert view.assigned_label.isHidden()
+    assert view.assign_button.text() == "Assign IK to empty slot #1"
+    assert _menu_texts(view) == []
 
 
 def test_assigning_mid_run_fills_an_empty_slot_and_says_so(window, config, caplog) -> None:
@@ -801,3 +873,89 @@ def test_reset_clears_the_assigned_line(window, config) -> None:
     assert view.tally.catch_all_total == 0
     assert view.assigned_label.isHidden()
     assert _names(view) == []
+
+
+class _PackageResets:
+    """Stand-in controller: records which package counters a reset clears."""
+
+    def __init__(self) -> None:
+        self.calls: list[object] = []
+
+    def stop(self) -> None:
+        pass
+
+    def reset_package_slot(self, slot: int) -> None:
+        self.calls.append(slot)
+
+    def reset_package_counts(self) -> None:
+        self.calls.append("all")
+
+
+def test_catch_all_reset_zeroes_slot_zero_and_leaves_the_rest(window, config) -> None:
+    """Emptying the catch-all bin zeroes that card and the panel, not the run."""
+    seed_model(config, {"WIN": 2, "BPS": 0})
+    package = _PackageResets()
+    window.run_controller = package
+    _post(window, label="BPS")
+    _post(window, label="BPS", reason="below_floor")
+    _post(window, slot=2, label="WIN", reason="routed")
+    view = window.catch_all_view
+    view.all_button.click()
+    _select(view, "BPS")
+    view.assign_button.click()
+    placed = config.slot_for_headstamp("BPS")
+    assert placed not in (None, 0)
+    assert not view.assigned_label.isHidden()
+    assert window.slot_grid.cards[0].count_label.text() == "2"
+    assert window.slot_grid.cards[2].count_label.text() == "1"
+    assert window.master_count_label.text() == "3"
+    cached = view._routing_cache
+    assert cached is not None
+
+    # A live run must not refuse the click or raise a modal.
+    window._is_running = True
+    view.reset_button.click()
+
+    assert window.statusBar().currentMessage() == "Catch-all counter reset."
+    assert package.calls == [0]
+    assert window.slot_grid.cards[0].count_label.text() == "0"
+    assert window.slot_grid.cards[2].count_label.text() == "1"
+    assert window.master_count_label.text() == "3"
+    assert view.tally.catch_all_total == 0
+    assert view.tally.total == 3
+    assert view.tally.buckets() == []
+    assert view.summary_label.text() == "0 in catch-all of 3 sorted (0%)"
+    assert view.assigned_label.isHidden()
+    assert _names(view) == []
+    assert view._selected_key is None
+    assert view.all_button.isChecked()
+    assert view._show_all
+    assert view._routing_cache is cached
+    assert config.slot_for_headstamp("BPS") == placed
+    assert config.slot_for_headstamp("WIN") == 2
+    assert "WIN" in window.slot_grid.cards[2].names_label.text()
+
+    # A case still in the wheel counts from the new zero. The old reasons stay gone.
+    _post(window, label="BPS", reason="below_floor")
+    assert window.slot_grid.cards[0].count_label.text() == "1"
+    assert window.slot_grid.cards[2].count_label.text() == "1"
+    assert window.master_count_label.text() == "4"
+    assert view.tally.catch_all_total == 1
+    assert view.tally.total == 4
+    assert view.summary_label.text() == "1 in catch-all of 4 sorted (25%)"
+    assert view.table.item(_row(view, "BPS"), 2).text() == "1"
+    assert view.table.item(_row(view, "BPS"), COL_REASON).text() == "Below floor"
+    assert view.assigned_label.isHidden()
+
+    window.reset_counts()
+
+    assert package.calls == [0, "all"]
+    assert window.slot_grid.cards[0].count_label.text() == "0"
+    assert window.slot_grid.cards[2].count_label.text() == "0"
+    assert window.master_count_label.text() == "0"
+    assert view.tally.total == 0
+    assert view.tally.catch_all_total == 0
+    assert view.summary_label.text() == "0 in catch-all of 0 sorted (0%)"
+    assert _names(view) == []
+    assert view.assigned_label.isHidden()
+    assert window.statusBar().currentMessage() == "Counters reset."

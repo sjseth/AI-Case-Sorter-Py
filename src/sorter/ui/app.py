@@ -762,6 +762,17 @@ class QtMainWindow(QMainWindow):
         if items:
             self.settings_list.setCurrentItem(items[0])
 
+    def _post_assignment_changed(self) -> None:
+        """The slot card and Assign by headstamp write Config and emit ``changed``.
+
+        The cards repaint from that signal directly. The Catch-All panel and
+        the run loop only drop their label-to-slot snapshot on
+        ``run/assignment_changed``, so a clear that never posts one leaves
+        the ranking, the empty-slot offer, the share menu and the session
+        line on the layout from before the clear.
+        """
+        self.bus.post("run/assignment_changed", {"source": "editor"})
+
     def _refresh_sort_grid(self) -> None:
         """Assignments changed (bus event, template swap, mode switch, edit)."""
         self.slot_grid.refresh_assignments()
@@ -1689,6 +1700,7 @@ class QtMainWindow(QMainWindow):
             return
         dialog = SlotAssignDialog(self.config, int(slot), self)
         dialog.changed.connect(self._refresh_sort_grid)
+        dialog.changed.connect(self._post_assignment_changed)
         dialog.exec()
         self._refresh_sort_grid()
 
@@ -1700,6 +1712,7 @@ class QtMainWindow(QMainWindow):
         """
         dialog = build_headstamp_assign_dialog(self)
         dialog.changed.connect(self._refresh_sort_grid)
+        dialog.changed.connect(self._post_assignment_changed)
         dialog.finished.connect(self._on_headstamp_assign_closed)
         self.headstamp_assign_dialog = dialog
         dialog.open()
@@ -1802,6 +1815,26 @@ class QtMainWindow(QMainWindow):
         if reset is not None:
             reset()
         self.set_status("Counters reset.")
+
+    def reset_catch_all_counts(self) -> None:
+        """Zero slot 0 and the Catch-All breakdown. The other cards and the master count stay.
+
+        The tally's sorted-so-far total stays too, so the panel header's
+        "of N sorted" still matches the master count and the catch-all
+        number still matches the slot 0 card. Package mode's batch counter
+        for slot 0 is cleared with the same call a numbered card uses; the
+        controller never tallies that slot, so this only drops a stored
+        counter. Safe during a run: a case still in the wheel counts from
+        the new zero when it lands.
+        """
+        self.slot_grid.reset_slot(0)
+        view = getattr(self, "catch_all_view", None)
+        if view is not None:
+            view.clear_catch_all()
+        reset = getattr(self.run_controller, "reset_package_slot", None)
+        if reset is not None:
+            reset(0)
+        self.set_status("Catch-all counter reset.")
 
     def assign_from_catch_all(self, key: str, slot: int | None = None) -> None:
         """Assign from the Catch-All panel.
