@@ -364,14 +364,43 @@ def _assert_checkbox_fits(box) -> None:
     assert box.width() + 1 >= box.sizeHint().width()
 
 
-def test_toolbar_labels_fit_at_a_typical_width_and_the_path_elides(window, monitor, qapp) -> None:
-    """1020px is the width from the macOS report. The port path is the item
-    that shortens; the checkboxes keep the width their text needs."""
+def _painted(label):
+    """The string QLabel actually stores, which is what gets painted.
+
+    ``_ElidingLabel.text()`` is the full path. Calling ``QLabel.text`` reaches
+    the base implementation, so this is the elided form when the layout has
+    squeezed the label and the full path when it has not.
+    """
     from PySide6.QtWidgets import QLabel
 
+    return QLabel.text(label)
+
+
+def _assert_checkboxes_fit(monitor) -> None:
+    for box in (
+        monitor.autoscroll_check,
+        monitor.timestamps_check,
+        monitor.pause_check,
+        *monitor.show_kind_checks.values(),
+    ):
+        _assert_checkbox_fits(box)
+
+
+def test_toolbar_labels_fit_at_a_typical_width_and_the_path_elides(window, monitor, qapp) -> None:
+    """The port path is the item that shortens; the checkboxes keep the width
+    their text needs.
+
+    1020px is the width from the macOS report. It is not wide enough for this
+    path on every font — Windows elides it there — so the full path is always
+    read from ``text()``, and the painted string is required to match it only
+    once the panel is at least its own size hint.
+    """
     monitor.setStyleSheet(window.styleSheet())
     monitor._header_label.setText(_LONG_PORT)
     monitor.count_label.setText("3999 of 4000 lines")
+    label = monitor._header_label
+    full_width = label.fontMetrics().horizontalAdvance(_LONG_PORT)
+
     monitor.resize(1020, 320)
     monitor.show()
     qapp.processEvents()
@@ -380,37 +409,44 @@ def test_toolbar_labels_fit_at_a_typical_width_and_the_path_elides(window, monit
     filters = _row_widgets(monitor.layout().itemAt(1).layout())
     _assert_disjoint(header)
     _assert_disjoint(filters)
-    for box in (
-        monitor.autoscroll_check,
-        monitor.timestamps_check,
-        monitor.pause_check,
-        *monitor.show_kind_checks.values(),
-    ):
-        _assert_checkbox_fits(box)
-    # Wide enough for the whole path: nothing is elided, and text() is the
-    # path either way (the painted string is what QLabel stores).
-    assert monitor._header_label.text() == _LONG_PORT
-    assert QLabel.text(monitor._header_label) == _LONG_PORT
+    _assert_checkboxes_fit(monitor)
+    # The holder does not depend on whether this width had to elide.
+    assert label.text() == _LONG_PORT
+    assert label.accessibleName() == _LONG_PORT
+    painted = _painted(label)
+    if label.width() >= full_width:
+        assert painted == _LONG_PORT
+        assert label.toolTip() == ""
+    else:
+        assert painted != _LONG_PORT
+        assert len(painted) < len(_LONG_PORT)
+        assert label.toolTip() == _LONG_PORT
 
-    label = monitor._header_label
+    # At the layout's own hint the path fits, on every font.
+    wide = max(monitor.sizeHint().width(), 1020)
+    monitor.resize(wide, 320)
+    qapp.processEvents()
+    _assert_disjoint(_row_widgets(monitor.layout().itemAt(0).layout()))
+    _assert_disjoint(_row_widgets(monitor.layout().itemAt(1).layout()))
+    _assert_checkboxes_fit(monitor)
+    assert label.width() >= full_width
+    assert label.text() == _LONG_PORT
+    assert _painted(label) == _LONG_PORT
+    assert label.toolTip() == ""
+
     slack = label.sizeHint().width() - label.minimumSizeHint().width()
     assert slack > label.fontMetrics().horizontalAdvance("usb")
-    monitor.resize(monitor.sizeHint().width() - slack // 2, 320)
+    monitor.resize(wide - slack // 2, 320)
     qapp.processEvents()
 
     _assert_disjoint(_row_widgets(monitor.layout().itemAt(0).layout()))
     _assert_disjoint(_row_widgets(monitor.layout().itemAt(1).layout()))
-    for box in (
-        monitor.autoscroll_check,
-        monitor.timestamps_check,
-        monitor.pause_check,
-        *monitor.show_kind_checks.values(),
-    ):
-        _assert_checkbox_fits(box)
-    painted = QLabel.text(label)
+    _assert_checkboxes_fit(monitor)
+    assert label.width() < full_width
+    painted = _painted(label)
     assert label.text() == _LONG_PORT
     assert painted != _LONG_PORT
-    assert "…" in painted
+    assert len(painted) < len(_LONG_PORT)
     assert label.toolTip() == _LONG_PORT
     monitor.close()
     monitor.deleteLater()

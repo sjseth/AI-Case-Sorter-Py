@@ -108,11 +108,14 @@ _FALLBACK = {
 class _ElidingLabel(QLabel):
     """Single-line label that yields its width before the controls beside it.
 
-    ``sizeHint`` stays the full string, so a wide panel shows a port path
-    intact. ``minimumSizeHint`` drops to an ellipsis once the text is longer
-    than that, so a narrow panel shortens the path and the checkboxes beside
-    it keep their own width. ``text()`` keeps returning the full string; the
-    painted label is the elided form.
+    ``sizeHint`` stays the full string, so a panel that gives the label that
+    width shows a port path intact. ``minimumSizeHint`` drops to an ellipsis
+    once the text is longer than that, so a narrow panel shortens the path
+    and the checkboxes beside it keep their own width. A fixed pixel width is
+    not "wide" on every font: the same toolbar that fits the path on macOS
+    elides it on Windows. ``text()`` keeps returning the full string either
+    way; the painted label is the elided form, and the tooltip carries the
+    full path only while it is elided.
     """
 
     def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
@@ -153,10 +156,17 @@ class _ElidingLabel(QLabel):
     def _show_elided(self) -> None:
         if self._showing:
             return
-        width = self.contentsRect().width()
-        if width <= 0:
+        # The layout's answer is the widget width, not the contents rect.
+        # A style can inset the contents by a few pixels; eliding off that
+        # inset would shorten a path the layout had already made room for.
+        # Width 0 means we have not been laid out yet, so keep the full string
+        # until the first real resize.
+        if self.width() <= 0 or self.width() >= self._full_width():
             shown = self._full
         else:
+            width = self.contentsRect().width()
+            if width <= 0:
+                width = self.width()
             shown = self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideMiddle, width)
         self.setToolTip(self._full if shown != self._full else "")
         self.setAccessibleName(self._full)
