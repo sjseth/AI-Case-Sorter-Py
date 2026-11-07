@@ -577,8 +577,25 @@ between them from the Sort page's template dropdown.
   `image_proc.case_present` finds the camera empty and one final forced feed
   drops the last case. `FLUSH_RESUME_CASES` consecutive real cases during the
   flush mean the dry spell was a collator gap: the run resumes at full speed.
-  Posts `run/out_of_brass` `{"flushed": n}` when the wheel ends empty. Jams
-  mid-flush stop the sequence — never home-and-refeed blind at end of brass.
+  Posts `run/out_of_brass` `{"flushed": n, "continuous": bool}` when the
+  wheel ends empty (`_handle_feeder_empty` returns `"drained"` for that, and
+  `"stop"` only for a jam or Stop). Jams mid-flush stop the sequence — never
+  home-and-refeed blind at end of brass.
+  **Feed timeout** (`config.run_feed_timeout_s`, Run options; default 6 =
+  `FEEDER_EMPTY_WAITS`) is the wait count `run_once` hands
+  `sort_and_move_watched` — the firmware prints "waiting for brass" once a
+  second, so the count is seconds; the ack timeout grows with it.
+  **Run continuously** (`config.run_continuous`): after a `"drained"` flush
+  `_wait_for_brass` resets `_last_classified_slot` to 0 (the close-out
+  `xf:0` queued it) and parks a bare `0` through `broker.wait_for_brass` —
+  the only way the firmware reports the sensor is a gated feed firing. No
+  limit, Stop cancels it (and Stop's `done` ack is never taken for brass),
+  `BRASS_WAIT_SILENCE_S` without a waiting line is a dead board. On `done`,
+  `_walk_to_camera` forced-feeds `xf:0` at most `RESUME_WALK_CYCLES` times
+  until `case_present`, so an empty pocket is never classified or counted;
+  a trigger that never reaches the camera parks the wait again. A resume
+  posts `run/resumed` (no UI subscriber yet; the status line carries it). The emulator
+  fires a parked feed when `set_hopper` refills it.
   `case_present`'s brightness floor is per-rig (`case_min_brightness` on
   `ImageProcessingConfig`, tuned in Settings → Image Processing — a shiny
   pocket reads >100 empty where a dark one reads ~12), and a flush-streak

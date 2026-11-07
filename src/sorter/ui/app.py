@@ -79,6 +79,7 @@ from PySide6.QtWidgets import (
 from .. import __version__
 from ..control.events import EventBus
 from ..control.run_controller import RunController
+from ..data.config import MAX_FEED_TIMEOUT_S, MIN_FEED_TIMEOUT_S
 from ..hardware import serial_broker
 from ..hardware.camera import Camera
 from ..hardware.serial_emulator import EMULATED_PORT, EmulatorBroker
@@ -258,6 +259,19 @@ STORE_IMAGES_LABELS = {
     "all": "All images",
 }
 STORE_IMAGES_BY_LABEL = {label: mode for mode, label in STORE_IMAGES_LABELS.items()}
+FEED_TIMEOUT_TOOLTIP = (
+    "How long the feed sensor may sit without brass before the run drains the "
+    "wheel — sorts the cases still in it and stops."
+)
+RUN_CONTINUOUS_TEXT = "Run continuously"
+RUN_CONTINUOUS_TOOLTIP = (
+    "After draining the wheel, keep the run going: wait for brass on the feed "
+    "sensor and resume sorting when it arrives. Press Stop to end the run."
+)
+OUT_OF_BRASS_STATUS = "Out of brass — run finished. {flushed} in-flight case(s) were flushed to their slots."
+OUT_OF_BRASS_CONTINUOUS_STATUS = (
+    "Out of brass — {flushed} in-flight case(s) were flushed to their slots. Waiting for more brass…"
+)
 STORE_IMAGES_WARNING_TITLE = "Store images enabled"
 STORE_IMAGES_WARNING_TEXT = (
     "Classified run images will be saved under the active model's run_images "
@@ -857,6 +871,20 @@ class QtMainWindow(QMainWindow):
         self.floor_spin.valueChanged.connect(self._on_floor_changed)
         form.addRow("Confidence floor", self.floor_spin)
 
+        self.feed_timeout_spin = QSpinBox(form_holder)
+        self.feed_timeout_spin.setRange(MIN_FEED_TIMEOUT_S, MAX_FEED_TIMEOUT_S)
+        self.feed_timeout_spin.setSuffix(" s")
+        self.feed_timeout_spin.setValue(int(self.config.run_feed_timeout_s))
+        self.feed_timeout_spin.setToolTip(FEED_TIMEOUT_TOOLTIP)
+        self.feed_timeout_spin.valueChanged.connect(self._on_feed_timeout_changed)
+        form.addRow("Feed timeout", self.feed_timeout_spin)
+
+        self.run_continuous_check = QCheckBox(RUN_CONTINUOUS_TEXT, form_holder)
+        self.run_continuous_check.setChecked(bool(self.config.run_continuous))
+        self.run_continuous_check.setToolTip(RUN_CONTINUOUS_TOOLTIP)
+        self.run_continuous_check.toggled.connect(self._on_run_continuous_toggled)
+        form.addRow(self.run_continuous_check)
+
         self.auto_select_check = QCheckBox("Automatically select trays", form_holder)
         self.auto_select_check.setChecked(bool(self.config.run_auto_select_trays))
         self.auto_select_check.toggled.connect(self._on_auto_select_toggled)
@@ -895,6 +923,16 @@ class QtMainWindow(QMainWindow):
 
     def _on_auto_select_toggled(self, checked: bool) -> None:
         self.config.set_run_auto_select_trays(bool(checked))
+
+    def _on_feed_timeout_changed(self, value: int) -> None:
+        # The run reads config.run_feed_timeout_s on every sort, so a change
+        # mid-run applies to the next case.
+        self.config.set_run_feed_timeout_s(int(value))
+
+    def _on_run_continuous_toggled(self, checked: bool) -> None:
+        # Read live at the end of each drain: turning it off while the run is
+        # waiting for brass does not end that wait — Stop does.
+        self.config.set_run_continuous(bool(checked))
 
     def _build_preview_column(self, parent: QWidget) -> QWidget:
         """The crop the classifier saw, what it made of it, and — on request — the feed.
@@ -2552,7 +2590,8 @@ class QtMainWindow(QMainWindow):
         data = payload if isinstance(payload, dict) else {}
         flushed = data.get("flushed", 0)
         self.beep()
-        self.set_status(f"Out of brass — run finished. {flushed} in-flight case(s) were flushed to their slots.")
+        template = OUT_OF_BRASS_CONTINUOUS_STATUS if data.get("continuous") else OUT_OF_BRASS_STATUS
+        self.set_status(template.format(flushed=flushed))
 
     def _on_package_halt(self, payload: Any) -> None:
         label = (payload or {}).get("label") if isinstance(payload, dict) else None

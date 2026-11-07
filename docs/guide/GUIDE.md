@@ -434,6 +434,14 @@ changes how a run behaves:
   the run actually uses — assigning the child on its own would leave the
   cases in the Catch-All. A label the model does not have is left alone.
 - **Package mode** and **Batch size** — see [package mode](#package-mode).
+- **Feed timeout** — how many seconds the feed sensor may go without brass
+  before the run decides the hopper is empty and drains the wheel (default
+  6 s). Raise it if your collator pauses for long stretches and the run keeps
+  draining in the middle of a tray. See
+  [running out of brass](#running-out-of-brass).
+- **Run continuously** — after that drain, keep the run going instead of
+  ending it: the machine waits for brass on the feed sensor and picks back up
+  by itself when you refill the hopper. Press **Stop** to end the run.
 
 ### Start, Stop, and Manual feed
 
@@ -492,18 +500,27 @@ your own, after which it counts as trained here.
 
 When the collator runs dry mid-run, up to three cases are still riding the
 feed wheel — fed past the sensor but not yet dropped. The app notices the
-board waiting on brass that isn't coming (about six seconds of quiet at the
-feed gate), confirms nothing is mid-fall, and then **flushes the wheel**:
+board waiting on brass that isn't coming (the **Feed timeout** in
+[Run options](#run-options) — six seconds of quiet at the feed gate unless
+you change it), confirms nothing is mid-fall, and then **flushes the wheel**:
 each remaining case is walked to the camera, classified, and dropped into
 its own slot, exactly as if the hopper were still full. The run then ends on
 its own with the wheel empty, and the status bar says how many in-flight
 cases were placed.
 
-Two details worth knowing:
+With **Run continuously** on, the run does not end there. Once the wheel is
+empty it waits on the feed sensor — the status bar says "waiting for brass"
+— and as soon as a case reaches the sensor it is fed to the camera and the
+run resumes at full speed, with the same counts and the same sort run.
+Refill the hopper whenever you like; **Stop** ends the wait.
+
+A few details worth knowing:
 
 - If brass keeps arriving during the flush — the "empty" was really the
-  collator pausing — the run notices and resumes at full speed by itself.
-  Topping up the hopper mid-run is fine.
+  collator pausing — the run notices and resumes at full speed by itself,
+  whether or not Run continuously is on. Topping up the hopper mid-run is
+  fine. (During the flush the board feeds without consulting the sensor, so
+  it is the camera seeing new brass arrive that triggers this.)
 - This relies on the board's **feed sensor**. With the sensor disabled the
   firmware feeds blind, the app can't tell an empty hopper from a full one,
   and a run at the end of the brass classifies empty air until you press
