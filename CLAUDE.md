@@ -124,6 +124,11 @@ fixtures only; `tests/integration/` stays flat — the files that exercise a
 real external tool or service (`uv build`, `git-cliff`, the PyTorch wheel
 index) instead, each self-skipping if that tool — or, for the wheel index,
 the network — is missing; `pytest -m "not integration"` skips them outright.
+Every test runs against a throwaway data root: `tests/conftest.py`'s autouse
+`_isolate_data_dir` sets `CASESORTER_DATA_DIR` to a fresh temp directory, so a
+test that writes through `sorter.paths` can never touch your real models or
+database (`tests/unit/test_data_isolation.py` pins it). A test that needs a
+particular root sets or clears the variable itself, as `test_paths.py` does.
 `tests/unit/ui/` mirrors `sorter/ui/` like the rest, and runs the whole
 UI headless on `QT_QPA_PLATFORM=offscreen` (its `conftest.py` sets it) —
 **no Xvfb, no display** (§5, §8).

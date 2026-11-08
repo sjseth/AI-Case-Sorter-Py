@@ -30,6 +30,21 @@ def _clear_dev_env(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+# Every test gets its own throwaway data root. Without this, any test that
+# writes through `sorter.paths` without setting CASESORTER_DATA_DIR itself
+# lands in the contributor's REAL data folder — the one their installed app
+# uses. test_model_ownership.py's imports did exactly that: a fresh test DB
+# hands its imported model id 2, so a 10-byte placeholder checkpoint
+# overwrote a real models/2/trainedmodel/2.pth, which then surfaced in the
+# app as "could not be loaded by PyTorch". A separate directory from
+# `tmp_path`, so tests that inspect their own tmp_path don't see it; a test
+# that needs a particular root (test_paths.py) still sets or clears the
+# variable itself, after this runs.
+@pytest.fixture(autouse=True)
+def _isolate_data_dir(monkeypatch, tmp_path_factory):
+    monkeypatch.setenv("CASESORTER_DATA_DIR", str(tmp_path_factory.mktemp("casesorter-data")))
+
+
 # A repo-wide `gc.collect()` between tests lived here for Tk: widgets and
 # StringVars only die in the cyclic collector, and one finalized on a worker
 # thread called into Tcl from the wrong thread. It went with the Tk UI —
